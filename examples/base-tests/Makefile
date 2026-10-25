@@ -62,7 +62,7 @@ todo_pass: $(foreach f,$(TODO_PASS),$(f).fail)
 %.fail : %.v
 	@/bin/echo -n "$<: "
 	@if ! test -e $<; \
-	 then echo -e "\033[1;31mmissing\033[0m"; \
+	 then echo -e "\033[1;31mmissing\033[0m"; exit 1; \
 	 elif ! $(TYPECHECK) $< >&/dev/null; \
 	 then echo -e "\033[1;31mfailed\033[0m"; \
 	 else echo -e "\033[1;32mpassed\033[0m (unexpected)"; exit 1; \
@@ -80,7 +80,8 @@ todo_pass: $(foreach f,$(TODO_PASS),$(f).fail)
 	$(HS_TO_ROCQ) $${E_ARG} \
 	    -e ../../base/edits \
 	    --iface-dir ../../base/ \
-	    -o . $${P_ARG} $${M_ARG} $*.hs 1>/dev/null
+	    -o . $${P_ARG} $${M_ARG} $*.hs 1>/dev/null || { rm -f $*.v; exit 1; }; \
+	test -e $*.v || { echo "$*.v: translation produced no output" >&2; exit 1; }
 
 # We always want to re-build the .v files, to test the current build of hs-to-rocq
 FORCE:

@@ -22,4 +22,4 @@ classDefns:
 classTypes:
   Data.Bitraversable.Bitraversable: fromList []
 superclassCount:
-  Data.Bitraversable.Bitraversable: '2'
+  Data.Bitraversable.Bitraversable: '3'

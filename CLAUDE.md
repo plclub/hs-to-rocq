@@ -18,6 +18,7 @@ make                                           # Build base + base-thy + contain
 make -C examples/base-src vfiles               # Re-generate base/ from Haskell sources
 make -C examples/tests                         # Unit tests (.hs → .v → coqc)
 make -C examples/base-tests                    # Tests requiring base/
+make -C examples/rocq9.0                       # Rocq 9.0 base + shared unit tests
 make -C examples/containers                    # containers lib + theories (regenerates + builds)
 make -C examples/transformers                   # transformers lib
 make -C examples/ghc clean && make -C examples/ghc  # Regenerate+compile GHC lib + theories
@@ -110,13 +111,26 @@ Key lemmas: `bin_Desc0` (combine Desc0), `Desc_outside` (f=None outside range), 
 
 ## Test Structure
 
-- `examples/tests/` — Unit tests: each `.hs` file is translated to `.v` and type-checked with `coqc`. Tests categorized as `PASS`, `TODO_PASS` (known failures), `TODO_TRANSLATE`.
-- `examples/base-tests/` — Tests requiring the `base/` Coq library to be built first.
-- Test-specific edits/preambles go in `examples/tests/<TestName>/edits` and `<TestName>/preamble.v`.
+- `examples/tests/` and `examples/rocq9.0/tests/` share `examples/tests/test-rules.mk` and the same fixtures, compiled with `coqc` and `rocq c` respectively. Each suite has 50 `PASS` cases and 3 expected compiler failures (`TODO_PASS`).
+- `examples/base-tests/` requires the `base/` Coq library to be built first; it has 18 `PASS` cases and 3 expected compiler failures.
+- Test-specific files go in `examples/tests/<TestName>/`: `edits`, `preamble.v`, and `midamble.v`.
+- `examples/tests/checks/` contains direct Haskell assertions for the rewrite definitions and a real-make harness with fake tools. See the README test commands. These fast checks do not replace compiler tests.
+
+Test categories distinguish translation from compilation:
+
+- `PASS`: the translator must exit zero and produce a `.v` file; compilation must succeed.
+- `TODO_PASS`: the translator must exit zero and produce a `.v` file; compilation must fail.
+- `TODO_TRANSLATE`: failed translation or missing output is expected. Any output from a successful translation fails this category, even if compilation fails.
+
+Both the shared rules and base-tests discard partial `.v` output when the translator exits nonzero. Unit-test generation uses `FORCE`, including the multi-source `Renamed.v` rule, so repeated runs test the current translator rather than stale output.
+
+The shared compiler fixtures cover nested shim references in the AST (`RocqNestedCorelib`), an AST-only moved-theorem reference (`RocqMovedAst`), preamble/midamble text with `From` syntax and extra whitespace (`RocqMovedText`), and an unqualified inner-module import (`RocqWfInnerImport`).
 
 ## CI (`.github/workflows/hs-to-rocq.yml`)
 
 Seven jobs: `hlint`; `build-haskell` (haskell:9.10.3 Docker, builds the executable once and is the cache producer); `test-coq-files` (mathcomp/mathcomp:2.5.0-coq-8.20 Docker, builds base+containers+ghc lib and theories); `tests` (haskell:9.10.3 Docker + opam for Coq 8.20, runs unit + base-tests + base-thy + small examples); `test-translation` (haskell:9.10.3 Docker, verifies base/containers/ghc/graph regeneration matches); `test-rocq9` (haskell:9.10.3 Docker + opam, builds `examples/rocq9.0/base` and runs `examples/rocq9.0/tests` on Rocq 9.0); `test-rocq9-translation` (Rocq 9.0 round-trip no-diff). Sets `LANG=C.utf8` globally for Unicode support. All hs-to-rocq-using jobs `needs: build-haskell` and share its Stack cache.
+
+After setup, `build-haskell` runs `stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs` and `bash examples/tests/checks/harness.sh`. The `test-rocq9` job runs `make -C examples/rocq9.0 clean`, then `make -j2 -C examples/rocq9.0 base`, before its unit-test step. These checks use the existing seven jobs.
 
 **Shared setup**: `build-haskell`, `tests`, `test-rocq9`, `test-rocq9-translation`, and `test-translation` all run `actions/checkout@v7` then `.github/actions/setup-hs-to-rocq` (composite), which does fix Docker permissions → init requested submodules (`submodules` / `shallow-submodules` inputs) → install extra apt packages (`extra-apt-packages`) → restore Stack cache via `actions/cache@v6` → `stack build`. A local action is not available until after checkout, so the checkout step must precede the composite action. Per-job variation is expressed via those inputs, not duplicated steps. `hlint` (native runner) and `test-coq-files` (docker-coq-action) keep their own checkout.
 
@@ -124,7 +138,7 @@ Seven jobs: `hlint`; `build-haskell` (haskell:9.10.3 Docker, builds the executab
 
 **test-translation job**: Inits `examples/ghc/ghc`, `examples/containers/containers` (full) and `examples/graph/graph` (`--depth 1`, via the composite action inputs), not `submodules: recursive` — GHC has ~20 nested submodules that are not needed.
 
-**Do not mask test failures**: the unit-test Makefiles already encode expected-vs-unexpected outcomes (`.pass` for PASS, `.fail` for TODO_PASS, `.fail_translate` for TODO_TRANSLATE), so `make -C examples/tests` returns 0 when everything is as expected and non-zero only on a real regression. Do not re-add `|| test $? -eq 2` or similar guards — they swallow genuine failures.
+**Do not mask test failures**: the shared unit-test and base-test Makefiles return zero only when outcomes match their categories (`.pass` for `PASS`, `.fail` for `TODO_PASS`, and `.fail_translate` for the shared suite's `TODO_TRANSLATE`). Keep nonzero exits visible in CI. Do not add `|| test $? -eq 2` or similar guards; they hide unexpected outcomes.
 
 **CI cache key**: Must include `src/**` in `hashFiles` — otherwise source changes don't invalidate the cache, and stale binaries persist in `.stack-work`.
 
@@ -140,12 +154,16 @@ Cross-version compatibility is managed via CPP macros in `src/include/ghc-compat
 
 Rocq 9 split the old `Coq.*` namespace: `Stdlib.X.Y` is often a one-line `Require Export` shim whose real content is `Corelib.X.Y`, and fully-qualified names do not follow `Require Export` aliases (e.g. `Stdlib.Init.Datatypes.app` doesn't resolve; `Corelib.Init.Datatypes.app` does). Two rewriters, both in `src/lib/HsToRocq/Rocq/Gallina/Util.hs`, bridge this:
 
-- **`coqToStdlib`** — SYB rewrite over the Gallina AST (`Qualid`s and the three `ModuleSentence` forms), applied to generated declarations. Use `rewriteASTFor version` rather than calling it directly.
-- **`rocq9RewriteText`** — boundary-aware text rewrite applied to user preamble/midamble files (which are copied verbatim and never become an AST). Use `rewriteTextFor version`. The Corelib-shim pass only rewrites `Coq.<path>` when the next char is not an identifier char, so `Coq.Program.Wf` matches `…Wf` / `…Wf.X` but not the longer identifier `Coq.Program.WfExtensionality`. `corelibShimModules` is the explicit allow-list (derived from the Rocq 9.2 distribution; stable across 9.x, verified against 9.0 by CI).
+- **`coqToStdlib`**: SYB rewrite over the Gallina AST (`Qualid`s and the three `ModuleSentence` forms), applied to generated declarations. Use `rewriteASTFor version` rather than calling it directly. Shim matching uses whole module-component prefixes, so `Coq.Init.Decimal.Little.succ` becomes `Corelib.Init.Decimal.Little.succ` without matching longer identifiers such as `Coq.Init.DecimalX`.
+- **`rocq9RewriteText`**: boundary-aware text rewrite applied to user preamble/midamble files, which are not parsed into an AST. Use `rewriteTextFor version`. The Corelib-shim pass matches `Coq.Program.Wf` and `Coq.Program.Wf.X`, but not the longer identifier `Coq.Program.WfExtensionality`. `corelibShimModules` is the explicit allow-list derived from the Rocq 9.2 distribution; CI exercises rewritten output on 9.0. Text rewriting handles dotted `Coq.*` paths, not bare `From Coq Require ...` commands.
 
 The 8.20 default path is byte-identical to the pre-Rocq-9 tool: both rewriters are the identity for `Rocq_8_20`, and `staticPreamble` (in `Rocq/Preamble.hs`) is parameterised by version. The cross-version surface is the unit-test tree, mirrored at `examples/rocq9.0/` (`base/`, `base-src/`, `tests/` reusing the `examples/tests/` `.hs` fixtures with `rocq c` instead of `coqc`). Large examples (`containers`, `ghc`, `transformers`) stay on Coq 8.20.
 
-**WfExtensionality structural move** (not a namespace rename): Rocq 9 pulled `WfExtensionality` out of `Program/Wf.v` into a sibling file. `rocq9RewriteText` now handles this for user preamble/midamble text: it rewrites `Coq.Program.Wf.WfExtensionality` → `Stdlib.Program.WfExtensionality.WfExtensionality` (structural move pass before the Corelib/Stdlib passes) and injects an extra `Require Import Stdlib.Program.WfExtensionality.` after any standalone `Require Import Coq.Program.Wf.` line. The handwritten-module copy rule in `examples/rocq9.0/base-src/Makefile` sed-rewrites the same two transformations for plain-Coq manual files the tool never processes; `rocq9RewriteText` is the source of truth — keep them in sync.
+**WfExtensionality structural move** (not a namespace rename): Rocq 9 pulled `WfExtensionality` out of `Program/Wf.v` into a sibling file. Both the AST and text rewriters change references from `Coq.Program.Wf.WfExtensionality` to `Stdlib.Program.WfExtensionality.WfExtensionality` before the normal namespace rewrite. In the AST, `Require` targets name library files, while `Import`/`Export`, module assignments, and qualified references can name inner modules.
+
+Loading is separate from renaming. The Rocq 9 `staticPreamble` emits `Require Import Stdlib.Program.WfExtensionality.` once per generated module, before user preambles and declarations. `rocq9RewriteText` no longer inserts imports based on an exact `Require` line. Manual files copied by `examples/rocq9.0/base-src/Makefile` bypass that header, so keep their `sed` import rule. `rocq9RewriteText` remains the source of truth for name substitutions; the static header and manual-copy rule handle loading separately.
+
+**Clean and rebuild**: `make -C examples/rocq9.0 clean` deletes the base convenience copy and test outputs. A subsequent plain `make -C examples/rocq9.0` regenerates the missing base automatically. The missing `base/_CoqProject` rule runs the full `base-src vfiles` submake before `coq_makefile` or compilation, including under parallel make. Existing convenience copies do not force regeneration. Regeneration requires the `examples/ghc/ghc` submodule and a built translator. Do not run the Rocq unit suite concurrently with `clean`.
 
 ## GHC 9.10 Migration (ghc910-coq820 branch)
 

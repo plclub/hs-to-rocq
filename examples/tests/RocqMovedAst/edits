@@ -1,0 +1,10 @@
+# Isolate the AST structural move from nested-library import inference.
+skip module Coq.Program.Wf.WfExtensionality
+add RocqMovedAst Definition RocqMovedAst.fixEq := @Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.
+
+add RocqMovedAst Theorem RocqMovedAst.fixEq_typed : fixEqType.
+Proof.
+  Check fixEq : fixEqType.
+  exact fixEq.
+Qed.
+order RocqMovedAst.fixEq RocqMovedAst.fixEq_typed

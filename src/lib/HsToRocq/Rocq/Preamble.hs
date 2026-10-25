@@ -23,7 +23,7 @@ import qualified Data.Map as M
 import Data.Bifunctor
 
 staticPreamble :: RocqVersion -> Text
-staticPreamble version = T.unlines
+staticPreamble version = T.unlines $
  [ "(* Default settings (from HsToRocq.Rocq.Preamble) *)"
  , ""
  , "Generalizable All Variables."
@@ -35,7 +35,9 @@ staticPreamble version = T.unlines
  , ""
  , "Require " <> stdlibPrefix version <> "Program.Tactics."
  , "Require " <> stdlibPrefix version <> "Program.Wf."
- ]
+ ] ++ case version of
+    Rocq_8_20 -> []
+    Rocq_9_0  -> ["Require Import Stdlib.Program.WfExtensionality."]
   where
     stdlibPrefix Rocq_8_20 = "Coq."
     stdlibPrefix Rocq_9_0  = "Stdlib."

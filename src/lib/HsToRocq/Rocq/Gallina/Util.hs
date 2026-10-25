@@ -396,19 +396,25 @@ coqToStdlib :: Data a => a -> a
 coqToStdlib = everywhere (mkT renameQualid `extT` renameModuleSentence)
   where
     renameQualid :: Qualid -> Qualid
-    renameQualid (Qualified modId accId) =
-      Qualified (rocq9RenameModule modId) accId
+    renameQualid (Qualified modId accId)
+      -- An exact reference to the moved module puts its name in accId.
+      -- Keep accessor components intact, including the special .Z/.N form.
+      | modId == "Coq.Program.Wf"
+      , "WfExtensionality" `isModulePrefixOf` accId =
+          Qualified "Stdlib.Program.WfExtensionality" accId
+      | otherwise = Qualified (rocq9RenameModuleReference modId) accId
     renameQualid q = q
 
     -- ModuleIdent is a type alias for Text, so we can't use mkT on it directly.
     -- Instead we pattern-match on ModuleSentence constructors that contain ModuleIdents.
     renameModuleSentence :: ModuleSentence -> ModuleSentence
     renameModuleSentence (ModuleImport ie mods) =
-      ModuleImport ie (fmap rocq9RenameModule mods)
+      ModuleImport ie (fmap rocq9RenameModuleReference mods)
+    -- Require targets name library files, not the nested modules they contain.
     renameModuleSentence (Require from ie mods) =
       Require (fmap rocq9RenameModule from) ie (fmap rocq9RenameModule mods)
     renameModuleSentence (ModuleAssignment m1 m2) =
-      ModuleAssignment (rocq9RenameModule m1) (rocq9RenameModule m2)
+      ModuleAssignment m1 (rocq9RenameModuleReference m2)
 
 -- | Rewrite a single module identifier from the Coq-8.20 @Coq.*@ namespace
 -- to its Rocq-9 equivalent (@Corelib.*@ for shim paths, @Stdlib.*@ otherwise).
@@ -416,14 +422,27 @@ rocq9RenameModule :: ModuleIdent -> ModuleIdent
 rocq9RenameModule m
   | m == "Coq"                           = "Stdlib"
   | Just rest <- T.stripPrefix "Coq." m
-  , rest `Set.member` corelibShimModules = "Corelib." <> rest
+  , any (`isModulePrefixOf` rest) corelibShimModules = "Corelib." <> rest
   | Just rest <- T.stripPrefix "Coq." m  = "Stdlib."  <> rest
   | otherwise                            = m
 
+-- | References and Import/assignment targets can name the moved inner module.
+-- Its containing library is just Stdlib.Program.WfExtensionality.
+rocq9RenameModuleReference :: ModuleIdent -> ModuleIdent
+rocq9RenameModuleReference m
+  | old `isModulePrefixOf` m = new <> T.drop (T.length old) m
+  | otherwise = rocq9RenameModule m
+  where
+    old = "Coq.Program.Wf.WfExtensionality"
+    new = "Stdlib.Program.WfExtensionality.WfExtensionality"
+
+isModulePrefixOf :: ModuleIdent -> ModuleIdent -> Bool
+isModulePrefixOf prefix path = prefix == path || (prefix <> ".") `T.isPrefixOf` path
+
 -- | Apply the Rocq-9 @Coq.*@ → @Corelib.*@/@Stdlib.*@ rewrite to plain text
--- (used for preamble/midamble files and handwritten-module copies).
+-- (used for preamble/midamble files).
 --
--- The rewrite has four phases, applied innermost-first:
+-- The rewrite has three phases, applied innermost-first:
 --
 -- 1. **WfExtensionality structural move.** Rocq 9 pulled @WfExtensionality@
 --    out of @Program/Wf.v@ into a sibling file. Fully-qualified references to
@@ -432,14 +451,13 @@ rocq9RenameModule m
 --    still exists in the new file). This is NOT a namespace rename, so it is
 --    handled before the Corelib\/Stdlib passes.
 --
--- 2. **Require injection.** A standalone @Require Import Coq.Program.Wf.@
---    line also needs @Require Import Stdlib.Program.WfExtensionality.@ so
---    that the moved module is available.
+-- The Rocq-9 static preamble loads @Stdlib.Program.WfExtensionality@ once,
+-- independently of the spelling of user-supplied Require commands.
 --
--- 3. **Corelib shim pass.** For every path in 'corelibShimModules', rewrites
+-- 2. **Corelib shim pass.** For every path in 'corelibShimModules', rewrites
 --    @Coq.\<path>@ to @Corelib.\<path>@ at module boundaries.
 --
--- 4. **Generic pass.** Rewrites any remaining @Coq.@ to @Stdlib.@.
+-- 3. **Generic pass.** Rewrites any remaining @Coq.@ to @Stdlib.@.
 --
 -- The Corelib pass is boundary-aware: @Coq.@/@path@ is only rewritten when the
 -- following character is not an identifier character. This prevents a shim path
@@ -452,23 +470,12 @@ rocq9RewriteText :: T.Text -> T.Text
 rocq9RewriteText =
     T.replace "Coq." "Stdlib."
   . (\t -> foldr replaceOne t (Set.toList corelibShimModules))
-  . T.intercalate "\n" . fmap injectWfExtRequire . T.splitOn "\n"
   . replaceAtModuleBoundary
       "Coq.Program.Wf.WfExtensionality"
       "Stdlib.Program.WfExtensionality.WfExtensionality"
   where
     replaceOne path =
       replaceAtModuleBoundary ("Coq." <> path) ("Corelib." <> path)
-
-    -- Rocq 9 moved WfExtensionality out of Program/Wf.v into a sibling file.
-    -- A Require Import of Coq.Program.Wf must also pull in the new module
-    -- (Stdlib.Program.WfExtensionality). The injected path uses @Stdlib.@
-    -- directly because the module only exists as a Stdlib file in Rocq 9.
-    injectWfExtRequire line
-      | line == "Require Import Coq.Program.Wf."
-      = "Require Import Coq.Program.Wf. Require Import Stdlib.Program.WfExtensionality."
-      | otherwise
-      = line
 
 -- | @replaceAtModuleBoundary needle repl haystack@ replaces every non-overlapping
 -- occurrence of @needle@ with @repl@, but only when the character immediately

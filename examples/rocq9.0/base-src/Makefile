@@ -22,7 +22,7 @@ vfiles: deps $(OUT)/_CoqProject $(VFILES)
 deps:
 	mkdir -p deps
 
-$(OUT)/_CoqProject : Makefile
+$(OUT)/_CoqProject : Makefile $(BASE_SRC)/modules.mk
 	mkdir -p $(OUT)
 	> $@
 	echo '-Q . ""' >> $@
@@ -34,26 +34,27 @@ $(OUT)/_CoqProject : Makefile
 
 # All generated modules depend on GHC/Base and manual modules.
 # Additional inter-module deps for fresh builds (before deps/*.mk exists).
+# Keep interface dependencies consistent with examples/base-src/deps/*.mk.
 $(VFILES_GEN) $(VFILES_RENAMED): | $(OUT)/GHC/Base.v $(VFILES_MAN)
 $(OUT)/Data/Monoid.v: | $(OUT)/Control/Monad/Fail.v
-$(OUT)/Data/Foldable.v: | $(OUT)/Data/Functor/Utils.v $(OUT)/Data/Monoid.v
+$(OUT)/Data/Foldable.v: | $(OUT)/Data/Functor/Utils.v $(OUT)/Data/Monoid.v $(OUT)/Data/Either.v $(OUT)/Data/SemigroupInternal.v
+$(OUT)/Data/Functor/Const.v: | $(OUT)/Data/Foldable.v
 $(OUT)/Data/Functor/Identity.v: | $(OUT)/Data/Foldable.v
-$(OUT)/Data/Traversable.v: | $(OUT)/Data/Functor/Identity.v $(OUT)/Data/Foldable.v
+$(OUT)/Data/Traversable.v: | $(OUT)/Data/Functor/Identity.v $(OUT)/Data/Foldable.v $(OUT)/Data/Either.v $(OUT)/Data/Functor/Const.v $(OUT)/Data/Monoid.v $(OUT)/Data/SemigroupInternal.v
 $(OUT)/Control/Applicative.v: | $(OUT)/Data/Traversable.v $(OUT)/Data/Functor/Const.v
 $(OUT)/Data/List/NonEmpty.v: | $(OUT)/Data/Foldable.v $(OUT)/Data/Traversable.v
-$(OUT)/Data/Semigroup.v: | $(OUT)/Data/List/NonEmpty.v
+$(OUT)/Data/Semigroup.v: | $(OUT)/Data/List/NonEmpty.v $(OUT)/Data/Bifoldable.v $(OUT)/Data/Bifunctor.v $(OUT)/Data/Bitraversable.v $(OUT)/Data/Foldable.v $(OUT)/Data/Traversable.v
 $(OUT)/Data/Functor/Compose.v: | $(OUT)/Data/Foldable.v $(OUT)/Data/Traversable.v
 $(OUT)/Data/Functor/Product.v: | $(OUT)/Data/Foldable.v $(OUT)/Data/Traversable.v
 $(OUT)/Data/Functor/Sum.v: | $(OUT)/Data/Foldable.v $(OUT)/Data/Traversable.v
-$(OUT)/Data/Bifoldable.v: | $(OUT)/Data/Foldable.v
-$(OUT)/Data/Bitraversable.v: | $(OUT)/Data/Bifoldable.v $(OUT)/Data/Traversable.v
-$(OUT)/Data/Bifunctor.v: | $(OUT)/Data/Bifoldable.v $(OUT)/Data/Bitraversable.v
-$(OUT)/Control/Monad/Zip.v: | $(OUT)/Control/Monad.v
-$(OUT)/Control/Arrow.v: | $(OUT)/Control/Category.v
+$(OUT)/Data/Bifoldable.v: | $(OUT)/Data/Foldable.v $(OUT)/Data/Either.v $(OUT)/Data/Functor/Const.v
+$(OUT)/Data/Bitraversable.v: | $(OUT)/Data/Bifoldable.v $(OUT)/Data/Traversable.v $(OUT)/Data/Bifunctor.v $(OUT)/Data/Either.v $(OUT)/Data/Functor/Const.v
+$(OUT)/Data/Bifunctor.v: | $(OUT)/Data/Either.v $(OUT)/Data/Functor/Const.v
+$(OUT)/Control/Monad/Zip.v: | $(OUT)/Control/Monad.v $(OUT)/Data/Functor/Identity.v $(OUT)/Data/SemigroupInternal.v
+$(OUT)/Control/Arrow.v: | $(OUT)/Control/Category.v $(OUT)/Data/Either.v
 $(OUT)/Data/Functor/Product.v: | $(OUT)/Control/Monad/Zip.v
 $(OUT)/Data/OldList.v: | $(OUT)/Data/Foldable.v
 $(OUT)/Data/List.v: | $(OUT)/Data/OldList.v
-$(OUT)/Data/SemigroupInternal.v: | $(OUT)/Data/Foldable.v
 
 # Common options shared by all translation rules
 HS_TO_ROCQ_OPTS_COMMON := \
@@ -145,11 +146,12 @@ $(OUT)/GHC/Base.v: $(GHC_BASE_PRE) $(GHC_BASE_MID) $(GHC_BASE_EDITS) $(BASE_SRC)
 #
 # The authoritative Coq.* -> Corelib.*/Stdlib.* rewrite lives in
 # rocq9RewriteText (src/lib/HsToRocq/Rocq/Gallina/Util.hs), which the hs-to-rocq
-# driver applies to generated output and to user preamble/midamble text. These
+# driver applies to user preamble/midamble text. These
 # manual files are plain Coq copied verbatim (they are not Haskell, so the tool
 # never processes them), so this rule is a shell-level re-implementation of that
-# same rewrite for the copy step. Keep the two in sync; rocq9RewriteText is the
-# source of truth.
+# same name rewrite for the copy step. Keep the names in sync; rocq9RewriteText
+# is the source of truth. Generated modules load WfExtensionality in the tool's
+# static preamble; manual copies bypass that header and need the import below.
 #
 # The sed order matters:
 #   1. Structural move (NOT a namespace rename): Rocq 9 pulled WfExtensionality

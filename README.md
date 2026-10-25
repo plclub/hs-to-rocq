@@ -172,9 +172,9 @@ base → base-thy → containers/lib → containers/theories
 | `lambda/` | Generate + verify | **PASS** | 2/2 .v | Lambda calculus |
 | `simple/` | Generate + verify | **PASS** | 1/1 .v | Simple example |
 | **Test suites** | | | | |
-| `tests/` | Unit tests | **PASS** | 46 pass, 3 known-fail | Translation + type-check |
-| `base-tests/` | Integration tests | **PASS** | 18 pass, 3 known-fail | Requires `base/` |
-| `rocq9.0/tests` | Unit tests (Rocq 9) | **PASS** | 46 pass, 3 known-fail | Reuses `examples/tests/` `.hs` with `rocq c` |
+| `tests/` | Unit tests | **PASS** | 50 pass, 3 expected-fail | Translation + type-check |
+| `base-tests/` | Integration tests | **PASS** | 18 pass, 3 expected-fail | Requires `base/` |
+| `rocq9.0/tests` | Unit tests (Rocq 9) | **PASS** | 50 pass, 3 expected-fail | Reuses `examples/tests/` `.hs` with `rocq c` |
 | **Examples with external dependencies** | | | | |
 | `wc/lib` | Generated lib | **BLOCKED** | 0/14 .v | Needs `coq-itree` package |
 | `wc/theories` | Proofs | **BLOCKED** | 0/2 .v | Depends on wc/lib |
@@ -211,10 +211,36 @@ cd examples/graph/theories && coq_makefile -f _CoqProject -o Makefile && make -j
 # Transformers
 cd examples/transformers && make
 
-# Tests
+# Fast checks (after stack build; no Coq/Rocq compiler required)
+stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs
+bash examples/tests/checks/harness.sh
+
+# Coq 8.20 tests
 make -C examples/tests
 make -C examples/base-tests
+
+# Rocq 9.0 base and shared unit tests (use a Rocq 9.0 environment)
+make -C examples/rocq9.0
+
+# Rocq 9.0 clean rebuild, including parallel base regeneration
+git submodule update --init examples/ghc/ghc
+make -C examples/rocq9.0 clean
+make -j2 -C examples/rocq9.0 base
+make -C examples/rocq9.0/tests
 ```
+
+The fast checks run 324 direct Haskell assertions about rewrite definitions,
+module boundaries, header imports, and Coq 8.20 identity, plus 40 checks of the
+production Makefiles with fake translator/compiler tools. These checks do not
+replace real compiler tests. The shared unit suites compile fixtures for nested
+Corelib references, moved theorems in generated declarations and preamble/midamble
+text, and unqualified `Import WfExtensionality.` on both targets. The three
+expected failures in each suite are compiler failures after successful translation.
+
+The Rocq 9.0 `clean` target deletes the `examples/rocq9.0/base/` convenience copy
+as well as test outputs. A subsequent plain `make -C examples/rocq9.0` regenerates
+the missing base before compiling it; no separate `vfiles` step is needed.
+Regeneration requires the GHC submodule and a built `hs-to-rocq` executable.
 
   Some examples use git submodules, so run
 

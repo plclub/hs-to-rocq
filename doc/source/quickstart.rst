@@ -41,18 +41,40 @@ In this case, it is the current directory.
 .. option:: --target-version {8.20|9.0}
 
 Selects the target Rocq/Coq version. The default is ``8.20``, which emits
-``Coq.*`` qualified names and is unchanged from earlier releases. Passing
-``--target-version 9.0`` rewrites the generated code for Rocq 9.0, where the
-standard library was split into ``Stdlib.*`` (often one-line re-exports) and
-``Corelib.*`` (the actual definitions); the bundled preamble and every
-fully-qualified reference are adjusted accordingly. This option is exercised by
-the ``examples/rocq9.0/`` tree.
+``Coq.*`` qualified names and preserves the pre-Rocq-9 output. Passing
+``--target-version 9.0`` rewrites standard-library references in generated
+declarations for Rocq 9.0. For modules that now re-export definitions from Corelib,
+the tool uses ``Corelib.*`` paths, including nested module paths. It uses
+``Stdlib.*`` for other standard-library references. The tool also adjusts the
+static header and names in user preambles and midambles.
 
-An example translated in this way
-is `simple
-<https://github.com/plclub/hs-to-rocq/tree/master/examples/simple>`_. Check
-out the ``Makefile`` in the ``examples/simple`` subdirectory to see how
-``hs-to-rocq`` is invoked with these arguments.
+The `simple <https://github.com/plclub/hs-to-rocq/tree/master/examples/simple>`_
+example shows how to invoke ``hs-to-rocq`` from a ``Makefile``.
+
+Building the Rocq 9.0 examples
+-----------------------------
+
+The ``examples/rocq9.0/`` tree provides the matching base library and reuses the
+shared unit tests with ``rocq c``. After building ``hs-to-rocq``, use a Rocq 9.0
+environment with Equations installed and run this command from the repository root:
+
+.. code-block:: shell
+
+     $ make -C examples/rocq9.0
+
+The ``clean`` target deletes the convenience copy in ``examples/rocq9.0/base/``
+as well as test outputs. To regenerate and rebuild it, initialize the GHC submodule
+and run:
+
+.. code-block:: shell
+
+     $ git submodule update --init examples/ghc/ghc
+     $ make -C examples/rocq9.0 clean
+     $ make -j2 -C examples/rocq9.0
+
+The build regenerates all base sources before creating the base Makefile and
+compiling them. Running ``make -C examples/rocq9.0`` without ``-j2`` also
+regenerates the missing sources; no separate ``vfiles`` step is needed.
 
 Local Edit files
 ----------------
@@ -89,6 +111,16 @@ type definitions but before any of the translated code or instance
 declarations.
 
 Only one preamble and one midamble can be provided to ``hs-to-rocq``.
+
+With ``--target-version 9.0``, the tool rewrites dotted ``Coq.*`` names in both
+files, including the move from ``Coq.Program.Wf.WfExtensionality`` to
+``Stdlib.Program.WfExtensionality.WfExtensionality``. The static header imports
+``Stdlib.Program.WfExtensionality`` once before user definitions, so loading does
+not depend on the spelling or spacing of a user ``Require`` command. The text
+rewriter does not insert extra imports. It does not rewrite bare
+``From Coq Require ...`` commands; use a dotted form such as
+``From Coq.Program Require Import Wf.`` for text shared by both targets.
+The Coq 8.20 target leaves preamble and midamble text unchanged.
 
 Strict vs. permissive translation
 ---------------------------------

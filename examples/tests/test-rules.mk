@@ -62,6 +62,10 @@ PASS = \
   UniversePolymorphic \
   Equations \
   TypeAnnotations \
+  RocqNestedCorelib \
+  RocqMovedAst \
+  RocqMovedText \
+  RocqWfInnerImport \
 
 # tests that *should* pass but currently fail
 TODO_PASS = \
@@ -117,7 +121,7 @@ todo_translate: $(foreach f, $(TODO_TRANSLATE), $(f).fail_translate)
 %.fail : %.v
 	@/usr/bin/env echo -n "$<: "
 	@if ! test -e $<; \
-	 then echo -e "\033[1;31mmissing\033[0m"; \
+	 then echo -e "\033[1;31mmissing\033[0m"; exit 1; \
 	 elif ! $(TYPECHECK) $< >&/dev/null; \
 	 then echo -e "\033[1;31mfailed\033[0m"; \
 	 else echo -e "\033[1;32mpassed\033[0m (unexpected)"; exit 1; \
@@ -135,17 +139,25 @@ todo_translate: $(foreach f, $(TODO_TRANSLATE), $(f).fail_translate)
 %.vo : %.v
 	@$(COMPILER) -Q . "" $*.v
 
+# Only TODO_TRANSLATE may omit output or fail translation. Discard partial
+# output on failure so .fail_translate sees an untranslated test.
 .SECONDEXPANSION:
 %.v : FORCE $$(wildcard $(SRC_DIR)/$$*/edits) $$(wildcard $(SRC_DIR)/$$*/preamble.v) $(SRC_DIR)/%.hs
 	@rm -f $*.v
 	@if [ -e $(SRC_DIR)/$*/preamble.v ]; then P_ARG="--preamble $(SRC_DIR)/$*/preamble.v"; else P_ARG=; fi;\
 	 if [ -e $(SRC_DIR)/$*/midamble.v ]; then M_ARG="--midamble $(SRC_DIR)/$*/midamble.v"; else M_ARG=; fi;\
 	 if [ -e $(SRC_DIR)/$*/edits ];      then E_ARG="--edits    $(SRC_DIR)/$*/edits";      else E_ARG=; fi;\
-	 $(HS_TO_ROCQ) $(HS_EXTRA) $${E_ARG} -N -e $(SRC_DIR)/renamings $(HS_IMPORT) -o . $${P_ARG} $${M_ARG} $(SRC_DIR)/$*.hs 1>/dev/null || true
+	 $(HS_TO_ROCQ) $(HS_EXTRA) $${E_ARG} -N -e $(SRC_DIR)/renamings $(HS_IMPORT) -o . $${P_ARG} $${M_ARG} $(SRC_DIR)/$*.hs 1>/dev/null || { \
+	   rm -f $*.v; test -n "$(filter $*,$(TODO_TRANSLATE))" || exit 1; \
+	 }; \
+	 if test -z "$(filter $*,$(TODO_TRANSLATE))"; then \
+	   test -e $*.v || { echo "$*.v: translation produced no output" >&2; exit 1; }; \
+	 fi
 
-Renamed.v: $(SRC_DIR)/RenameMe.hs $(SRC_DIR)/RenameMe.hs-boot $(SRC_DIR)/RenameMeToo.hs $(SRC_DIR)/RenameMe/edits
+Renamed.v: FORCE $(SRC_DIR)/RenameMe.hs $(SRC_DIR)/RenameMe.hs-boot $(SRC_DIR)/RenameMeToo.hs $(SRC_DIR)/RenameMe/edits
 	@rm -f Renamed.v
-	$(HS_TO_ROCQ) $(HS_EXTRA) -N -e $(SRC_DIR)/RenameMe/edits -e $(SRC_DIR)/renamings $(HS_IMPORT) -o . $(SRC_DIR)/RenameMe.hs $(SRC_DIR)/RenameMeToo.hs 1>/dev/null
+	$(HS_TO_ROCQ) $(HS_EXTRA) -N -e $(SRC_DIR)/RenameMe/edits -e $(SRC_DIR)/renamings $(HS_IMPORT) -o . $(SRC_DIR)/RenameMe.hs $(SRC_DIR)/RenameMeToo.hs 1>/dev/null || { rm -f Renamed.v; exit 1; }
+	@test -e Renamed.v || { echo "Renamed.v: translation produced no output" >&2; exit 1; }
 
 RenameModule.v:: Renamed.vo
 

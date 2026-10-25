@@ -9,6 +9,7 @@ Unset Printing Implicit Defensive.
 
 Require Stdlib.Program.Tactics.
 Require Stdlib.Program.Wf.
+Require Import Stdlib.Program.WfExtensionality.
 
 (* No imports to convert. *)
 

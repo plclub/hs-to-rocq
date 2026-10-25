@@ -16,7 +16,7 @@ filelist:
 
 vfiles: $(OUT)/edits $(OUT)/README.md $(OUT)/_CoqProject $(OUT)/coq-hs-to-rocq-base.opam $(VFILES)
 
-$(OUT)/_CoqProject : Makefile
+$(OUT)/_CoqProject : Makefile modules.mk
 	mkdir -p $(OUT)
 	> $@
 	echo '-Q . ""' >> $@
