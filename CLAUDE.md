@@ -128,7 +128,9 @@ The shared compiler fixtures cover nested shim references in the AST (`RocqNeste
 
 ## CI (`.github/workflows/hs-to-rocq.yml`)
 
-Seven jobs: `hlint`; `build-haskell` (haskell:9.10.3 Docker, builds the executable once and is the cache producer); `test-coq-files` (mathcomp/mathcomp:2.5.0-coq-8.20 Docker, builds base+containers+ghc lib and theories); `tests` (haskell:9.10.3 Docker + opam for Coq 8.20, runs unit + base-tests + base-thy + small examples); `test-translation` (haskell:9.10.3 Docker, verifies base/containers/ghc/graph regeneration matches); `test-rocq9` (haskell:9.10.3 Docker + opam, builds `examples/rocq9.0/base` and runs `examples/rocq9.0/tests` on Rocq 9.0); `test-rocq9-translation` (Rocq 9.0 round-trip no-diff). Sets `LANG=C.utf8` globally for Unicode support. All hs-to-rocq-using jobs `needs: build-haskell` and share its Stack cache.
+Seven jobs: `hlint`; `build-haskell` (haskell:9.10.3-bookworm Docker, builds the executable once and is the cache producer); `test-coq-files` (mathcomp/mathcomp:2.5.0-coq-8.20 Docker, builds base+containers+ghc lib and theories); `tests` (haskell:9.10.3-bookworm Docker + opam for Coq 8.20, runs unit + base-tests + base-thy + small examples); `test-translation` (haskell:9.10.3-bookworm Docker, verifies base/containers/ghc/graph regeneration matches); `test-rocq9` (haskell:9.10.3-bookworm Docker + opam, builds `examples/rocq9.0/base` and runs `examples/rocq9.0/tests` on Rocq 9.0); `test-rocq9-translation` (haskell:9.10.3-bookworm Docker, Rocq 9.0 round-trip no-diff). Sets `LANG=C.utf8` globally for Unicode support. All hs-to-rocq-using jobs `needs: build-haskell` and share its Stack cache.
+
+Use the explicit Bookworm image tag: the unqualified `haskell:9.10.3` tag uses Debian 11 Bullseye, whose LTS ended in August 2026. Its security-package URLs returned 404 during compiler setup. Bookworm keeps GHC 9.10.3 while using a supported Debian package source.
 
 After setup, `build-haskell` runs `stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs` and `bash examples/tests/checks/harness.sh`. The `test-rocq9` job runs `make -C examples/rocq9.0 clean`, then `make -j2 -C examples/rocq9.0 base`, before its unit-test step. These checks use the existing seven jobs.
 
@@ -140,7 +142,7 @@ After setup, `build-haskell` runs `stack --allow-different-user exec -- runghc -
 
 **Do not mask test failures**: the shared unit-test and base-test Makefiles return zero only when outcomes match their categories (`.pass` for `PASS`, `.fail` for `TODO_PASS`, and `.fail_translate` for the shared suite's `TODO_TRANSLATE`). Keep nonzero exits visible in CI. Do not add `|| test $? -eq 2` or similar guards; they hide unexpected outcomes.
 
-**CI cache key**: Must include `src/**` in `hashFiles` — otherwise source changes don't invalidate the cache, and stale binaries persist in `.stack-work`.
+**CI cache key**: The `stack-bookworm-ghc9.10.3-` prefix separates native build artifacts from the old Bullseye cache. Change the distribution prefix when changing the container base. Keep `src/**` in `hashFiles` so source changes invalidate the cache.
 
 **Unicode encoding**: `src/exe/Main.hs` calls `setLocaleEncoding utf8` at startup so all file I/O uses UTF-8 regardless of system locale. Edits/midamble/preamble files may contain Unicode (e.g., `∘` in Coq identifiers). To test locally without UTF-8 locale: `LANG=C make -C examples/base-src clean && make vfiles`. Avoid Unicode in comments (smart quotes etc.) — use ASCII equivalents.
 

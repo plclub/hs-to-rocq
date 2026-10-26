@@ -47,7 +47,8 @@ runs:
         path: |
           /root/.stack
           .stack-work
-        key: stack-ghc9.10.3-${{ hashFiles('hs-to-rocq.cabal', 'stack.yaml', 'src/**') }}
+        # Keep native build artifacts within the same Debian base image.
+        key: stack-bookworm-ghc9.10.3-${{ hashFiles('hs-to-rocq.cabal', 'stack.yaml', 'src/**') }}
     - name: Build hs-to-rocq
       shell: bash
       run: stack --no-terminal --system-ghc --allow-different-user build
