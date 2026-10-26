@@ -145,11 +145,13 @@ proofCases =
     oldTactics = T.unlines
       [ "pose proof Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext as H."
       , "pose proof Coq.Arith.PeanoNat.Nat.add_comm as Hcomm."
+      , "pose (\"Coq.Init.Decimal\") as path."
       , "exact Coq.Init.Logic.I."
       ]
     newTactics = T.unlines
       [ "pose proof Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext as H."
       , "pose proof Stdlib.Arith.PeanoNat.Nat.add_comm as Hcomm."
+      , "pose (\"Coq.Init.Decimal\") as path."
       , "exact Corelib.Init.Logic.I."
       ]
 
@@ -170,6 +172,11 @@ programCases =
         (Just "pose proof MyCoq.add as H; pose proof Other.Coq.Init.Decimal.Little.add as Hdec; exact Coq.Init.Logic.I"),
       ProgramSentence newDefinition
         (Just "pose proof MyCoq.add as H; pose proof Other.Coq.Init.Decimal.Little.add as Hdec; exact Corelib.Init.Logic.I"))
+  , ("Program obligation tactics preserve string literals",
+      ProgramSentence oldDefinition
+        (Just "pose (\"Coq.Init.Decimal\") as path; exact Coq.Init.Logic.I"),
+      ProgramSentence newDefinition
+        (Just "pose (\"Coq.Init.Decimal\") as path; exact Corelib.Init.Logic.I"))
   , ("Program without obligation tactics",
       ProgramSentence oldDefinition Nothing, ProgramSentence newDefinition Nothing)
   , ("Program admitted obligations",
@@ -185,6 +192,24 @@ textCases :: [(String, T.Text, T.Text)]
 textCases =
   [ ("exact shim text", "Coq.Init.Decimal", "Corelib.Init.Decimal")
   , ("nested shim text", "Coq.Init.Decimal.Little.succ", "Corelib.Init.Decimal.Little.succ")
+  , ("quoted string stays unchanged while code reference rewrites",
+      "exact (eq_refl \"Coq.Init.Decimal\"); pose proof Coq.Init.Logic.I.",
+      "exact (eq_refl \"Coq.Init.Decimal\"); pose proof Corelib.Init.Logic.I.")
+  , ("doubled quotes keep paths inside the literal",
+      "pose (\"before \"\"Coq.Init.Decimal\"\" after\") as path; exact Coq.Init.Logic.I.",
+      "pose (\"before \"\"Coq.Init.Decimal\"\" after\") as path; exact Corelib.Init.Logic.I.")
+  , ("empty string does not hide the following code reference",
+      "pose (\"\") as path; exact Coq.Init.Logic.I.",
+      "pose (\"\") as path; exact Corelib.Init.Logic.I.")
+  , ("multiline string preserves paths and comment delimiters",
+      "pose (\"Coq.Init.Decimal\n(* Coq.Program.Wf *)\") as path; exact Coq.Init.Logic.I.",
+      "pose (\"Coq.Init.Decimal\n(* Coq.Program.Wf *)\") as path; exact Corelib.Init.Logic.I.")
+  , ("backslash does not escape a Rocq closing quote",
+      "pose (\"Coq.Init.Decimal\\\") as path; exact Coq.Init.Logic.I.",
+      "pose (\"Coq.Init.Decimal\\\") as path; exact Corelib.Init.Logic.I.")
+  , ("unterminated string remains unchanged after a code reference",
+      "Coq.Init.Logic.I \"Coq.Init.Decimal",
+      "Corelib.Init.Logic.I \"Coq.Init.Decimal")
   , ("moved theorem text", "Coq.Program.Wf.WfExtensionality.fix_sub_eq",
       "Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq")
   , ("exact moved module text", "Coq.Program.Wf.WfExtensionality",

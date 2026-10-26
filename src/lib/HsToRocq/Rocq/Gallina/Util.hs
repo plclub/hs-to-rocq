@@ -457,6 +457,8 @@ isModulePrefixOf prefix path = prefix == path || (prefix <> ".") `T.isPrefixOf` 
 -- Only root @Coq.*@ paths are rewritten: a preceding identifier character or
 -- @.@ makes the path part of a user identifier or another namespace. Bare
 -- @From Coq Require ...@ commands are left unchanged.
+-- Quoted string literals are copied verbatim, including doubled quote escapes,
+-- so raw tactics and their AST string values stay consistent.
 --
 -- Each complete path uses the same renaming as AST module references:
 -- @Coq.Program.Wf.WfExtensionality@ moves to
@@ -469,9 +471,23 @@ isModulePrefixOf prefix path = prefix == path || (prefix <> ".") `T.isPrefixOf` 
 rocq9RewriteText :: T.Text -> T.Text
 rocq9RewriteText = go
   where
-    go text
+    go text = rewritePaths pre <> case T.uncons rest of
+      Nothing -> ""
+      Just (_, after) -> "\"" <> quoted after
+      where
+        (pre, rest) = T.breakOn "\"" text
+
+    -- Rocq escapes a quote inside a string by doubling it.
+    quoted text
+      | T.null rest = pre
+      | Just after <- T.stripPrefix "\"\"" rest = pre <> "\"\"" <> quoted after
+      | otherwise = pre <> "\"" <> go (T.drop 1 rest)
+      where
+        (pre, rest) = T.breakOn "\"" text
+
+    rewritePaths text
       | T.null rest = text
-      | otherwise = pre <> renamed <> go after
+      | otherwise = pre <> renamed <> rewritePaths after
       where
         (pre, rest) = T.breakOn "Coq." text
         -- Consume the whole path, including rejected matches, so an embedded

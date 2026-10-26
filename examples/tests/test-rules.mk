@@ -65,6 +65,7 @@ PASS = \
   RocqNestedCorelib \
   RocqMovedAst \
   RocqMovedText \
+  RocqQuotedText \
   RocqWfInnerImport \
 
 # tests that *should* pass but currently fail

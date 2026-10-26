@@ -111,7 +111,7 @@ Key lemmas: `bin_Desc0` (combine Desc0), `Desc_outside` (f=None outside range), 
 
 ## Test Structure
 
-- `examples/tests/` and `examples/rocq9.0/tests/` share `examples/tests/test-rules.mk` and the same fixtures, compiled with `coqc` and `rocq c` respectively. Each suite has 50 `PASS` cases and 3 expected compiler failures (`TODO_PASS`).
+- `examples/tests/` and `examples/rocq9.0/tests/` share `examples/tests/test-rules.mk` and the same fixtures, compiled with `coqc` and `rocq c` respectively. Each suite has 51 `PASS` cases and 3 expected compiler failures (`TODO_PASS`).
 - `examples/base-tests/` requires the `base/` Coq library to be built first; it has 18 `PASS` cases and 3 expected compiler failures.
 - Test-specific files go in `examples/tests/<TestName>/`: `edits`, `preamble.v`, and `midamble.v`.
 - `examples/tests/checks/` contains direct Haskell assertions for the rewrite definitions and a real-make harness with fake tools. See the README test commands. These fast checks do not replace compiler tests.
@@ -129,6 +129,7 @@ The shared compiler fixtures cover:
 - `RocqNestedCorelib`: nested shim references in the AST.
 - `RocqMovedAst`: the moved theorem in a generated `Definition`, a raw `Qed` proof, and an edits-supplied `Program` obligation tactic. A local `Obligation Tactic := idtac` keeps the obligation pending, while `set type` makes `fixEqWitness` a dependent pair requiring `fixEqType`. The tactic supplies the moved theorem, and `Check (proj2_sig fixEqWitness) : fixEqType.` makes an incomplete obligation fail compilation.
 - `RocqMovedText`: preamble/midamble text with `From` syntax and extra whitespace, root `Coq.*` references (including after superscript notation), and user names that must remain unchanged: identifiers containing combining U+1DC0 or non-breaking U+00A0, `MyCoq.add`, and paths under `UserCoq` and `Other.Coq` that resemble shim or moved-module paths.
+- `RocqQuotedText`: raw preamble, midamble, and `Qed`/`Defined` proof string literals compared against unchanged AST literals, alongside genuine qualified code references that must rewrite.
 - `RocqWfInnerImport`: an unqualified inner-module import.
 
 ## CI (`.github/workflows/hs-to-rocq.yml`)
@@ -162,7 +163,7 @@ Cross-version compatibility is managed via CPP macros in `src/include/ghc-compat
 Rocq 9 split the old `Coq.*` namespace: `Stdlib.X.Y` is often a one-line `Require Export` shim whose real content is `Corelib.X.Y`, and fully-qualified names do not follow `Require Export` aliases (e.g. `Stdlib.Init.Datatypes.app` doesn't resolve; `Corelib.Init.Datatypes.app` does). Two rewriters, both in `src/lib/HsToRocq/Rocq/Gallina/Util.hs`, bridge this:
 
 - **`coqToStdlib`**: SYB rewrite over the Gallina AST, applied to generated declarations. It visits `Qualid`s and the three `ModuleSentence` forms, and applies `rocq9RewriteText` to tactic text in `ProofQed`, `ProofDefined`, `ProofAdmitted`, and the optional obligation tactics in `ProgramSentence`. These type-specific visits leave unrelated AST strings and comments unchanged. Use `rewriteASTFor version` rather than calling it directly. Shim matching uses whole module-component prefixes, so `Coq.Init.Decimal.Little.succ` becomes `Corelib.Init.Decimal.Little.succ` without matching longer identifiers such as `Coq.Init.DecimalX`.
-- **`rocq9RewriteText`**: a single scanner over complete paths in user preamble/midamble files and raw proof/obligation tactics. It uses the shared `rocq9RenameModuleReference` and rewrites only root `Coq.*` paths. A preceding Rocq 9 identifier-continuation character or dot blocks rewriting, preserving names such as `MyCoq.add` and `Other.Coq.Init.Decimal`. Root references after `@`, an unspaced `(`, or a superscript-symbol notation still rewrite. Use `rewriteTextFor version` for preamble/midamble files.
+- **`rocq9RewriteText`**: scans complete paths in user preamble/midamble files and raw proof/obligation tactics. It uses the shared `rocq9RenameModuleReference` and rewrites only root `Coq.*` paths. Quoted string literals, including doubled quote escapes, are copied verbatim so raw tactics and AST literal values remain consistent. A preceding Rocq 9 identifier-continuation character or dot blocks rewriting, preserving names such as `MyCoq.add` and `Other.Coq.Init.Decimal`. Root references after `@`, an unspaced `(`, or a superscript-symbol notation still rewrite. Use `rewriteTextFor version` for preamble/midamble files.
 
 The text scanner uses the same predicate for leading boundaries and complete paths. It follows Rocq 9.0.1's `clib/unicode.ml`: letters, numbers, non-spacing combining marks, underscore, apostrophe, and non-breaking space U+00A0 continue identifiers, while superscript decimal digits are symbols. The shared fixtures use U+1DC0, which is accepted by both Coq 8.20 and Rocq 9.0; Rocq 9.0 accepts non-spacing marks more generally. Consuming combining marks within a path also prevents `Coq.Init.Decimal` followed by a combining-mark suffix from incorrectly matching the `Decimal` shim.
 

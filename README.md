@@ -172,9 +172,9 @@ base → base-thy → containers/lib → containers/theories
 | `lambda/` | Generate + verify | **PASS** | 2/2 .v | Lambda calculus |
 | `simple/` | Generate + verify | **PASS** | 1/1 .v | Simple example |
 | **Test suites** | | | | |
-| `tests/` | Unit tests | **PASS** | 50 pass, 3 expected-fail | Translation + type-check |
+| `tests/` | Unit tests | **PASS** | 51 pass, 3 expected-fail | Translation + type-check |
 | `base-tests/` | Integration tests | **PASS** | 18 pass, 3 expected-fail | Requires `base/` |
-| `rocq9.0/tests` | Unit tests (Rocq 9) | **PASS** | 50 pass, 3 expected-fail | Reuses `examples/tests/` `.hs` with `rocq c` |
+| `rocq9.0/tests` | Unit tests (Rocq 9) | **PASS** | 51 pass, 3 expected-fail | Reuses `examples/tests/` `.hs` with `rocq c` |
 | **Examples with external dependencies** | | | | |
 | `wc/lib` | Generated lib | **BLOCKED** | 0/14 .v | Needs `coq-itree` package |
 | `wc/theories` | Proofs | **BLOCKED** | 0/2 .v | Depends on wc/lib |
@@ -229,10 +229,11 @@ make -j2 -C examples/rocq9.0 base
 make -C examples/rocq9.0/tests
 ```
 
-The fast checks run 508 direct Haskell assertions about rewrite definitions,
+The fast checks run 536 direct Haskell assertions about rewrite definitions,
 including proof and obligation tactics, root and module boundaries, Unicode
-identifier and notation boundaries, preservation of user names and unrelated AST
-text, header imports, and Coq 8.20 identity.
+identifier and notation boundaries, preservation of user names, quoted string
+literals (including doubled quote escapes), and unrelated AST text, header
+imports, and Coq 8.20 identity.
 They also run 40 checks of the production Makefiles with fake translator/compiler
 tools. These checks do not replace real compiler tests.
 
@@ -242,6 +243,8 @@ obligations, and preamble/midamble text. They also check that user-qualified nam
 remain unchanged, including names with combining marks and non-breaking spaces,
 that root paths after superscript notation rewrite, and that the unqualified
 `Import WfExtensionality.` succeeds.
+The string-literal fixture compares raw preamble, midamble, and proof values
+against unchanged AST string literals while requiring code references to rewrite.
 The three expected failures in each suite are compiler failures after successful
 translation.
 

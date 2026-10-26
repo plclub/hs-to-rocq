@@ -1,0 +1,14 @@
+# AST string expectations anchor literals in raw preambles, midambles and proofs.
+add RocqQuotedText Theorem RocqQuotedText.preambleLiteral_preserved :
+  preambleLiteral = "Coq.Init.Decimal".
+Proof.
+  pose proof Coq.Init.Logic.I.
+  exact (eq_refl "Coq.Init.Decimal").
+Qed.
+
+add RocqQuotedText Theorem RocqQuotedText.midambleLiteral_preserved :
+  midambleLiteral = "Coq.Program.Wf.WfExtensionality".
+Proof.
+  pose proof Coq.Init.Logic.I.
+  exact (eq_refl "Coq.Program.Wf.WfExtensionality").
+Defined.
