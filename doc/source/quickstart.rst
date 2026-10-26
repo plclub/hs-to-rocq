@@ -43,10 +43,15 @@ In this case, it is the current directory.
 Selects the target Rocq/Coq version. The default is ``8.20``, which emits
 ``Coq.*`` qualified names and preserves the pre-Rocq-9 output. Passing
 ``--target-version 9.0`` rewrites standard-library references in generated
-declarations for Rocq 9.0. For modules that now re-export definitions from Corelib,
-the tool uses ``Corelib.*`` paths, including nested module paths. It uses
-``Stdlib.*`` for other standard-library references. The tool also adjusts the
-static header and names in user preambles and midambles.
+declarations, including raw proof and ``Program`` obligation tactics, for Rocq 9.0.
+For modules that now re-export definitions from Corelib, the tool uses
+``Corelib.*`` paths, including nested module paths. It uses ``Stdlib.*`` for other
+standard-library references. The tool also adjusts the static header and names
+in user preambles and midambles.
+
+The text rewrite applies only to root ``Coq.*`` paths. User names such as
+``MyCoq.add`` and ``Other.Coq.Init.Decimal`` remain unchanged, while root
+references after ``@`` or an opening parenthesis still rewrite.
 
 The `simple <https://github.com/plclub/hs-to-rocq/tree/master/examples/simple>`_
 example shows how to invoke ``hs-to-rocq`` from a ``Makefile``.

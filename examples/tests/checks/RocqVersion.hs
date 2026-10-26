@@ -129,6 +129,58 @@ moduleCases =
       "Require Import Stdlib.Program.WfExtensionality.")
   ]
 
+proofCases :: [(String, Proof, Proof)]
+proofCases =
+  [ (label, ending oldTactics, ending newTactics)
+  | (label, ending) <-
+      [("Qed proof tactics", ProofQed), ("Defined proof tactics", ProofDefined),
+       ("Admitted proof tactics", ProofAdmitted)]
+  ] ++
+  [ ("empty admitted proof", ProofAdmitted "", ProofAdmitted "")
+  , ("proof tactics preserve user qualifiers",
+      ProofQed "pose proof MyCoq.Init.Decimal.Little.add as H; pose proof Other.Coq.Program.Wf.WfExtensionality.add as Hwf; exact Coq.Init.Logic.I.",
+      ProofQed "pose proof MyCoq.Init.Decimal.Little.add as H; pose proof Other.Coq.Program.Wf.WfExtensionality.add as Hwf; exact Corelib.Init.Logic.I.")
+  ]
+  where
+    oldTactics = T.unlines
+      [ "pose proof Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext as H."
+      , "pose proof Coq.Arith.PeanoNat.Nat.add_comm as Hcomm."
+      , "exact Coq.Init.Logic.I."
+      ]
+    newTactics = T.unlines
+      [ "pose proof Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext as H."
+      , "pose proof Stdlib.Arith.PeanoNat.Nat.add_comm as Hcomm."
+      , "exact Corelib.Init.Logic.I."
+      ]
+
+programCases :: [(String, Sentence, Sentence)]
+programCases =
+  [ ("Program obligation tactics",
+      ProgramSentence oldDefinition
+        (Just "pose proof Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext as H; exact I"),
+      ProgramSentence newDefinition
+        (Just "pose proof Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext as H; exact I"))
+  , ("Program obligation standard namespaces",
+      ProgramSentence oldDefinition
+        (Just "pose proof Coq.Arith.PeanoNat.Nat.add_comm as H; exact Coq.Init.Logic.I"),
+      ProgramSentence newDefinition
+        (Just "pose proof Stdlib.Arith.PeanoNat.Nat.add_comm as H; exact Corelib.Init.Logic.I"))
+  , ("Program obligation tactics preserve user qualifiers",
+      ProgramSentence oldDefinition
+        (Just "pose proof MyCoq.add as H; pose proof Other.Coq.Init.Decimal.Little.add as Hdec; exact Coq.Init.Logic.I"),
+      ProgramSentence newDefinition
+        (Just "pose proof MyCoq.add as H; pose proof Other.Coq.Init.Decimal.Little.add as Hdec; exact Corelib.Init.Logic.I"))
+  , ("Program without obligation tactics",
+      ProgramSentence oldDefinition Nothing, ProgramSentence newDefinition Nothing)
+  , ("Program admitted obligations",
+      ProgramSentence oldDefinition (Just "admit"), ProgramSentence newDefinition (Just "admit"))
+  ]
+  where
+    oldDefinition = DefinitionSentence (DefinitionDef ExportL (Bare "witness") [] Nothing
+      (Qualid (Qualified "Coq.Init.Logic" "I")) NotExistingClass)
+    newDefinition = DefinitionSentence (DefinitionDef ExportL (Bare "witness") [] Nothing
+      (Qualid (Qualified "Corelib.Init.Logic" "I")) NotExistingClass)
+
 textCases :: [(String, T.Text, T.Text)]
 textCases =
   [ ("exact shim text", "Coq.Init.Decimal", "Corelib.Init.Decimal")
@@ -156,13 +208,59 @@ textCases =
       "Import Stdlib.Program.WfExtensionality.WfExtensionality.")
   , ("module assignment text", "Module WE := Coq.Program.Wf.WfExtensionality.",
       "Module WE := Stdlib.Program.WfExtensionality.WfExtensionality.")
+  , ("user module alias text", "Module MyCoq := Nat.\nCheck MyCoq.add.",
+      "Module MyCoq := Nat.\nCheck MyCoq.add.")
+  , ("combining marks preserve user qualifiers and module boundaries",
+      "A\x1dc0\&Coq.add Coq.Init.Decimal\x1dc0.Little.succ",
+      "A\x1dc0\&Coq.add Stdlib.Init.Decimal\x1dc0.Little.succ")
+  , ("root path after superscript notation",
+      "Check \xb2\&Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.",
+      "Check \xb2\&Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext.")
+  , ("non-breaking spaces preserve user qualifiers and module boundaries",
+      "A\xa0\&Coq.add Coq.Init.Decimal\xa0.Little.succ",
+      "A\xa0\&Coq.add Stdlib.Init.Decimal\xa0.Little.succ")
+  , ("repeated shim roots after false matches",
+      "MyCoq.Init.Decimal Other.Coq.Init.Decimal Coq.Init.Decimal Coq.Init.Decimal",
+      "MyCoq.Init.Decimal Other.Coq.Init.Decimal Corelib.Init.Decimal Corelib.Init.Decimal")
+  , ("repeated moved roots after false matches",
+      "MyCoq.Program.Wf.WfExtensionality Other.Coq.Program.Wf.WfExtensionality Coq.Program.Wf.WfExtensionality Coq.Program.Wf.WfExtensionality",
+      "MyCoq.Program.Wf.WfExtensionality Other.Coq.Program.Wf.WfExtensionality Stdlib.Program.WfExtensionality.WfExtensionality Stdlib.Program.WfExtensionality.WfExtensionality")
+  , ("repeated generic roots after false matches",
+      "MyCoq.Arith.PeanoNat Other.Coq.Arith.PeanoNat Coq.Arith.PeanoNat Coq.Arith.PeanoNat",
+      "MyCoq.Arith.PeanoNat Other.Coq.Arith.PeanoNat Stdlib.Arith.PeanoNat Stdlib.Arith.PeanoNat")
+  , ("root paths in unspaced parentheses",
+      "f(Coq.Init.Logic.I)(Coq.Arith.PeanoNat.Nat.add_comm)(Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext)",
+      "f(Corelib.Init.Logic.I)(Stdlib.Arith.PeanoNat.Nat.add_comm)(Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext)")
+  , ("explicit root applications",
+      "@Coq.Init.Logic.I @Coq.Arith.PeanoNat.Nat.add_comm @Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext",
+      "@Corelib.Init.Logic.I @Stdlib.Arith.PeanoNat.Nat.add_comm @Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext")
+  , ("generic replacement preserves nested Coq component", "Coq.Coq.X", "Stdlib.Coq.X")
+  , ("shim replacement preserves nested Coq component",
+      "Coq.Init.Decimal.Coq.Init.Logic.I", "Corelib.Init.Decimal.Coq.Init.Logic.I")
+  , ("moved replacement preserves nested Coq component",
+      "Coq.Program.Wf.WfExtensionality.Coq.Init.Decimal.Little.succ",
+      "Stdlib.Program.WfExtensionality.WfExtensionality.Coq.Init.Decimal.Little.succ")
+  , ("rejected shim prefix preserves embedded identifier context",
+      "Coq.Init.DecimalCoq.Init.Logic.I", "Stdlib.Init.DecimalCoq.Init.Logic.I")
+  , ("rejected root preserves nested context before a real root",
+      "MyCoq.Coq.Init.Decimal.Little.succ(Coq.Init.Logic.I)",
+      "MyCoq.Coq.Init.Decimal.Little.succ(Corelib.Init.Logic.I)")
+  , ("target namespaces preserve nested Coq components",
+      "Stdlib.Coq.Init.Decimal.Little.succ Corelib.Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext",
+      "Stdlib.Coq.Init.Decimal.Little.succ Corelib.Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext")
   , ("already target text",
       "Corelib.Init.Decimal.Little.succ Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq",
       "Corelib.Init.Decimal.Little.succ Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq")
   , ("unrelated text", "Other.Init.Decimal.Little.succ CoqX.Program.Wf.value",
       "Other.Init.Decimal.Little.succ CoqX.Program.Wf.value")
   , ("empty text", "", "")
-  ] ++ concatMap boundaryCases ["X", "1", "_", "'"]
+  ] ++ concatMap boundaryCases ["X", "1", "_", "'"] ++
+  [ ("non-root text " ++ T.unpack (prefix <> path), prefix <> path, prefix <> path)
+  | prefix <- ["My", "1", "_", "'", "Other.", "\x03bb"]
+  , path <- ["Coq.Init.Decimal.Little.succ",
+             "Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext",
+             "Coq.Arith.PeanoNat.Nat.add_comm"]
+  ]
   where
     boundaryCases suffix =
       [ ("shim text boundary " ++ T.unpack suffix,
@@ -194,6 +292,10 @@ oldHeader = T.unlines
 main :: IO ()
 main = do
   let movedRequire = "Require Import Stdlib.Program.WfExtensionality."
+      assertion = Assertion Theorem (Bare "witness") [] (Qualid (Bare "True"))
+      nonCodeText = "Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext"
+      nonCodeAST = (nonCodeText, Comment nonCodeText,
+        [String nonCodeText, HsString nonCodeText], StringPat nonCodeText, Bare nonCodeText)
       checks = concatMap (\(label, input, expected) -> checkAST label input expected) qualidCases
         ++ concatMap (\(label, input, expected, printed) ->
              checkAST label input expected ++
@@ -206,6 +308,19 @@ main = do
         ++ checkAST "sentence traversal"
              [ModuleSentence input | (_, input, _, _) <- moduleCases]
              [ModuleSentence expected | (_, _, expected, _) <- moduleCases]
+        ++ concatMap (\(label, input, expected) -> checkAST label input expected) proofCases
+        ++ concatMap (\(label, input, expected) -> checkAST label input expected) programCases
+        ++ checkAST "nested proof and obligation traversal"
+             (LocalModuleSentence (LocalModule "Proofs"
+               ([AssertionSentence assertion input | (_, input, _) <- proofCases] ++
+                [input | (_, input, _) <- programCases])))
+             (LocalModuleSentence (LocalModule "Proofs"
+               ([AssertionSentence assertion expected | (_, _, expected) <- proofCases] ++
+                [expected | (_, _, expected) <- programCases])))
+        ++ checkAST "instance proof traversal"
+             [InstanceProof (Bare "witness") [] (Qualid (Bare "C")) input | (_, input, _) <- proofCases]
+             [InstanceProof (Bare "witness") [] (Qualid (Bare "C")) expected | (_, _, expected) <- proofCases]
+        ++ checkAST "non-code AST text stays unchanged" nonCodeAST nonCodeAST
         ++ concatMap (\(label, input, expected) ->
              [ assertEqual (label ++ " (text)") expected (rocq9RewriteText input)
              , assertEqual (label ++ " (9.0 dispatch)") expected (rewriteTextFor Rocq_9_0 input)

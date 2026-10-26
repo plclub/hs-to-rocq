@@ -229,13 +229,21 @@ make -j2 -C examples/rocq9.0 base
 make -C examples/rocq9.0/tests
 ```
 
-The fast checks run 324 direct Haskell assertions about rewrite definitions,
-module boundaries, header imports, and Coq 8.20 identity, plus 40 checks of the
-production Makefiles with fake translator/compiler tools. These checks do not
-replace real compiler tests. The shared unit suites compile fixtures for nested
-Corelib references, moved theorems in generated declarations and preamble/midamble
-text, and unqualified `Import WfExtensionality.` on both targets. The three
-expected failures in each suite are compiler failures after successful translation.
+The fast checks run 508 direct Haskell assertions about rewrite definitions,
+including proof and obligation tactics, root and module boundaries, Unicode
+identifier and notation boundaries, preservation of user names and unrelated AST
+text, header imports, and Coq 8.20 identity.
+They also run 40 checks of the production Makefiles with fake translator/compiler
+tools. These checks do not replace real compiler tests.
+
+The shared unit suites compile fixtures on both targets for nested Corelib
+references and moved theorems in generated definitions, raw proofs, `Program`
+obligations, and preamble/midamble text. They also check that user-qualified names
+remain unchanged, including names with combining marks and non-breaking spaces,
+that root paths after superscript notation rewrite, and that the unqualified
+`Import WfExtensionality.` succeeds.
+The three expected failures in each suite are compiler failures after successful
+translation.
 
 The Rocq 9.0 `clean` target deletes the `examples/rocq9.0/base/` convenience copy
 as well as test outputs. A subsequent plain `make -C examples/rocq9.0` regenerates

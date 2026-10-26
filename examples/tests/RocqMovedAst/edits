@@ -5,6 +5,11 @@ add RocqMovedAst Definition RocqMovedAst.fixEq := @Coq.Program.Wf.WfExtensionali
 add RocqMovedAst Theorem RocqMovedAst.fixEq_typed : fixEqType.
 Proof.
   Check fixEq : fixEqType.
-  exact fixEq.
+  Check (proj2_sig fixEqWitness) : fixEqType.
+  exact @Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.
 Qed.
 order RocqMovedAst.fixEq RocqMovedAst.fixEq_typed
+order RocqMovedAst.fixEqWitness RocqMovedAst.fixEq_typed
+
+set type RocqMovedAst.fixEqWitness : fixEqWitnessType
+obligations RocqMovedAst.fixEqWitness exact @Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext

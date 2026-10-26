@@ -53,7 +53,7 @@ import Control.Lens
 
 import Data.Bifunctor
 import Data.Semigroup ((<>))
-import Data.Char (isAlphaNum)
+import Data.Char (GeneralCategory(NonSpacingMark), generalCategory, isAlphaNum)
 import Data.Foldable
 import Data.Maybe
 import Data.List.NonEmpty (NonEmpty(..), nonEmpty)
@@ -393,7 +393,8 @@ normalizeType t                         = t
 -- For those, we rewrite @Coq.@ → @Corelib.@. Everything else becomes
 -- @Stdlib.@.
 coqToStdlib :: Data a => a -> a
-coqToStdlib = everywhere (mkT renameQualid `extT` renameModuleSentence)
+coqToStdlib = everywhere
+  (mkT renameQualid `extT` renameModuleSentence `extT` renameProof `extT` renameSentence)
   where
     renameQualid :: Qualid -> Qualid
     renameQualid (Qualified modId accId)
@@ -415,6 +416,17 @@ coqToStdlib = everywhere (mkT renameQualid `extT` renameModuleSentence)
       Require (fmap rocq9RenameModule from) ie (fmap rocq9RenameModule mods)
     renameModuleSentence (ModuleAssignment m1 m2) =
       ModuleAssignment m1 (rocq9RenameModuleReference m2)
+
+    -- Tactics are raw Text, so rewrite only code-bearing payloads, not all Text.
+    renameProof :: Proof -> Proof
+    renameProof (ProofQed tactics) = ProofQed (rocq9RewriteText tactics)
+    renameProof (ProofDefined tactics) = ProofDefined (rocq9RewriteText tactics)
+    renameProof (ProofAdmitted tactics) = ProofAdmitted (rocq9RewriteText tactics)
+
+    renameSentence :: Sentence -> Sentence
+    renameSentence (ProgramSentence sentence tactics) =
+      ProgramSentence sentence (fmap rocq9RewriteText tactics)
+    renameSentence sentence = sentence
 
 -- | Rewrite a single module identifier from the Coq-8.20 @Coq.*@ namespace
 -- to its Rocq-9 equivalent (@Corelib.*@ for shim paths, @Stdlib.*@ otherwise).
@@ -440,67 +452,43 @@ isModulePrefixOf :: ModuleIdent -> ModuleIdent -> Bool
 isModulePrefixOf prefix path = prefix == path || (prefix <> ".") `T.isPrefixOf` path
 
 -- | Apply the Rocq-9 @Coq.*@ → @Corelib.*@/@Stdlib.*@ rewrite to plain text
--- (used for preamble/midamble files).
+-- (used for preamble/midamble files and raw proof/obligation tactics).
 --
--- The rewrite has three phases, applied innermost-first:
+-- Only root @Coq.*@ paths are rewritten: a preceding identifier character or
+-- @.@ makes the path part of a user identifier or another namespace. Bare
+-- @From Coq Require ...@ commands are left unchanged.
 --
--- 1. **WfExtensionality structural move.** Rocq 9 pulled @WfExtensionality@
---    out of @Program/Wf.v@ into a sibling file. Fully-qualified references to
---    @Coq.Program.Wf.WfExtensionality@ must become
---    @Stdlib.Program.WfExtensionality.WfExtensionality@ (the inner module
---    still exists in the new file). This is NOT a namespace rename, so it is
---    handled before the Corelib\/Stdlib passes.
+-- Each complete path uses the same renaming as AST module references:
+-- @Coq.Program.Wf.WfExtensionality@ moves to
+-- @Stdlib.Program.WfExtensionality.WfExtensionality@, Corelib shim paths use
+-- @Corelib.@, and other paths use @Stdlib.@. Matching whole module components
+-- keeps @Coq.Program.WfExtensionality@ distinct from the @Coq.Program.Wf@ shim.
 --
 -- The Rocq-9 static preamble loads @Stdlib.Program.WfExtensionality@ once,
 -- independently of the spelling of user-supplied Require commands.
---
--- 2. **Corelib shim pass.** For every path in 'corelibShimModules', rewrites
---    @Coq.\<path>@ to @Corelib.\<path>@ at module boundaries.
---
--- 3. **Generic pass.** Rewrites any remaining @Coq.@ to @Stdlib.@.
---
--- The Corelib pass is boundary-aware: @Coq.@/@path@ is only rewritten when the
--- following character is not an identifier character. This prevents a shim path
--- that is a proper *prefix* of a non-shim path from matching — e.g.
--- @Coq.Program.Wf@ (a shim) must NOT match inside @Coq.Program.WfExtensionality@
--- (not a shim), which is supposed to become @Stdlib.Program.WfExtensionality@.
--- A trailing @.@ counts as a boundary, so @Coq.Program.Wf.X@ still rewrites to
--- @Corelib.Program.Wf.X@.
 rocq9RewriteText :: T.Text -> T.Text
-rocq9RewriteText =
-    T.replace "Coq." "Stdlib."
-  . (\t -> foldr replaceOne t (Set.toList corelibShimModules))
-  . replaceAtModuleBoundary
-      "Coq.Program.Wf.WfExtensionality"
-      "Stdlib.Program.WfExtensionality.WfExtensionality"
+rocq9RewriteText = go
   where
-    replaceOne path =
-      replaceAtModuleBoundary ("Coq." <> path) ("Corelib." <> path)
+    go text
+      | T.null rest = text
+      | otherwise = pre <> renamed <> go after
+      where
+        (pre, rest) = T.breakOn "Coq." text
+        -- Consume the whole path, including rejected matches, so an embedded
+        -- Coq component cannot be reconsidered as a root on the next scan.
+        (path, after) = T.span isPathChar rest
+        renamed = case T.unsnoc pre of
+          Just (_, c) | isPathChar c -> path
+          _ -> rocq9RenameModuleReference path
 
--- | @replaceAtModuleBoundary needle repl haystack@ replaces every non-overlapping
--- occurrence of @needle@ with @repl@, but only when the character immediately
--- after the match is not a Coq identifier-continuation character
--- (letter, digit, @_@, @'@). This makes module-prefix substitution respect
--- token boundaries, so @Coq.Program.Wf@ does not match the longer identifier
--- @Coq.Program.WfExtensionality@.
-replaceAtModuleBoundary :: T.Text -> T.Text -> T.Text -> T.Text
-replaceAtModuleBoundary needle repl = go
-  where
-    go h
-      | T.null h = h
-      | otherwise =
-          let (pre, rest) = T.breakOn needle h
-          in if T.null rest
-               then h   -- no (further) match
-               else let after = T.drop (T.length needle) rest
-                    in case T.uncons after of
-                         Just (c, _) | isIdentCont c ->
-                           -- false match (needle is a prefix of a longer
-                           -- identifier): keep the first char and rescan.
-                           pre <> T.singleton (T.head rest) <> go (T.drop 1 rest)
-                         _ -> pre <> repl <> go after
-
-    isIdentCont c = isAlphaNum c || c == '_' || c == '\''
+    -- Rocq 9.0.1 clib/unicode.ml includes non-spacing marks in IdentPart
+    -- and U+00A0 in IdentSep.
+    -- Superscript decimal digits are symbols in both Coq 8.20.1 and Rocq 9.0.1.
+    -- https://github.com/rocq-prover/rocq/blob/V9.0.1/clib/unicode.ml
+    isPathChar c
+      | c `elem` ("\xb2\xb3\xb9\x2070\x2074\x2075\x2076\x2077\x2078\x2079" :: String) = False
+      | otherwise = isAlphaNum c || generalCategory c == NonSpacingMark
+                 || c == '_' || c == '\'' || c == '\xa0' || c == '.'
 
 -- | The Rocq-version-aware text rewriter used by the driver for user-supplied
 -- preamble/midamble files. The Coq-8.20 target leaves text untouched (so the
