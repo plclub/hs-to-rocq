@@ -3,42 +3,53 @@
 set -euo pipefail
 
 log_call() {
-    local kind=$1 module=$2
+    local kind=$1 module=$2 args record
     shift 2
-    {
-        printf '%s:%s' "$kind" "$module"
-        printf ' <%s>' "$@"
-        printf '\n'
-    } >> "$HARNESS_LOG"
+    # Append the complete record once so parallel tools cannot mix its fields.
+    printf -v args ' <%s>' "$@"
+    printf -v record '%s:%s%s\n' "$kind" "$module" "$args"
+    printf '%s' "$record" >> "$HARNESS_LOG"
 }
 
-# Reuse this script as both fake tools so the check needs no installed packages.
+# Reuse this script as fake tools so the check needs no installed packages.
 case "${1:-}" in
     --fake-translator)
         shift
+        translator_args=("$@")
         module=
         renamed=false
-        for arg in "$@"; do
+        output=.
+        while [[ $# -gt 0 ]]; do
+            arg=$1
             case "$arg" in
                 */RenameMe.hs|RenameMe.hs) renamed=true ;;
             esac
             case "$arg" in
+                -o) shift; output=$1 ;;
+                # The production GHC/Base rule merges sources ending in Maybe.hs.
+                */ghc-internal/src/GHC/Internal/Maybe.hs) module=GHC/Base ;;
+                */ghc-internal/src/GHC/Internal/*.hs)
+                    module=${arg#*/ghc-internal/src/GHC/Internal/}
+                    module=${module%.hs}
+                    ;;
                 *.hs) module=${arg##*/}; module=${module%.hs} ;;
             esac
+            shift
         done
         test -n "$module"
         if "$renamed"; then module=Renamed; fi
-        log_call translate "$module" "$@"
+        log_call translate "$module" "${translator_args[@]}"
         mode=success
         if [[ "$module" == Renamed ]]; then
             mode=${RENAMED_MODE:-success}
         elif [[ "$module" == "${FAULT_MODULE:-Probe}" ]]; then
             mode=${TRANSLATOR_MODE:-success}
         fi
+        mkdir -p "$(dirname "$output/$module.v")"
         case "$mode" in
-            success) printf 'generated %s\n' "${GENERATION:-initial}" > "$module.v" ;;
+            success) printf 'generated %s\n' "${GENERATION:-initial}" > "$output/$module.v" ;;
             error) exit 42 ;;
-            partial) printf 'partial output\n' > "$module.v"; exit 42 ;;
+            partial) printf 'partial output\n' > "$output/$module.v"; exit 42 ;;
             missing) : ;;
             *) exit 99 ;;
         esac
@@ -55,10 +66,30 @@ case "${1:-}" in
         module=${module%.v}
         log_call compile "$module" "$@"
         test -f "$source"
+        IFS= read -r line < "$source"
+        [[ "$line" == "generated ${GENERATION:-initial}" ]] || exit 44
         if [[ "$module" == "${COMPILER_FAULT_MODULE:-Probe}" && ${COMPILER_MODE:-success} == error ]]; then
             exit 43
         fi
         : > "${source%.v}.vo"
+        exit 0
+        ;;
+    --fake-coq-makefile)
+        shift
+        log_call coq_makefile base "$@"
+        [[ "$*" == '-f _CoqProject -o Makefile' ]]
+        sources=()
+        while IFS= read -r line; do
+            for source in $line; do
+                case "$source" in *.v) sources+=("$source") ;; esac
+            done
+        done < _CoqProject
+        [[ ${#sources[@]} -gt 0 ]]
+        {
+            printf 'all:'
+            for source in "${sources[@]}"; do printf ' %s' "${source%.v}.vo"; done
+            printf '\n\n%%.vo: %%.v\n\tbash "%s" --fake-compiler "$<"\n' "${BASH_SOURCE[0]}"
+        } > Makefile
         exit 0
         ;;
 esac
@@ -92,27 +123,40 @@ new_case() {
     if [[ "$suite" == shared ]]; then
         test_dir="$case_root/examples/tests"
         source=sources
+    elif [[ "$suite" == rocq9 ]]; then
+        test_dir="$case_root/examples/rocq9.0"
     else
         test_dir="$case_root/examples/base-tests"
         source=.
     fi
-    mkdir -p "$test_dir/$source/Probe" "$test_dir/$source/RenameMe"
+    mkdir -p "$test_dir"
     ln -s "$workspace/common.mk" "$case_root/common.mk"
-    if [[ "$suite" == shared ]]; then
-        ln -s "$workspace/examples/tests/Makefile" "$test_dir/Makefile"
-        ln -s "$workspace/examples/tests/test-rules.mk" "$test_dir/test-rules.mk"
+    if [[ "$suite" == rocq9 ]]; then
+        mkdir -p "$test_dir/base-src" "$test_dir/bin" "$case_root/examples/base-src"
+        ln -s "$workspace/examples/rocq9.0/Makefile" "$test_dir/Makefile"
+        ln -s "$workspace/examples/rocq9.0/base-src/Makefile" "$test_dir/base-src/Makefile"
+        ln -s "$workspace/examples/base-src/modules.mk" "$case_root/examples/base-src/modules.mk"
+        : > "$case_root/examples/base-src/edits"
+        printf '#!/usr/bin/env bash\nexec bash "%s" --fake-coq-makefile "$@"\n' "$script" > "$test_dir/bin/coq_makefile"
+        chmod +x "$test_dir/bin/coq_makefile"
     else
-        ln -s "$workspace/examples/base-tests/Makefile" "$test_dir/Makefile"
+        mkdir -p "$test_dir/$source/Probe" "$test_dir/$source/RenameMe"
+        if [[ "$suite" == shared ]]; then
+            ln -s "$workspace/examples/tests/Makefile" "$test_dir/Makefile"
+            ln -s "$workspace/examples/tests/test-rules.mk" "$test_dir/test-rules.mk"
+        else
+            ln -s "$workspace/examples/base-tests/Makefile" "$test_dir/Makefile"
+        fi
+        for module in Probe ProbeExtra Control Future RenameMe RenameMeToo RenameModule; do
+            : > "$test_dir/$source/$module.hs"
+        done
+        : > "$test_dir/$source/RenameMe.hs-boot"
+        : > "$test_dir/$source/RenameMe/edits"
+        : > "$test_dir/$source/renamings"
+        : > "$test_dir/$source/Probe/edits"
+        : > "$test_dir/$source/Probe/preamble.v"
+        : > "$test_dir/$source/Probe/midamble.v"
     fi
-    for module in Probe ProbeExtra Control Future RenameMe RenameMeToo RenameModule; do
-        : > "$test_dir/$source/$module.hs"
-    done
-    : > "$test_dir/$source/RenameMe.hs-boot"
-    : > "$test_dir/$source/RenameMe/edits"
-    : > "$test_dir/$source/renamings"
-    : > "$test_dir/$source/Probe/edits"
-    : > "$test_dir/$source/Probe/preamble.v"
-    : > "$test_dir/$source/Probe/midamble.v"
     : > "$test_dir/tools.log"
     pass_modules=
     todo_pass_modules=
@@ -140,11 +184,19 @@ run_make() {
             SRC_DIR=sources 'HS_EXTRA=--target-version 9.0' 'HS_IMPORT=-i sources'
             "TODO_TRANSLATE=$todo_translate_modules"
         )
+    elif [[ "$suite" == rocq9 ]]; then
+        # Keep the real module-list and dependency rules, with just two sources.
+        args+=(
+            HANDMOD= EARLY_GHC_INTERNAL_MODULES= EARLY_BASE_MODULES=
+            GHC_INTERNAL_MODULES=Data/Bool GHC_INTERNAL_GHC_MODULES= BASE_MODULES=
+            RENAMED= DROPIN= SPECIAL_MODULES=GHC/Base
+        )
     else
         # base-tests has its own TYPECHECK rather than the shared COMPILER hook.
         args+=("TYPECHECK=bash \"$script\" --fake-compiler")
     fi
     if MAKEFLAGS='' MFLAGS='' GNUMAKEFLAGS='' MAKEFILES='' MAKELEVEL=0 \
+        PATH="$test_dir/bin:$PATH" \
         HARNESS_LOG="$test_dir/tools.log" \
         TRANSLATOR_MODE="$translator_mode" COMPILER_MODE="$compiler_mode" \
         RENAMED_MODE="$renamed_mode" FAULT_MODULE="$fault_module" \
@@ -188,6 +240,42 @@ passed() {
     checks=$((checks + 1))
     printf 'ok %d - %s/%s\n' "$checks" "$suite" "$name"
 }
+
+# Concurrent fake tools must each leave one complete, uniquely identifiable
+# record. Separate output directories keep file writes out of this log check.
+new_case shared concurrent-tool-logging
+workers=32
+pids=()
+: > "$test_dir/expected.log"
+for ((worker=1; worker<=workers; worker++)); do
+    output="$test_dir/worker $worker"
+    (
+        export HARNESS_LOG="$test_dir/tools.log" GENERATION="$generation"
+        bash "$script" --fake-translator -o "$output" -e "worker $worker" "Log$worker.hs" &&
+            bash "$script" --fake-compiler -Q "$output" "" "$output/Log$worker.v"
+    ) &
+    pids+=("$!")
+    printf '%s\n' \
+        "translate:Log$worker <-o> <$output> <-e> <worker $worker> <Log$worker.hs>" \
+        "compile:Log$worker <-Q> <$output> <> <$output/Log$worker.v>" >> "$test_dir/expected.log"
+done
+tool_failed=false
+for pid in "${pids[@]}"; do
+    wait "$pid" || tool_failed=true
+done
+if "$tool_failed"; then fail "$suite/$name: a concurrent fake tool failed"; fi
+
+# Comparing sorted full records also rejects missing, duplicate, or extra calls.
+LC_ALL=C sort "$test_dir/expected.log" > "$test_dir/expected.sorted"
+LC_ALL=C sort "$test_dir/tools.log" > "$test_dir/tools.sorted"
+cmp -s "$test_dir/expected.sorted" "$test_dir/tools.sorted" ||
+    fail "$suite/$name: concurrent tool log records were corrupted"
+for ((worker=1; worker<=workers; worker++)); do
+    assert_output "worker $worker/Log$worker.v" present
+    [[ -f "$test_dir/worker $worker/Log$worker.vo" ]] ||
+        fail "$suite/$name: Log$worker was not compiled"
+done
+passed
 
 # Each row drives a real .pass, .fail, or .fail_translate prerequisite chain.
 for suite_name in shared base; do
@@ -357,4 +445,55 @@ for suite_name in shared base; do
     done
 done
 
-printf 'Passed %d production-make harness checks.\n' "$checks"
+# Exercise failed regeneration and an unchanged-command retry through both real
+# Rocq makefiles. A later failure must retain Base.v but discard any failed .v.
+for jobs in 1 2; do
+    for failure in early later partial; do
+        new_case rocq9 "base-retry-j$jobs-$failure"
+        translator_mode=error
+        fault_module=GHC/Base
+        base_translations=2
+        bool_translations=1
+        if [[ "$failure" != early ]]; then
+            fault_module=Data/Bool
+            base_translations=1
+            bool_translations=2
+        fi
+        if [[ "$failure" == partial ]]; then translator_mode=partial; fi
+        run_make 2 "-j$jobs" base
+        assert_contains make.log 'Error 42'
+        assert_calls translate GHC/Base 1
+        assert_calls coq_makefile base 0
+        assert_calls compile Base 0
+        assert_calls compile Bool 0
+        assert_output base/Data/Bool.v absent
+        if [[ "$failure" == early ]]; then
+            assert_calls translate Data/Bool 0
+            assert_output base/GHC/Base.v absent
+        else
+            assert_calls translate Data/Bool 1
+            assert_output base/GHC/Base.v present
+        fi
+
+        translator_mode=success
+        run_make 0 "-j$jobs" base
+        assert_calls translate GHC/Base "$base_translations"
+        assert_calls translate Data/Bool "$bool_translations"
+        assert_calls coq_makefile base 1
+        assert_calls compile Base 1
+        assert_calls compile Bool 1
+        assert_output base/GHC/Base.v present
+        assert_output base/Data/Bool.v present
+
+        # A complete convenience copy must not trigger another translation.
+        run_make 0 "-j$jobs" base
+        assert_calls translate GHC/Base "$base_translations"
+        assert_calls translate Data/Bool "$bool_translations"
+        assert_calls coq_makefile base 1
+        assert_calls compile Base 1
+        assert_calls compile Bool 1
+        passed
+    done
+done
+
+printf 'Passed %d harness checks.\n' "$checks"

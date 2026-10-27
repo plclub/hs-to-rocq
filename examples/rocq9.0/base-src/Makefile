@@ -17,6 +17,9 @@ TARGET_VERSION = --target-version 9.0
 
 all: vfiles
 
+# Discard failed recipes' partial targets so the next build retries them.
+.DELETE_ON_ERROR:
+
 vfiles: deps $(OUT)/_CoqProject $(VFILES)
 
 deps:

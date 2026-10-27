@@ -53,7 +53,7 @@ import Control.Lens
 
 import Data.Bifunctor
 import Data.Semigroup ((<>))
-import Data.Char (GeneralCategory(NonSpacingMark), generalCategory, isAlphaNum)
+import Data.Char (GeneralCategory(NonSpacingMark), generalCategory, isAlphaNum, isSpace)
 import Data.Foldable
 import Data.Maybe
 import Data.List.NonEmpty (NonEmpty(..), nonEmpty)
@@ -412,8 +412,11 @@ coqToStdlib = everywhere
     renameModuleSentence (ModuleImport ie mods) =
       ModuleImport ie (fmap rocq9RenameModuleReference mods)
     -- Require targets name library files, not the nested modules they contain.
-    renameModuleSentence (Require from ie mods) =
-      Require (fmap rocq9RenameModule from) ie (fmap rocq9RenameModule mods)
+    -- With From, operands are relative to its prefix, not independent roots.
+    renameModuleSentence (Require (Just from) ie mods) =
+      Require (Just (rocq9RenameModule from)) ie mods
+    renameModuleSentence (Require Nothing ie mods) =
+      Require Nothing ie (fmap rocq9RenameModule mods)
     renameModuleSentence (ModuleAssignment m1 m2) =
       ModuleAssignment m1 (rocq9RenameModuleReference m2)
 
@@ -455,10 +458,11 @@ isModulePrefixOf prefix path = prefix == path || (prefix <> ".") `T.isPrefixOf` 
 -- (used for preamble/midamble files and raw proof/obligation tactics).
 --
 -- Only root @Coq.*@ paths are rewritten: a preceding identifier character or
--- @.@ makes the path part of a user identifier or another namespace. Bare
--- @From Coq Require ...@ commands are left unchanged.
--- Quoted string literals are copied verbatim, including doubled quote escapes,
--- so raw tactics and their AST string values stay consistent.
+-- @.@ makes the path part of a user identifier or another namespace. From
+-- commands rewrite only their prefix, leaving relative Require operands intact.
+-- Bare @From Coq Require ...@ commands are left unchanged.
+-- Comments and quoted string literals are copied verbatim, including nested
+-- comments and doubled quote escapes, without recognizing commands inside them.
 --
 -- Each complete path uses the same renaming as AST module references:
 -- @Coq.Program.Wf.WfExtensionality@ moves to
@@ -469,33 +473,80 @@ isModulePrefixOf prefix path = prefix == path || (prefix <> ".") `T.isPrefixOf` 
 -- The Rocq-9 static preamble loads @Stdlib.Program.WfExtensionality@ once,
 -- independently of the spelling of user-supplied Require commands.
 rocq9RewriteText :: T.Text -> T.Text
-rocq9RewriteText = go
+rocq9RewriteText = T.concat . scan False
   where
-    go text = rewritePaths pre <> case T.uncons rest of
-      Nothing -> ""
-      Just (_, after) -> "\"" <> quoted after
+    -- Within a From Require command, module paths are relative until its final
+    -- dot. Consume whole paths so embedded Coq components never become roots.
+    scan relative text
+      | Just after <- T.stripPrefix "\"" text =
+          let (literal, rest) = quoted after
+          in ("\"" <> literal) : scan relative rest
+      | Just after <- T.stripPrefix "(*" text =
+          let (comment, rest) = commented 1 after
+          in ("(*" <> comment) : scan relative rest
+      | not (T.null path), relative =
+          path : scan (not ("." `T.isSuffixOf` path)) afterPath
+      | path == "From", Just (prefix, rest) <- fromRequire afterPath =
+          path : (prefix ++ scan True rest)
+      | not (T.null path) = rewritePath path : scan False afterPath
+      | Just (c, rest) <- T.uncons text = T.singleton c : scan relative rest
+      | otherwise = []
       where
-        (pre, rest) = T.breakOn "\"" text
+        (path, afterPath) = T.span isPathChar text
+
+    -- Recognize just From <prefix> Require, allowing comments between tokens.
+    -- This is not a vernacular parser; Import/Export and operands need only be
+    -- copied until the command ends. In particular, bare Coq stays untouched.
+    fromRequire text
+      | not (T.null beforePrefix), not (T.null prefix)
+      , not ("." `T.isSuffixOf` prefix), not (T.null beforeRequire)
+      , Just rest <- T.stripPrefix "Require" requireText
+      , maybe True (not . isPathChar . fst) (T.uncons rest) =
+          Just ([beforePrefix, rewritePath prefix, beforeRequire, "Require"], rest)
+      | otherwise = Nothing
+      where
+        (beforePrefix, prefixText) = trivia text
+        (prefix, afterPrefix) = T.span isPathChar prefixText
+        (beforeRequire, requireText) = trivia afterPrefix
+
+    trivia text =
+      let (space, rest) = T.span (\c -> isSpace c && not (isPathChar c)) text
+      in case T.stripPrefix "(*" rest of
+        Just after ->
+          let (comment, following) = commented 1 after
+              (more, remaining) = trivia following
+          in (space <> "(*" <> comment <> more, remaining)
+        Nothing -> (space, rest)
 
     -- Rocq escapes a quote inside a string by doubling it.
     quoted text
-      | T.null rest = pre
-      | Just after <- T.stripPrefix "\"\"" rest = pre <> "\"\"" <> quoted after
-      | otherwise = pre <> "\"" <> go (T.drop 1 rest)
+      | T.null rest = (pre, "")
+      | Just after <- T.stripPrefix "\"\"" rest =
+          first ((pre <> "\"\"") <>) (quoted after)
+      | otherwise = (pre <> "\"", T.drop 1 rest)
       where
         (pre, rest) = T.breakOn "\"" text
 
-    rewritePaths text
-      | T.null rest = text
-      | otherwise = pre <> renamed <> rewritePaths after
+    -- Quotes inside a comment can themselves contain comment delimiters.
+    commented :: Int -> T.Text -> (T.Text, T.Text)
+    commented depth text
+      | Just after <- T.stripPrefix "(*" text =
+          first ("(*" <>) (commented (depth + 1) after)
+      | Just after <- T.stripPrefix "*)" text =
+          if depth == 1 then ("*)", after)
+          else first ("*)" <>) (commented (depth - 1) after)
+      | Just after <- T.stripPrefix "\"" text =
+          let (literal, rest) = quoted after
+          in first (("\"" <> literal) <>) (commented depth rest)
+      | not (T.null pre) = first (pre <>) (commented depth rest)
+      | Just (c, after) <- T.uncons text = first (T.cons c) (commented depth after)
+      | otherwise = ("", "")
       where
-        (pre, rest) = T.breakOn "Coq." text
-        -- Consume the whole path, including rejected matches, so an embedded
-        -- Coq component cannot be reconsidered as a root on the next scan.
-        (path, after) = T.span isPathChar rest
-        renamed = case T.unsnoc pre of
-          Just (_, c) | isPathChar c -> path
-          _ -> rocq9RenameModuleReference path
+        (pre, rest) = T.break (`elem` ("(*\"" :: String)) text
+
+    rewritePath path
+      | "Coq." `T.isPrefixOf` path = rocq9RenameModuleReference path
+      | otherwise = path
 
     -- Rocq 9.0.1 clib/unicode.ml includes non-spacing marks in IdentPart
     -- and U+00A0 in IdentSep.

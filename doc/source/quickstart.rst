@@ -52,6 +52,9 @@ in user preambles and midambles.
 The text rewrite applies only to root ``Coq.*`` paths. User names such as
 ``MyCoq.add`` and ``Other.Coq.Init.Decimal`` remain unchanged, while root
 references after ``@`` or an opening parenthesis still rewrite.
+In ``From Other Require Import Coq.Init.Decimal.``, the operand is relative to
+``Other``, so it also remains unchanged. Comments and string literals are copied
+verbatim.
 
 The `simple <https://github.com/plclub/hs-to-rocq/tree/master/examples/simple>`_
 example shows how to invoke ``hs-to-rocq`` from a ``Makefile``.
@@ -80,6 +83,9 @@ and run:
 The build regenerates all base sources before creating the base Makefile and
 compiling them. Running ``make -C examples/rocq9.0`` without ``-j2`` also
 regenerates the missing sources; no separate ``vfiles`` step is needed.
+If regeneration fails, fix the cause and rerun the same build command. The build
+discards failed targets and retries generation before compiling, while keeping
+successfully generated sources.
 
 Local Edit files
 ----------------
@@ -185,5 +191,3 @@ library.
 
 An example project that takes this approach is:
 https://github.com/mit-plv/riscv-coq
-
-

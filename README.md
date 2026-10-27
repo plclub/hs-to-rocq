@@ -172,9 +172,9 @@ base → base-thy → containers/lib → containers/theories
 | `lambda/` | Generate + verify | **PASS** | 2/2 .v | Lambda calculus |
 | `simple/` | Generate + verify | **PASS** | 1/1 .v | Simple example |
 | **Test suites** | | | | |
-| `tests/` | Unit tests | **PASS** | 51 pass, 3 expected-fail | Translation + type-check |
+| `tests/` | Unit tests | **PASS** | 52 pass, 3 expected-fail | Translation + type-check |
 | `base-tests/` | Integration tests | **PASS** | 18 pass, 3 expected-fail | Requires `base/` |
-| `rocq9.0/tests` | Unit tests (Rocq 9) | **PASS** | 51 pass, 3 expected-fail | Reuses `examples/tests/` `.hs` with `rocq c` |
+| `rocq9.0/tests` | Unit tests (Rocq 9) | **PASS** | 52 pass, 3 expected-fail | Reuses `examples/tests/` `.hs` with `rocq c` |
 | **Examples with external dependencies** | | | | |
 | `wc/lib` | Generated lib | **BLOCKED** | 0/14 .v | Needs `coq-itree` package |
 | `wc/theories` | Proofs | **BLOCKED** | 0/2 .v | Depends on wc/lib |
@@ -229,13 +229,15 @@ make -j2 -C examples/rocq9.0 base
 make -C examples/rocq9.0/tests
 ```
 
-The fast checks run 536 direct Haskell assertions about rewrite definitions,
+The fast checks run 613 direct Haskell assertions about rewrite definitions,
 including proof and obligation tactics, root and module boundaries, Unicode
 identifier and notation boundaries, preservation of user names, quoted string
-literals (including doubled quote escapes), and unrelated AST text, header
-imports, and Coq 8.20 identity.
-They also run 40 checks of the production Makefiles with fake translator/compiler
-tools. These checks do not replace real compiler tests.
+literals (including doubled quote escapes), comments, relative `From` imports,
+unrelated AST text, header imports, and Coq 8.20 identity.
+They also run 47 harness checks with fake tools, including concurrent tool logging
+and production-Makefile checks for serial and parallel base-regeneration retries
+after early, later, and partial-output failures. These checks do not replace real
+compiler tests.
 
 The shared unit suites compile fixtures on both targets for nested Corelib
 references and moved theorems in generated definitions, raw proofs, `Program`
@@ -245,6 +247,9 @@ that root paths after superscript notation rewrite, and that the unqualified
 `Import WfExtensionality.` succeeds.
 The string-literal fixture compares raw preamble, midamble, and proof values
 against unchanged AST string literals while requiring code references to rewrite.
+The `From`-import fixture loads a generated user library at
+`Other.Coq.Init.Decimal` and checks its contents, so a relative operand cannot be
+mistaken for a root `Coq.*` reference.
 The three expected failures in each suite are compiler failures after successful
 translation.
 
@@ -252,6 +257,9 @@ The Rocq 9.0 `clean` target deletes the `examples/rocq9.0/base/` convenience cop
 as well as test outputs. A subsequent plain `make -C examples/rocq9.0` regenerates
 the missing base before compiling it; no separate `vfiles` step is needed.
 Regeneration requires the GHC submodule and a built `hs-to-rocq` executable.
+If regeneration fails, rerun the same build command after fixing the cause.
+The build discards the failed target and retries generation before compiling,
+while keeping sources that were generated successfully.
 
   Some examples use git submodules, so run
 

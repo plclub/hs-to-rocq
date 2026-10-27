@@ -67,6 +67,7 @@ PASS = \
   RocqMovedText \
   RocqQuotedText \
   RocqWfInnerImport \
+  RocqFromImports \
 
 # tests that *should* pass but currently fail
 TODO_PASS = \
@@ -162,10 +163,20 @@ Renamed.v: FORCE $(SRC_DIR)/RenameMe.hs $(SRC_DIR)/RenameMe.hs-boot $(SRC_DIR)/R
 
 RenameModule.v:: Renamed.vo
 
+RocqFromImports.v: Other/Coq/Init/Decimal.vo
+RocqFromImports.pass: TYPECHECK = $(COMPILER) -Q . "" 1>/dev/null
+
+# The implicit %.v rule prefixes prerequisites with a nested target's directory.
+Other/Coq/Init/Decimal.v: FORCE $(SRC_DIR)/Other/Coq/Init/Decimal.hs $(SRC_DIR)/Other/Coq/Init/Decimal/edits
+	@rm -f $@
+	$(HS_TO_ROCQ) $(HS_EXTRA) -N -e $(SRC_DIR)/Other/Coq/Init/Decimal/edits -e $(SRC_DIR)/renamings $(HS_IMPORT) -o . $(SRC_DIR)/Other/Coq/Init/Decimal.hs 1>/dev/null || { rm -f $@; exit 1; }
+	@test -e $@ || { echo "$@: translation produced no output" >&2; exit 1; }
+
 # We always want to re-build the .v files, to test the current build of hs-to-rocq
 FORCE:
 
 clean:
 	rm -rf */*.vo */*.glob */*.v.d *.vo *.v.d *.glob *.hi *.o *.hi-boot *.o-boot $(VFILES) _CoqProject Makefile.coq *~
+	rm -f Other/Coq/Init/Decimal.v Other/Coq/Init/Decimal.vo Other/Coq/Init/Decimal.vok Other/Coq/Init/Decimal.vos Other/Coq/Init/Decimal.glob Other/Coq/Init/.Decimal.aux
 
-.SECONDARY: $(VFILES)
+.SECONDARY: $(VFILES) Other/Coq/Init/Decimal.v

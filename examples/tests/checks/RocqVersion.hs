@@ -122,6 +122,26 @@ moduleCases =
       "From Stdlib.Program Require Import WfExtensionality.")
   , ("unrelated Require", Require (Just "Other") Nothing ("Library" :| []),
       Require (Just "Other") Nothing ("Library" :| []), "From Other Require Library.")
+  , ("From user prefix Require Import preserves relative operands",
+      Require (Just "Other") (Just Import) ("Coq.Init.Decimal" :| ["Coq.Program.Wf"]),
+      Require (Just "Other") (Just Import) ("Coq.Init.Decimal" :| ["Coq.Program.Wf"]),
+      "From Other Require Import Coq.Init.Decimal Coq.Program.Wf.")
+  , ("From user prefix Require Export preserves relative operands",
+      Require (Just "Other") (Just Export) ("Coq.Init.Decimal" :| []),
+      Require (Just "Other") (Just Export) ("Coq.Init.Decimal" :| []),
+      "From Other Require Export Coq.Init.Decimal.")
+  , ("From user prefix plain Require preserves relative operands",
+      Require (Just "Other") Nothing ("Coq.Program.WfExtensionality" :| []),
+      Require (Just "Other") Nothing ("Coq.Program.WfExtensionality" :| []),
+      "From Other Require Coq.Program.WfExtensionality.")
+  , ("From root Coq prefix rewrites only the prefix",
+      Require (Just "Coq.Program") (Just Import) ("Coq.Init.Decimal" :| []),
+      Require (Just "Stdlib.Program") (Just Import) ("Coq.Init.Decimal" :| []),
+      "From Stdlib.Program Require Import Coq.Init.Decimal.")
+  , ("From embedded Coq prefix preserves relative operands",
+      Require (Just "Other.Coq") (Just Import) ("Coq.Init.Decimal" :| []),
+      Require (Just "Other.Coq") (Just Import) ("Coq.Init.Decimal" :| []),
+      "From Other.Coq Require Import Coq.Init.Decimal.")
   , ("already target Import", ModuleImport Import ("Corelib.Init.Decimal.Little" :| []),
       ModuleImport Import ("Corelib.Init.Decimal.Little" :| []), "Import Corelib.Init.Decimal.Little.")
   , ("already target Require", Require Nothing (Just Import) ("Stdlib.Program.WfExtensionality" :| []),
@@ -227,6 +247,45 @@ textCases =
       "From Stdlib.Program Require Import Wf.\nCheck Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq.\n")
   , ("bare From Coq text (dotted-path rewriter limitation)", "From Coq Require Import Init.Datatypes Program.Wf.",
       "From Coq Require Import Init.Datatypes Program.Wf.")
+  , ("From user prefix Require Import preserves relative operands",
+      "From Other Require Import Coq.Init.Decimal Coq.Program.Wf.",
+      "From Other Require Import Coq.Init.Decimal Coq.Program.Wf.")
+  , ("From user prefix Require Export preserves relative operands",
+      "From Other Require Export Coq.Init.Decimal.",
+      "From Other Require Export Coq.Init.Decimal.")
+  , ("From user prefix plain Require preserves relative operands",
+      "From Other Require Coq.Program.WfExtensionality.",
+      "From Other Require Coq.Program.WfExtensionality.")
+  , ("From root Coq prefix rewrites only the prefix",
+      "From Coq.Program Require Import Coq.Init.Decimal Wf.",
+      "From Stdlib.Program Require Import Coq.Init.Decimal Wf.")
+  , ("From embedded Coq prefix preserves relative operands",
+      "From Other.Coq Require Import Coq.Init.Decimal.",
+      "From Other.Coq Require Import Coq.Init.Decimal.")
+  , ("From imports preserve whitespace and release following root references",
+      "Check Coq.Init.Logic.I.\n  From\tOther\nRequire\nImport\n Coq.Init.Decimal\n Coq.Program.Wf.\nCheck Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.",
+      "Check Corelib.Init.Logic.I.\n  From\tOther\nRequire\nImport\n Coq.Init.Decimal\n Coq.Program.Wf.\nCheck Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext.")
+  , ("From imports recognize comments as whitespace without ending at comment dots",
+      "From(* outer (* From Coq.Program Require Wf. *) *)Other(* prefix *)Require(* list *)Import Coq.Init.Decimal(* . *)Coq.Program.Wf.\nCheck Coq.Init.Logic.I.",
+      "From(* outer (* From Coq.Program Require Wf. *) *)Other(* prefix *)Require(* list *)Import Coq.Init.Decimal(* . *)Coq.Program.Wf.\nCheck Corelib.Init.Logic.I.")
+  , ("From in comments does not suppress following code rewrites",
+      "(* From Other Require Import Coq.Init.Decimal *) Check Coq.Init.Logic.I.",
+      "(* From Other Require Import Coq.Init.Decimal *) Check Corelib.Init.Logic.I.")
+  , ("From in strings does not suppress following code rewrites",
+      "pose (\"From Other Require Import Coq.Init.Decimal\") as command; exact Coq.Init.Logic.I.",
+      "pose (\"From Other Require Import Coq.Init.Decimal\") as command; exact Corelib.Init.Logic.I.")
+  , ("quotes in comments do not expose a false From command",
+      "(* \"*) From Other Require Import Coq.Init.Decimal\" *) Check Coq.Init.Logic.I.",
+      "(* \"*) From Other Require Import Coq.Init.Decimal\" *) Check Corelib.Init.Logic.I.")
+  , ("comments do not prevent rewriting the standard From prefix",
+      "From (* \"From Other Require Import\" *) Coq.Program (* prefix *) Require Export Wf.\nCheck Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.",
+      "From (* \"From Other Require Import\" *) Stdlib.Program (* prefix *) Require Export Wf.\nCheck Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext.")
+  , ("successive From and root Require commands keep their own roots",
+      "From Other Require Coq.Init.Decimal.(* separator *)From Coq.Program Require Wf. Require Coq.Init.Logic.",
+      "From Other Require Coq.Init.Decimal.(* separator *)From Stdlib.Program Require Wf. Require Corelib.Init.Logic.")
+  , ("From must be a whole token",
+      "Check Other.From. Check FromOther. Require Coq.Init.Decimal.",
+      "Check Other.From. Check FromOther. Require Corelib.Init.Decimal.")
   , ("Import nested module text", "Import Coq.Init.Decimal.Little.",
       "Import Corelib.Init.Decimal.Little.")
   , ("Import moved module text", "Import Coq.Program.Wf.WfExtensionality.",
@@ -319,8 +378,10 @@ main = do
   let movedRequire = "Require Import Stdlib.Program.WfExtensionality."
       assertion = Assertion Theorem (Bare "witness") [] (Qualid (Bare "True"))
       nonCodeText = "Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext"
-      nonCodeAST = (nonCodeText, Comment nonCodeText,
-        [String nonCodeText, HsString nonCodeText], StringPat nonCodeText, Bare nonCodeText)
+      fromText = "From Other Require Import Coq.Init.Decimal."
+      nonCodeAST = (nonCodeText, [Comment nonCodeText, Comment fromText],
+        [String nonCodeText, HsString nonCodeText, String fromText, HsString fromText],
+        [StringPat nonCodeText, StringPat fromText], Bare nonCodeText)
       checks = concatMap (\(label, input, expected) -> checkAST label input expected) qualidCases
         ++ concatMap (\(label, input, expected, printed) ->
              checkAST label input expected ++
