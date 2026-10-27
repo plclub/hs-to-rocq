@@ -8,8 +8,10 @@ import Control.Monad (unless)
 import Data.Data (Data)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
+import qualified Options.Applicative as OA
 import System.Exit (die)
 
+import HsToRocq.CLI (ProgramArgs(..), argParserInfo)
 import HsToRocq.Rocq.Gallina
 import HsToRocq.Rocq.Gallina.Util
 import HsToRocq.Rocq.Preamble (staticPreamble)
@@ -18,6 +20,42 @@ import HsToRocq.Rocq.Pretty (textP)
 assertEqual :: (Eq a, Show a) => String -> a -> a -> IO ()
 assertEqual label expected actual = unless (expected == actual) $
   die (label ++ "\n  expected: " ++ show expected ++ "\n  actual:   " ++ show actual)
+
+checkCLI :: String -> [String] -> (RocqVersion, Maybe FilePath, [FilePath]) -> IO ()
+checkCLI label input expected = case OA.execParserPure OA.defaultPrefs argParserInfo input of
+  OA.Success args -> assertEqual label expected
+    (rocqVersionArg args, outputFileArg args, directInputFilesArgs args)
+  OA.Failure failure -> die (label ++ "\n" ++ fst (OA.renderFailure failure "hs-to-rocq"))
+  OA.CompletionInvoked _ -> die (label ++ "\n  unexpected completion request")
+
+checkCLIRejected :: String -> [String] -> IO ()
+checkCLIRejected label input = case OA.execParserPure OA.defaultPrefs argParserInfo input of
+  OA.Failure _ -> pure ()
+  OA.Success args -> die (label ++ "\n  unexpectedly accepted: " ++ show args)
+  OA.CompletionInvoked _ -> die (label ++ "\n  unexpected completion request")
+
+cliChecks :: [IO ()]
+cliChecks =
+  [ checkCLI "CLI defaults to Coq 8.20" [] (Rocq_8_20, Nothing, [])
+  , checkCLI "CLI default preserves output and input files"
+      ["-o", "output", "Input.hs"] (Rocq_8_20, Just "output", ["Input.hs"])
+  , checkCLI "CLI explicit Coq 8.20" ["--target-version", "8.20", "Input.hs"]
+      (Rocq_8_20, Nothing, ["Input.hs"])
+  , checkCLI "CLI Rocq 9.0 preserves output and multiple input files"
+      ["--target-version", "9.0", "-o", "output directory", "Input.hs", "Other Input.hs"]
+      (Rocq_9_0, Just "output directory", ["Input.hs", "Other Input.hs"])
+  , checkCLI "CLI equals syntax after an input file"
+      ["Input.hs", "--target-version=9.0", "--output=output"]
+      (Rocq_9_0, Just "output", ["Input.hs"])
+  ] ++
+  [ checkCLIRejected ("CLI rejects target version " ++ show version)
+      ["--target-version=" ++ version, "Input.hs"]
+  | version <- ["unknown", "8.19", "9.2", "9.0.1", ""]
+  ] ++
+  [ checkCLIRejected "CLI rejects a missing target version" ["--target-version"]
+  , checkCLIRejected "CLI rejects a missing target version before another option"
+      ["--target-version", "-o", "output", "Input.hs"]
+  ]
 
 checkAST :: (Data a, Eq a, Show a) => String -> a -> a -> [IO ()]
 checkAST label input expected =
@@ -245,8 +283,26 @@ textCases =
   , ("From Require and moved reference text",
       "From Coq.Program Require Import Wf.\nCheck Coq.Program.Wf.WfExtensionality.fix_sub_eq.\n",
       "From Stdlib.Program Require Import Wf.\nCheck Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq.\n")
-  , ("bare From Coq text (dotted-path rewriter limitation)", "From Coq Require Import Init.Datatypes Program.Wf.",
-      "From Coq Require Import Init.Datatypes Program.Wf.")
+  , ("bare From Coq prefix", "From Coq Require Import Init.Datatypes Program.Wf.",
+      "From Stdlib Require Import Init.Datatypes Program.Wf.")
+  , ("bare From Coq preserves relative operands",
+      "From Coq Require Coq.Init.Decimal Coq.Program.Wf.",
+      "From Stdlib Require Coq.Init.Decimal Coq.Program.Wf.")
+  , ("bare From Coq Export releases following root references",
+      "From Coq Require Export Init.Datatypes.\nCheck Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.",
+      "From Stdlib Require Export Init.Datatypes.\nCheck Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext.")
+  , ("bare From Coq handles comments and newlines",
+      "From(* outer (* From Coq Require Bogus. *) *)\nCoq(* prefix . *)\nRequire(* operands *)Import Init.Datatypes Coq.Program.Wf.\nCheck Coq.Init.Logic.I.",
+      "From(* outer (* From Coq Require Bogus. *) *)\nStdlib(* prefix . *)\nRequire(* operands *)Import Init.Datatypes Coq.Program.Wf.\nCheck Corelib.Init.Logic.I.")
+  , ("bare From Coq in comments and strings stays unchanged",
+      "(* From Coq Require Import Init.Datatypes. *)\npose (\"From Coq Require Import Init.Datatypes.\") as command; exact Coq.Init.Logic.I.",
+      "(* From Coq Require Import Init.Datatypes. *)\npose (\"From Coq Require Import Init.Datatypes.\") as command; exact Corelib.Init.Logic.I.")
+  , ("bare Coq names and module alias stay unchanged",
+      "Module Coq := Other.Module.\nCheck Coq.\nCheck (Coq).\nCheck Coq.Init.Logic.I.",
+      "Module Coq := Other.Module.\nCheck Coq.\nCheck (Coq).\nCheck Corelib.Init.Logic.I.")
+  , ("bare From Coq matching preserves user prefixes and relative operands",
+      "From CoqX Require Import Coq.Init.Decimal. From Other.Coq Require Coq.Program.Wf.\nCheck Coq.Init.Logic.I.",
+      "From CoqX Require Import Coq.Init.Decimal. From Other.Coq Require Coq.Program.Wf.\nCheck Corelib.Init.Logic.I.")
   , ("From user prefix Require Import preserves relative operands",
       "From Other Require Import Coq.Init.Decimal Coq.Program.Wf.",
       "From Other Require Import Coq.Init.Decimal Coq.Program.Wf.")
@@ -379,10 +435,13 @@ main = do
       assertion = Assertion Theorem (Bare "witness") [] (Qualid (Bare "True"))
       nonCodeText = "Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext"
       fromText = "From Other Require Import Coq.Init.Decimal."
-      nonCodeAST = (nonCodeText, [Comment nonCodeText, Comment fromText],
-        [String nonCodeText, HsString nonCodeText, String fromText, HsString fromText],
-        [StringPat nonCodeText, StringPat fromText], Bare nonCodeText)
-      checks = concatMap (\(label, input, expected) -> checkAST label input expected) qualidCases
+      bareFromText = "From Coq Require Import Init.Datatypes."
+      nonCodeAST = (nonCodeText, [Comment nonCodeText, Comment fromText, Comment bareFromText],
+        [String nonCodeText, HsString nonCodeText, String fromText, HsString fromText,
+         String bareFromText, HsString bareFromText],
+        [StringPat nonCodeText, StringPat fromText, StringPat bareFromText], Bare nonCodeText)
+      checks = cliChecks
+        ++ concatMap (\(label, input, expected) -> checkAST label input expected) qualidCases
         ++ concatMap (\(label, input, expected, printed) ->
              checkAST label input expected ++
              [assertEqual (label ++ " (rendered)") printed (textP (rewriteASTFor Rocq_9_0 input))]) moduleCases

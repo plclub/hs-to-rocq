@@ -10,7 +10,7 @@ Generalizable All Variables.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-From Coq Require Import ssreflect Lia.
+From Stdlib Require Import ssreflect Lia.
 
 (* Note: we will only be able to make instances of this class for bounded
    types so that we can support enumFrom and still terminate.

@@ -1,3 +1,5 @@
+(* Both bare and dotted standard-library prefixes must rewrite. *)
+From Coq Require Import Init.Datatypes.
 Check Coq.Init.Logic.I.
 
 (* Comments separate tokens; their strings and dots are not commands. *)

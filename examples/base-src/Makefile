@@ -1,6 +1,7 @@
 include ../../common.mk
 
 OUT=../../base
+BASE_SRC=.
 
 # Not all of these need to be handwritten. Eventually we should be able to
 # generate some of these modules as hs-to-rocq is improved.
@@ -16,15 +17,7 @@ filelist:
 
 vfiles: $(OUT)/edits $(OUT)/README.md $(OUT)/_CoqProject $(OUT)/coq-hs-to-rocq-base.opam $(VFILES)
 
-$(OUT)/_CoqProject : Makefile modules.mk
-	mkdir -p $(OUT)
-	> $@
-	echo '-Q . ""' >> $@
-	echo $(addsuffix .v,$(HANDMOD)) $(addsuffix .v,$(EARLY_MODULES)) >> $@
-	echo $(addsuffix .v,$(MODULES)) >> $@
-	echo $(addsuffix .v,$(RENAMED)) >> $@
-	echo $(addsuffix .v,$(SPECIAL_MODULES)) >> $@
-	echo $(addsuffix .v,$(DROPIN)) >> $@
+include $(BASE_SRC)/base-rules.mk
 
 $(OUT)/Makefile: $(OUT)/_CoqProject
 	cd $(OUT); coq_makefile -f _CoqProject -o Makefile
@@ -115,7 +108,7 @@ HS_TO_ROCQ_OPTS_BASE := \
     --ghc -this-unit-id --ghc base
 
 
-include deps/*.mk
+-include deps/*.mk
 
 .SECONDEXPANSION:
 

@@ -81,7 +81,7 @@ TODO_TRANSLATE = \
 
 MODULES = $(PASS) $(TODO_PASS) $(TODO_TRANSLATE)
 
-VFILES    = $(addsuffix .v,$(MODULES)) Renamed.v
+VFILES    = $(addsuffix .v,$(MODULES))
 VOFILES   = $(patsubst %.v,%.vo,$(VFILES))
 COQFLAGS  = ""
 
@@ -138,13 +138,15 @@ todo_translate: $(foreach f, $(TODO_TRANSLATE), $(f).fail_translate)
 	 else echo -e "\033[1;32mpassed\033[0m (unexpected)"; exit 1; \
 	 fi
 
-%.vo : %.v
+# Helpers must be compiled on every run, even when regeneration shares the
+# previous .vo's timestamp (notably with GNU Make 3.81's one-second resolution).
+%.vo : %.v FORCE
 	@$(COMPILER) -Q . "" $*.v
 
 # Only TODO_TRANSLATE may omit output or fail translation. Discard partial
 # output on failure so .fail_translate sees an untranslated test.
 .SECONDEXPANSION:
-%.v : FORCE $$(wildcard $(SRC_DIR)/$$*/edits) $$(wildcard $(SRC_DIR)/$$*/preamble.v) $(SRC_DIR)/%.hs
+%.v : FORCE $$(wildcard $(SRC_DIR)/$$*/edits) $$(wildcard $(SRC_DIR)/$$*/preamble.v) $$(wildcard $(SRC_DIR)/$$*/midamble.v) $(SRC_DIR)/%.hs
 	@rm -f $*.v
 	@if [ -e $(SRC_DIR)/$*/preamble.v ]; then P_ARG="--preamble $(SRC_DIR)/$*/preamble.v"; else P_ARG=; fi;\
 	 if [ -e $(SRC_DIR)/$*/midamble.v ]; then M_ARG="--midamble $(SRC_DIR)/$*/midamble.v"; else M_ARG=; fi;\
@@ -176,7 +178,9 @@ Other/Coq/Init/Decimal.v: FORCE $(SRC_DIR)/Other/Coq/Init/Decimal.hs $(SRC_DIR)/
 FORCE:
 
 clean:
-	rm -rf */*.vo */*.glob */*.v.d *.vo *.v.d *.glob *.hi *.o *.hi-boot *.o-boot $(VFILES) _CoqProject Makefile.coq *~
-	rm -f Other/Coq/Init/Decimal.v Other/Coq/Init/Decimal.vo Other/Coq/Init/Decimal.vok Other/Coq/Init/Decimal.vos Other/Coq/Init/Decimal.glob Other/Coq/Init/.Decimal.aux
+	rm -rf */*.vo */*.glob */*.v.d *.vo *.vok *.vos *.v.d *.glob *.h2ci .*.aux *.hi *.o *.hi-boot *.o-boot $(VFILES) Renamed.v _CoqProject Makefile.coq *~
+	rm -f Other/Coq/Init/Decimal.v Other/Coq/Init/Decimal.h2ci Other/Coq/Init/Decimal.vo Other/Coq/Init/Decimal.vok Other/Coq/Init/Decimal.vos Other/Coq/Init/Decimal.glob Other/Coq/Init/.Decimal.aux
 
 .SECONDARY: $(VFILES) Other/Coq/Init/Decimal.v
+
+.PHONY: main all pass todo_pass todo_translate FORCE clean

@@ -459,8 +459,8 @@ isModulePrefixOf prefix path = prefix == path || (prefix <> ".") `T.isPrefixOf` 
 --
 -- Only root @Coq.*@ paths are rewritten: a preceding identifier character or
 -- @.@ makes the path part of a user identifier or another namespace. From
--- commands rewrite only their prefix, leaving relative Require operands intact.
--- Bare @From Coq Require ...@ commands are left unchanged.
+-- commands rewrite only their prefix, including bare @Coq@, leaving relative
+-- Require operands intact. Bare @Coq@ names elsewhere stay unchanged.
 -- Comments and quoted string literals are copied verbatim, including nested
 -- comments and doubled quote escapes, without recognizing commands inside them.
 --
@@ -496,13 +496,13 @@ rocq9RewriteText = T.concat . scan False
 
     -- Recognize just From <prefix> Require, allowing comments between tokens.
     -- This is not a vernacular parser; Import/Export and operands need only be
-    -- copied until the command ends. In particular, bare Coq stays untouched.
+    -- copied until the command ends. Only this prefix may rename bare Coq.
     fromRequire text
       | not (T.null beforePrefix), not (T.null prefix)
       , not ("." `T.isSuffixOf` prefix), not (T.null beforeRequire)
       , Just rest <- T.stripPrefix "Require" requireText
       , maybe True (not . isPathChar . fst) (T.uncons rest) =
-          Just ([beforePrefix, rewritePath prefix, beforeRequire, "Require"], rest)
+          Just ([beforePrefix, rocq9RenameModuleReference prefix, beforeRequire, "Require"], rest)
       | otherwise = Nothing
       where
         (beforePrefix, prefixText) = trivia text
@@ -545,7 +545,7 @@ rocq9RewriteText = T.concat . scan False
         (pre, rest) = T.break (`elem` ("(*\"" :: String)) text
 
     rewritePath path
-      | "Coq." `T.isPrefixOf` path = rocq9RenameModuleReference path
+      | "Coq." `T.isPrefixOf` path, path /= "Coq." = rocq9RenameModuleReference path
       | otherwise = path
 
     -- Rocq 9.0.1 clib/unicode.ml includes non-spacing marks in IdentPart

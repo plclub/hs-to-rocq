@@ -2,13 +2,15 @@
 add RocqQuotedText Theorem RocqQuotedText.preambleLiteral_preserved :
   preambleLiteral = "Coq.Init.Decimal".
 Proof.
-  pose proof Coq.Init.Logic.I.
+  pose ("Coq.Init.Decimal") as path.
+  pose proof Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.
   exact (eq_refl "Coq.Init.Decimal").
 Qed.
 
 add RocqQuotedText Theorem RocqQuotedText.midambleLiteral_preserved :
   midambleLiteral = "Coq.Program.Wf.WfExtensionality".
 Proof.
-  pose proof Coq.Init.Logic.I.
+  pose ("Coq.Program.Wf.WfExtensionality") as path.
+  pose proof Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.
   exact (eq_refl "Coq.Program.Wf.WfExtensionality").
 Defined.

@@ -17,23 +17,9 @@ TARGET_VERSION = --target-version 9.0
 
 all: vfiles
 
-# Discard failed recipes' partial targets so the next build retries them.
-.DELETE_ON_ERROR:
+vfiles: $(OUT)/_CoqProject $(VFILES)
 
-vfiles: deps $(OUT)/_CoqProject $(VFILES)
-
-deps:
-	mkdir -p deps
-
-$(OUT)/_CoqProject : Makefile $(BASE_SRC)/modules.mk
-	mkdir -p $(OUT)
-	> $@
-	echo '-Q . ""' >> $@
-	echo $(addsuffix .v,$(HANDMOD)) $(addsuffix .v,$(EARLY_MODULES)) >> $@
-	echo $(addsuffix .v,$(MODULES)) >> $@
-	echo $(addsuffix .v,$(RENAMED)) >> $@
-	echo $(addsuffix .v,$(SPECIAL_MODULES)) >> $@
-	echo $(addsuffix .v,$(DROPIN)) >> $@
+include $(BASE_SRC)/base-rules.mk
 
 # All generated modules depend on GHC/Base and manual modules.
 # Additional inter-module deps for fresh builds (before deps/*.mk exists).
@@ -165,14 +151,15 @@ $(OUT)/GHC/Base.v: $(GHC_BASE_PRE) $(GHC_BASE_MID) $(GHC_BASE_EDITS) $(BASE_SRC)
 #      Coq.Program.Wf.
 #   2. Coq.Init.* modules are Corelib re-exports; fully-qualified references
 #      must use Corelib, not Stdlib.
-#   3. Everything else: Coq. -> Stdlib.
+#   3. Bare From Coq prefixes use Stdlib; other paths use Coq. -> Stdlib.
 # Also copy .h2ci files if they exist (needed for cross-module type info).
-$(VFILES_MAN): $(OUT)/%.v : $(BASE_SRC)/manual/%.v
+$(VFILES_MAN): $(OUT)/%.v : $(BASE_SRC)/manual/%.v Makefile
 	mkdir -p $(dir $@)
 	sed \
 	    -e 's#Coq\.Program\.Wf\.WfExtensionality#Stdlib.Program.WfExtensionality.WfExtensionality#g' \
 	    -e 's#^Require Import Coq\.Program\.Wf\.$$#Require Import Coq.Program.Wf. Require Import Stdlib.Program.WfExtensionality.#' \
 	    -e 's#Coq\.Init\.#Corelib.Init.#g' \
+	    -e 's#^\([[:space:]]*From[[:space:]][[:space:]]*\)Coq\([[:space:]]\)#\1Stdlib\2#' \
 	    -e 's#Coq\.#Stdlib.#g' \
 	    $< > $@
 	@if [ -e $(BASE_SRC)/manual/$*.h2ci ]; then cp $(BASE_SRC)/manual/$*.h2ci $(OUT)/$*.h2ci; fi

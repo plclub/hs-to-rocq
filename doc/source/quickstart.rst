@@ -86,6 +86,8 @@ regenerates the missing sources; no separate ``vfiles`` step is needed.
 If regeneration fails, fix the cause and rerun the same build command. The build
 discards failed targets and retries generation before compiling, while keeping
 successfully generated sources.
+The same retry guarantee applies to direct ``vfiles`` requests: the build
+publishes ``base/_CoqProject`` only after all sources succeed.
 
 Local Edit files
 ----------------
@@ -128,9 +130,9 @@ files, including the move from ``Coq.Program.Wf.WfExtensionality`` to
 ``Stdlib.Program.WfExtensionality.WfExtensionality``. The static header imports
 ``Stdlib.Program.WfExtensionality`` once before user definitions, so loading does
 not depend on the spelling or spacing of a user ``Require`` command. The text
-rewriter does not insert extra imports. It does not rewrite bare
-``From Coq Require ...`` commands; use a dotted form such as
-``From Coq.Program Require Import Wf.`` for text shared by both targets.
+rewriter does not insert extra imports. Both ``From Coq Require ...`` and dotted
+forms such as ``From Coq.Program Require Import Wf.`` rewrite their prefix while
+preserving relative library operands. Comments and quoted strings stay unchanged.
 The Coq 8.20 target leaves preamble and midamble text unchanged.
 
 Strict vs. permissive translation

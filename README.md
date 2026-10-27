@@ -229,14 +229,17 @@ make -j2 -C examples/rocq9.0 base
 make -C examples/rocq9.0/tests
 ```
 
-The fast checks run 613 direct Haskell assertions about rewrite definitions,
-including proof and obligation tactics, root and module boundaries, Unicode
-identifier and notation boundaries, preservation of user names, quoted string
+The fast checks run 649 direct Haskell assertions about CLI version selection
+and rewrite definitions, including proof and obligation tactics, root and module
+boundaries, Unicode identifier and notation boundaries, user-name preservation, quoted string
 literals (including doubled quote escapes), comments, relative `From` imports,
 unrelated AST text, header imports, and Coq 8.20 identity.
-They also run 47 harness checks with fake tools, including concurrent tool logging
-and production-Makefile checks for serial and parallel base-regeneration retries
-after early, later, and partial-output failures. These checks do not replace real
+They also run 109 harness checks with fake tools. These exercise both production
+test wrappers, nested helper compilation, clean rebuilds, concurrent tool logging,
+and serial and parallel base-generation retries through the `base` and `vfiles`
+entry points, plus fresh Coq builds with manual modules. The fake translator
+writes interfaces and dependency files, so a missing dependency directory fails
+the check. These checks do not replace real
 compiler tests.
 
 The shared unit suites compile fixtures on both targets for nested Corelib
@@ -246,10 +249,14 @@ remain unchanged, including names with combining marks and non-breaking spaces,
 that root paths after superscript notation rewrite, and that the unqualified
 `Import WfExtensionality.` succeeds.
 The string-literal fixture compares raw preamble, midamble, and proof values
-against unchanged AST string literals while requiring code references to rewrite.
+against unchanged AST string literals. Moved theorem references after the literals
+also check that rewriting resumes after each closing quote.
 The `From`-import fixture loads a generated user library at
 `Other.Coq.Init.Decimal` and checks its contents, so a relative operand cannot be
 mistaken for a root `Coq.*` reference.
+The Rocq suite treats `deprecated-dirpath-Coq` warnings as errors, so compatibility
+aliases cannot hide missed namespace rewrites. Helper libraries are recompiled
+on every test run, including immediate reruns with identical file timestamps.
 The three expected failures in each suite are compiler failures after successful
 translation.
 
@@ -260,6 +267,8 @@ Regeneration requires the GHC submodule and a built `hs-to-rocq` executable.
 If regeneration fails, rerun the same build command after fixing the cause.
 The build discards the failed target and retries generation before compiling,
 while keeping sources that were generated successfully.
+The shared base-generation rules invalidate `_CoqProject` before checking sources
+and publish it only after all sources succeed, including direct `vfiles` requests.
 
   Some examples use git submodules, so run
 

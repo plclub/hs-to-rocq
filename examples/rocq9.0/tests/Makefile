@@ -4,7 +4,8 @@
 
 include ../../../common.mk
 
-COMPILER  = rocq c
+# Do not let Rocq's compatibility alias hide missed namespace rewrites.
+COMPILER  = rocq c -w +deprecated-dirpath-Coq
 SRC_DIR   = ../../tests
 HS_EXTRA  = --target-version 9.0
 HS_IMPORT = -i $(SRC_DIR)
