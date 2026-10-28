@@ -106,7 +106,7 @@ case "${1:-}" in
         test -n "$source"
         module=${source##*/}
         module=${module%.v}
-        log_call compile "$module" "${compiler_command[@]}" "${compiler_args[@]}"
+        log_call compile "$module" ${compiler_command[@]+"${compiler_command[@]}"} "${compiler_args[@]}"
         test -f "$source"
         IFS= read -r line < "$source"
         [[ "$line" == "generated ${GENERATION:-initial}" ]] || exit 44

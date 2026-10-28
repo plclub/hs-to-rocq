@@ -50,6 +50,8 @@ jobs:
         run: stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs
       - name: Check test-harness failure propagation
         run: bash examples/tests/checks/harness.sh
+      - name: Check concurrent real translations
+        run: bash examples/tests/checks/concurrent.sh
 
   test-coq-files:
     name: Testing all Coq examples (Coq 8.20)

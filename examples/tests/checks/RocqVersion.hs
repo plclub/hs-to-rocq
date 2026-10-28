@@ -187,12 +187,27 @@ moduleCases =
       "Require Import Stdlib.Program.WfExtensionality.")
   ]
 
+fieldTacticCases :: [(String, T.Text, T.Text)]
+fieldTacticCases =
+  [ ("spaced FIELD tokens",
+      "pose proof @Coq .Program.Wf .WfExtensionality.fix_sub_eq_ext as H; pose (\"Coq .Program.Wf\") as path; exact Coq .Init.Logic.I",
+      "pose proof @Stdlib .Program.WfExtensionality .WfExtensionality.fix_sub_eq_ext as H; pose (\"Coq .Program.Wf\") as path; exact Corelib .Init.Logic.I")
+  , ("commented FIELD tokens",
+      "pose proof @Coq(* \"Coq.Program.Wf\" (* nested *) *) .Program .Wf .WfExtensionality .fix_sub_eq_ext as H; exact Coq(* \"Coq.Init.Logic\" *) .Init.Logic.I",
+      "pose proof @Stdlib(* \"Coq.Program.Wf\" (* nested *) *) .Program .WfExtensionality .WfExtensionality .fix_sub_eq_ext as H; exact Corelib(* \"Coq.Init.Logic\" *) .Init.Logic.I")
+  ]
+
 proofCases :: [(String, Proof, Proof)]
 proofCases =
   [ (label, ending oldTactics, ending newTactics)
   | (label, ending) <-
       [("Qed proof tactics", ProofQed), ("Defined proof tactics", ProofDefined),
        ("Admitted proof tactics", ProofAdmitted)]
+  ] ++
+  [ (endingLabel ++ " with " ++ label, ending oldTactics, ending newTactics)
+  | (endingLabel, ending) <-
+      [("Qed", ProofQed), ("Defined", ProofDefined), ("Admitted", ProofAdmitted)]
+  , (label, oldTactics, newTactics) <- fieldTacticCases
   ] ++
   [ ("empty admitted proof", ProofAdmitted "", ProofAdmitted "")
   , ("proof tactics preserve user qualifiers",
@@ -239,6 +254,11 @@ programCases =
       ProgramSentence oldDefinition Nothing, ProgramSentence newDefinition Nothing)
   , ("Program admitted obligations",
       ProgramSentence oldDefinition (Just "admit"), ProgramSentence newDefinition (Just "admit"))
+  ] ++
+  [ ("Program obligation with " ++ label,
+      ProgramSentence oldDefinition (Just oldTactics),
+      ProgramSentence newDefinition (Just newTactics))
+  | (label, oldTactics, newTactics) <- fieldTacticCases
   ]
   where
     oldDefinition = DefinitionSentence (DefinitionDef ExportL (Bare "witness") [] Nothing
@@ -270,6 +290,27 @@ textCases =
       "Corelib.Init.Logic.I \"Coq.Init.Decimal")
   , ("moved theorem text", "Coq.Program.Wf.WfExtensionality.fix_sub_eq",
       "Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq")
+  , ("moved theorem across spaced FIELD tokens",
+      "Check Coq.Program.Wf .WfExtensionality.fix_sub_eq_ext.",
+      "Check Stdlib.Program.WfExtensionality .WfExtensionality.fix_sub_eq_ext.")
+  , ("moved theorem preserves every FIELD separator",
+      "Check Coq .Program\n .Wf(* \"Coq.Program.Wf\" (* nested *) *) .WfExtensionality\t.fix_sub_eq_ext.",
+      "Check Stdlib .Program\n .WfExtensionality(* \"Coq.Program.Wf\" (* nested *) *) .WfExtensionality\t.fix_sub_eq_ext.")
+  , ("shim and generic paths match across trivia",
+      "Check Coq .Init(* shim *) .Logic.I. Check Coq .Arith.PeanoNat .Nat.add_comm.",
+      "Check Corelib .Init(* shim *) .Logic.I. Check Stdlib .Arith.PeanoNat .Nat.add_comm.")
+  , ("FIELD lookahead preserves literals and trailing comments",
+      "pose (\"Coq.Program.Wf .WfExtensionality\") as path; exact Coq(* \"Coq.Init.Logic\" *) .Init.Logic.I (* trailing *).",
+      "pose (\"Coq.Program.Wf .WfExtensionality\") as path; exact Corelib(* \"Coq.Init.Logic\" *) .Init.Logic.I (* trailing *).")
+  , ("FIELD lookahead leaves command dots separate",
+      "Check Coq.Init.Logic.I (* trailing *) .\nCheck Coq.Init.Logic.I.",
+      "Check Corelib.Init.Logic.I (* trailing *) .\nCheck Corelib.Init.Logic.I.")
+  , ("FIELD lookahead leaves dot notation separate",
+      "Check Coq.Init.Datatypes.O (* notation *) .....Coq.Init.Logic.I.",
+      "Check Corelib.Init.Datatypes.O (* notation *) .....Corelib.Init.Logic.I.")
+  , ("spaced and commented user paths stay unchanged",
+      "Check Other .Coq .Program.Wf .WfExtensionality.add. Check Other(* \"Coq.Init.Decimal\" *) .Coq.Init.Decimal.Little.add.",
+      "Check Other .Coq .Program.Wf .WfExtensionality.add. Check Other(* \"Coq.Init.Decimal\" *) .Coq.Init.Decimal.Little.add.")
   , ("exact moved module text", "Coq.Program.Wf.WfExtensionality",
       "Stdlib.Program.WfExtensionality.WfExtensionality")
   , ("Require text without injection", "Require Import Coq.Program.Wf.\n",
@@ -318,6 +359,18 @@ textCases =
   , ("From embedded Coq prefix preserves relative operands",
       "From Other.Coq Require Import Coq.Init.Decimal.",
       "From Other.Coq Require Import Coq.Init.Decimal.")
+  , ("From spaced standard prefix rewrites with its separators",
+      "From Coq .Program Require Wf. From Coq .Init Require Import Datatypes.",
+      "From Stdlib .Program Require Wf. From Stdlib .Init Require Import Datatypes.")
+  , ("From commented standard prefix preserves comment contents",
+      "From Coq(* \"Coq.Program.Wf\" (* nested *) *) .Program Require Import Wf.",
+      "From Stdlib(* \"Coq.Program.Wf\" (* nested *) *) .Program Require Import Wf.")
+  , ("From spaced user prefix protects relative operands",
+      "From Other .Prefix Require Import Coq.Init.Decimal. Check Coq.Init.Logic.I.",
+      "From Other .Prefix Require Import Coq.Init.Decimal. Check Corelib.Init.Logic.I.")
+  , ("From commented user prefix protects spaced relative operands",
+      "From Other(* \"Coq.Init.Decimal\" (* nested *) *) .Prefix Require Export Coq .Init.Decimal. Check Coq.Init.Logic.I.",
+      "From Other(* \"Coq.Init.Decimal\" (* nested *) *) .Prefix Require Export Coq .Init.Decimal. Check Corelib.Init.Logic.I.")
   , ("From imports preserve whitespace and release following root references",
       "Check Coq.Init.Logic.I.\n  From\tOther\nRequire\nImport\n Coq.Init.Decimal\n Coq.Program.Wf.\nCheck Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.",
       "Check Corelib.Init.Logic.I.\n  From\tOther\nRequire\nImport\n Coq.Init.Decimal\n Coq.Program.Wf.\nCheck Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext.")
@@ -356,6 +409,36 @@ textCases =
   , ("root path after superscript notation",
       "Check \xb2\&Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.",
       "Check \xb2\&Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext.")
+  , ("root paths after subscript notation",
+      "Check \x2081\&Coq.Init.Logic.I. Check \x2081\&Coq.Arith.PeanoNat.Nat.add_comm. Check \x2081\&Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.",
+      "Check \x2081\&Corelib.Init.Logic.I. Check \x2081\&Stdlib.Arith.PeanoNat.Nat.add_comm. Check \x2081\&Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext.")
+  , ("subscripts inside user paths and module components stay together",
+      "My\x2081\&Coq.add Other\x2081.Coq.Init.Decimal.Little.add Coq.Init.Decimal\x2081.Little.succ",
+      "My\x2081\&Coq.add Other\x2081.Coq.Init.Decimal.Little.add Stdlib.Init.Decimal\x2081.Little.succ")
+  , ("root paths after symbolic notation ending in a dot",
+      "Check +.Coq.Init.Logic.I. Check +.Coq.Arith.PeanoNat.Nat.add_comm. Check +.Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.",
+      "Check +.Corelib.Init.Logic.I. Check +.Stdlib.Arith.PeanoNat.Nat.add_comm. Check +.Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext.")
+  , ("multiple dots and punctuation stay in the preceding notation token",
+      "Check +..Coq.Init.Logic.I. Check +...Coq.Init.Logic.I. Check ..Coq.Init.Logic.I. Check ....Coq.Init.Logic.I. Check (.Coq.Init.Logic.I. Check \x2295..Coq.Init.Logic.I.",
+      "Check +..Corelib.Init.Logic.I. Check +...Corelib.Init.Logic.I. Check ..Corelib.Init.Logic.I. Check ....Corelib.Init.Logic.I. Check (.Corelib.Init.Logic.I. Check \x2295..Corelib.Init.Logic.I.")
+  , ("dot-only infix notation separates identifiers, paths and numerals",
+      "Check n.....Coq.Init.Logic.I. Check Coq.Init.Datatypes.O.....Coq.Init.Logic.I. Check 0.....Coq.Init.Logic.I.",
+      "Check n.....Corelib.Init.Logic.I. Check Corelib.Init.Datatypes.O.....Corelib.Init.Logic.I. Check 0.....Corelib.Init.Logic.I.")
+  , ("symbolic notation preserves following user paths",
+      "+.My\x2081\&Coq.add +..Other'1.Coq.Init.Decimal.Little.add ..Other\x2081.Coq.Program.Wf.WfExtensionality.add (.Other.Coq.Init.Decimal.Little.add",
+      "+.My\x2081\&Coq.add +..Other'1.Coq.Init.Decimal.Little.add ..Other\x2081.Coq.Program.Wf.WfExtensionality.add (.Other.Coq.Init.Decimal.Little.add")
+  , ("a single field dot does not expose a root path",
+      "r.Coq.Init.Logic.I .Coq.Init.Decimal.Little.add 1.Coq.Init.Logic.I",
+      "r.Coq.Init.Logic.I .Coq.Init.Decimal.Little.add 1.Coq.Init.Logic.I")
+  , ("notation tokens stop before comments and string literals",
+      "+.(* Coq.Init.Logic.I (* nested *) *)Coq.Init.Logic.I +.\"Coq.Init.Logic.I\" Coq.Init.Logic.I",
+      "+.(* Coq.Init.Logic.I (* nested *) *)Corelib.Init.Logic.I +.\"Coq.Init.Logic.I\" Corelib.Init.Logic.I")
+  , ("spaced ellipsis leaves the following path separate",
+      "Check ... Coq.Init.Logic.I.",
+      "Check ... Corelib.Init.Logic.I.")
+  , ("From commands end before a following notation and root path",
+      "From Other Require Coq.Init.Decimal. Check ..Coq.Init.Logic.I. From Coq Require Init.Datatypes. Check +.Coq.Init.Logic.I.",
+      "From Other Require Coq.Init.Decimal. Check ..Corelib.Init.Logic.I. From Stdlib Require Init.Datatypes. Check +.Corelib.Init.Logic.I.")
   , ("non-breaking spaces preserve user qualifiers and module boundaries",
       "A\xa0\&Coq.add Coq.Init.Decimal\xa0.Little.succ",
       "A\xa0\&Coq.add Stdlib.Init.Decimal\xa0.Little.succ")
@@ -374,6 +457,36 @@ textCases =
   , ("explicit root applications",
       "@Coq.Init.Logic.I @Coq.Arith.PeanoNat.Nat.add_comm @Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext",
       "@Corelib.Init.Logic.I @Stdlib.Arith.PeanoNat.Nat.add_comm @Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext")
+  , ("root constructor after a pattern apostrophe",
+      "let 'Coq.Init.Datatypes.pair a b := p in a",
+      "let 'Corelib.Init.Datatypes.pair a b := p in a")
+  , ("apostrophes inside user identifiers and qualified paths stay unchanged",
+      "Check My'Coq.add. Check Other'.Coq.Init.Decimal.Little.add. Check Coq'.Init.Logic.I.",
+      "Check My'Coq.add. Check Other'.Coq.Init.Decimal.Little.add. Check Coq'.Init.Logic.I.")
+  , ("root references after adjacent decimal numerals",
+      "f 1Coq.Init.Logic.I 2Coq.Arith.PeanoNat.Nat.add_comm 3Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext",
+      "f 1Corelib.Init.Logic.I 2Stdlib.Arith.PeanoNat.Nat.add_comm 3Stdlib.Program.WfExtensionality.WfExtensionality.fix_sub_eq_ext")
+  , ("numeric tokens preserve underscores and decimal exponents",
+      "f 1_000Coq.Init.Logic.I 2e3Coq.Init.Logic.I 3e+4Coq.Init.Logic.I 5e-6Coq.Init.Logic.I",
+      "f 1_000Corelib.Init.Logic.I 2e3Corelib.Init.Logic.I 3e+4Corelib.Init.Logic.I 5e-6Corelib.Init.Logic.I")
+  , ("root references after decimal fractions and exponents",
+      "f 1.5Coq.Init.Logic.I 1.25e+3Coq.Init.Logic.I",
+      "f 1.5Corelib.Init.Logic.I 1.25e+3Corelib.Init.Logic.I")
+  , ("root references after hexadecimal exponents",
+      "f 0x1p2Coq.Init.Logic.I 0x1.fp-2Coq.Init.Logic.I",
+      "f 0x1p2Corelib.Init.Logic.I 0x1.fp-2Corelib.Init.Logic.I")
+  , ("hexadecimal digits consume C before the following identifier",
+      "f 0x1Coq.Init.Logic.I 0XACoq.Init.Logic.I 0x1.Coq.Init.Logic.I",
+      "f 0x1Coq.Init.Logic.I 0XACoq.Init.Logic.I 0x1.Coq.Init.Logic.I")
+  , ("incomplete numeric prefixes preserve following user identifiers",
+      "f 1eCoq.Init.Logic.I 0xGCoq.Init.Logic.I",
+      "f 1eCoq.Init.Logic.I 0xGCoq.Init.Logic.I")
+  , ("digits inside user identifiers and qualified paths stay unchanged",
+      "Check My1Coq.add. Check Other1.Coq.Init.Decimal.Little.add. Check Coq1.Init.Logic.I.",
+      "Check My1Coq.add. Check Other1.Coq.Init.Decimal.Little.add. Check Coq1.Init.Logic.I.")
+  , ("numeric tokens preserve following user-qualified paths",
+      "f 1My1Coq.add 2Other1.Coq.Init.Decimal.Little.add",
+      "f 1My1Coq.add 2Other1.Coq.Init.Decimal.Little.add")
   , ("generic replacement preserves nested Coq component", "Coq.Coq.X", "Stdlib.Coq.X")
   , ("shim replacement preserves nested Coq component",
       "Coq.Init.Decimal.Coq.Init.Logic.I", "Corelib.Init.Decimal.Coq.Init.Logic.I")
@@ -396,7 +509,7 @@ textCases =
   , ("empty text", "", "")
   ] ++ concatMap boundaryCases ["X", "1", "_", "'"] ++
   [ ("non-root text " ++ T.unpack (prefix <> path), prefix <> path, prefix <> path)
-  | prefix <- ["My", "1", "_", "'", "Other.", "\x03bb"]
+  | prefix <- ["My", "My1", "_", "My'", "Other.", "\x03bb"]
   , path <- ["Coq.Init.Decimal.Little.succ",
              "Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext",
              "Coq.Arith.PeanoNat.Nat.add_comm"]

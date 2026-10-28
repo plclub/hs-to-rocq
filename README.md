@@ -214,6 +214,7 @@ cd examples/transformers && make
 # Fast checks (after stack build; no Coq/Rocq compiler required)
 stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs
 bash examples/tests/checks/harness.sh
+bash examples/tests/checks/concurrent.sh
 
 # Coq 8.20 tests
 make -C examples/tests
@@ -229,10 +230,11 @@ make -j2 -C examples/rocq9.0 base
 make -C examples/rocq9.0/tests
 ```
 
-The fast checks run 649 direct Haskell assertions about CLI version selection
+The fast checks run 805 direct Haskell assertions about CLI version selection
 and rewrite definitions, including proof and obligation tactics, root and module
 boundaries, Unicode identifier and notation boundaries, user-name preservation, quoted string
-literals (including doubled quote escapes), comments, relative `From` imports,
+literals (including doubled quote escapes), comments, qualified paths split by
+whitespace/comments, relative `From` imports,
 unrelated AST text, header imports, and Coq 8.20 identity.
 They also run 109 harness checks with fake tools. These exercise both production
 test wrappers, nested helper compilation, clean rebuilds, concurrent tool logging,
@@ -241,13 +243,24 @@ entry points, plus fresh Coq builds with manual modules. The fake translator
 writes interfaces and dependency files, so a missing dependency directory fails
 the check. These checks do not replace real
 compiler tests.
+The harness supports both macOS Bash 3.2 and Bash 5.
+
+A separate real-translator check runs two modules with a shared source dependency
+concurrently on each target. It requires both `.v` and `.h2ci` outputs and checks
+that default translation creates no shared GHC object cache, so scheduling cannot
+hide the object-file race. GHC only typechecks by default (`-fno-code`); the check
+also verifies that an explicit `--ghc -fobject-code` still enables native code
+generation.
 
 The shared unit suites compile fixtures on both targets for nested Corelib
 references and moved theorems in generated definitions, raw proofs, `Program`
 obligations, and preamble/midamble text. They also check that user-qualified names
 remain unchanged, including names with combining marks and non-breaking spaces,
-that root paths after superscript notation rewrite, and that the unqualified
-`Import WfExtensionality.` succeeds.
+that root paths after symbolic notation, pattern apostrophes, and adjacent
+numerals rewrite, and that the unqualified `Import WfExtensionality.` succeeds.
+Notation coverage includes superscripts, subscripts, and punctuation ending in
+dots. User identifiers containing subscripts, apostrophes, or digits remain
+unchanged.
 The string-literal fixture compares raw preamble, midamble, and proof values
 against unchanged AST string literals. Moved theorem references after the literals
 also check that rewriting resumes after each closing quote.

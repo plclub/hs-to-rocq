@@ -6,10 +6,20 @@ add RocqMovedAst Theorem RocqMovedAst.fixEq_typed : fixEqType.
 Proof.
   Check fixEq : fixEqType.
   Check (proj2_sig fixEqWitness) : fixEqType.
-  exact @Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext.
+  exact @Coq .Program.Wf(* "Coq.Program.Wf" *) .WfExtensionality.fix_sub_eq_ext.
 Qed.
 order RocqMovedAst.fixEq RocqMovedAst.fixEq_typed
 order RocqMovedAst.fixEqWitness RocqMovedAst.fixEq_typed
+
+add RocqMovedAst Definition RocqMovedAst.fieldPathLiteral := "Coq.Program.Wf .WfExtensionality".
+add RocqMovedAst Theorem RocqMovedAst.fieldPathLiteral_preserved :
+  fieldPathLiteral = "Coq.Program.Wf .WfExtensionality".
+Proof.
+  pose ("Coq.Program.Wf .WfExtensionality") as path.
+  pose proof @Coq.Program(* "Coq.Program.Wf" (* nested *) *) .Wf .WfExtensionality.fix_sub_eq_ext.
+  exact (eq_refl "Coq.Program.Wf .WfExtensionality").
+Defined.
+order RocqMovedAst.fieldPathLiteral RocqMovedAst.fieldPathLiteral_preserved
 
 set type RocqMovedAst.fixEqWitness : fixEqWitnessType
 obligations RocqMovedAst.fixEqWitness exact @Coq.Program.Wf.WfExtensionality.fix_sub_eq_ext

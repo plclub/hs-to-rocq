@@ -1,6 +1,6 @@
 # Makefile for generating Rocq 9.0 base library from Haskell sources.
 # Reuses edits, module-edits, and manual files from examples/base-src/,
-# with --target-version 9.0 for automatic Coq.* → Stdlib.* rewriting.
+# with --target-version 9.0 for automatic Coq.* -> Corelib.*/Stdlib.* rewriting.
 
 include ../../../common.mk
 
@@ -103,7 +103,7 @@ $(VFILES_BASE_GEN) $(VFILES_EARLY_BASE): $(OUT)/%.v : $$(wildcard $(BASE_SRC)/mo
 		     $(BASE_SRC)/base/src/$*.hs
 	test -e $@
 
-# Renamed module: Data/Semigroup/Internal → Data/SemigroupInternal
+# Renamed module: Data/Semigroup/Internal -> Data/SemigroupInternal
 $(OUT)/Data/SemigroupInternal.v : $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/preamble.v) $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/midamble.v) $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/edits) $(BASE_SRC)/edits
 	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/edits)) \
 	             $(addprefix -p , $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/preamble.v)) \

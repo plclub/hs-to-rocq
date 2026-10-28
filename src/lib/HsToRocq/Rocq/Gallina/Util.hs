@@ -53,7 +53,7 @@ import Control.Lens
 
 import Data.Bifunctor
 import Data.Semigroup ((<>))
-import Data.Char (GeneralCategory(NonSpacingMark), generalCategory, isAlphaNum, isSpace)
+import Data.Char (GeneralCategory(NonSpacingMark), generalCategory, isAlphaNum, isDigit, isHexDigit, isLetter, isSpace)
 import Data.Foldable
 import Data.Maybe
 import Data.List.NonEmpty (NonEmpty(..), nonEmpty)
@@ -385,12 +385,12 @@ normalizeType t                         = t
 -- Many former @Coq.X.Y@ modules are now one-line re-exports inside
 -- @Stdlib.X.Y@ whose actual content lives at @Corelib.X.Y@. Fully-qualified
 -- names do not follow @Require Export@ aliases, so e.g.
--- @Stdlib.Init.Datatypes.app@ does not resolve — the correct path is
+-- @Stdlib.Init.Datatypes.app@ does not resolve -- the correct path is
 -- @Corelib.Init.Datatypes.app@.
 --
 -- The set 'corelibShimModules' below lists every @Coq.X.Y@ path whose Stdlib
 -- counterpart is a Corelib re-export (derived from the Rocq 9.2 distribution).
--- For those, we rewrite @Coq.@ → @Corelib.@. Everything else becomes
+-- For those, we rewrite @Coq.@ -> @Corelib.@. Everything else becomes
 -- @Stdlib.@.
 coqToStdlib :: Data a => a -> a
 coqToStdlib = everywhere
@@ -454,13 +454,14 @@ rocq9RenameModuleReference m
 isModulePrefixOf :: ModuleIdent -> ModuleIdent -> Bool
 isModulePrefixOf prefix path = prefix == path || (prefix <> ".") `T.isPrefixOf` path
 
--- | Apply the Rocq-9 @Coq.*@ → @Corelib.*@/@Stdlib.*@ rewrite to plain text
+-- | Apply the Rocq-9 @Coq.*@ -> @Corelib.*@/@Stdlib.*@ rewrite to plain text
 -- (used for preamble/midamble files and raw proof/obligation tactics).
 --
--- Only root @Coq.*@ paths are rewritten: a preceding identifier character or
--- @.@ makes the path part of a user identifier or another namespace. From
--- commands rewrite only their prefix, including bare @Coq@, leaving relative
--- Require operands intact. Bare @Coq@ names elsewhere stay unchanged.
+-- Only root @Coq.*@ paths are rewritten: whole identifiers and qualified paths
+-- stay together, while symbolic and numeric tokens do not absorb a following
+-- root reference. From commands rewrite only their prefix,
+-- including bare @Coq@, leaving relative Require operands intact. Bare @Coq@
+-- names elsewhere stay unchanged.
 -- Comments and quoted string literals are copied verbatim, including nested
 -- comments and doubled quote escapes, without recognizing commands inside them.
 --
@@ -484,29 +485,96 @@ rocq9RewriteText = T.concat . scan False
       | Just after <- T.stripPrefix "(*" text =
           let (comment, rest) = commented 1 after
           in ("(*" <> comment) : scan relative rest
+      | Just (c, _) <- T.uncons text, isDigit c =
+          let (number, rest) = numericToken text
+          in number : scan relative rest
       | not (T.null path), relative =
-          path : scan (not ("." `T.isSuffixOf` path)) afterPath
+          renderPath path separators : scan True afterPath
       | path == "From", Just (prefix, rest) <- fromRequire afterPath =
           path : (prefix ++ scan True rest)
-      | not (T.null path) = rewritePath path : scan False afterPath
+      | not (T.null path) = renderPath (rewritePath path) separators : scan False afterPath
+      -- A single dot followed by an identifier is a FIELD token, not a root.
+      | Just after <- T.stripPrefix "." text
+      , let (field, fieldSeparators, rest) = qualifiedPath after
+      , not (T.null field) = ("." <> renderPath field fieldSeparators) : scan relative rest
+      | not (T.null symbols) =
+          symbols : scan (relative && not ("." `T.isSuffixOf` symbols)) afterSymbols
       | Just (c, rest) <- T.uncons text = T.singleton c : scan relative rest
       | otherwise = []
       where
-        (path, afterPath) = T.span isPathChar text
+        (path, separators, afterPath) = qualifiedPath text
+        (symbols, afterSymbols) = symbolicToken text
+
+    -- FIELD tokens can follow whitespace or comments, but their dot must be
+    -- immediately followed by an identifier start. Look ahead through trivia
+    -- without consuming it unless a field follows; command dots and notation
+    -- stay outside the path. Match canonical names, retaining each separator.
+    qualifiedPath text
+      | Just (c, _) <- T.uncons text, isIdentInitial c =
+          let (name, rest) = T.span isIdentChar text
+              (beforeDot, fieldText) = trivia rest
+          in case T.stripPrefix "." fieldText of
+            Just after
+              | let (suffix, separators, following) = qualifiedPath after
+              , not (T.null suffix) ->
+                  (name <> "." <> suffix, (beforeDot <> ".") : separators, following)
+            _ -> (name, [], rest)
+      | otherwise = ("", [], text)
+
+    -- All supported substitutions preserve the number of path components,
+    -- including the WfExtensionality move. Copy their original separators.
+    renderPath path separators =
+      T.concat $ zipWith (<>) ("" : separators) (T.splitOn "." path)
+
+    -- Keep punctuation together, including trailing dots and leading pattern
+    -- apostrophes. Comments and strings start separate lexical regions.
+    symbolicToken text =
+      let (symbols, _) = T.span (\c -> not (isIdentInitial c || isDigit c || isSpace c || c == '"')) text
+          (beforeComment, _) = T.breakOn "(*" symbols
+      in T.splitAt (T.length beforeComment) text
+
+    -- Follow Rocq's NumTok.Unsigned grammar, preserving the original spelling.
+    -- Hex digits can absorb C: 0x1Coq is a numeral followed by oq, not Coq.
+    numericToken text
+      | Just ('0', rest) <- T.uncons text
+      , Just (base, digits) <- T.uncons rest, base == 'x' || base == 'X'
+      , Just (c, _) <- T.uncons digits, isHexDigit c =
+          first (("0" <> T.singleton base) <>) (numberParts isHexDigit "pP" digits)
+      | otherwise = numberParts isDigit "eE" text
+
+    numberParts digit exponents text =
+      let digitOrUnderscore c = digit c || c == '_'
+          (integer, afterInteger) = T.span digitOrUnderscore text
+          (fraction, afterFraction)
+            | Just ('.', digits) <- T.uncons afterInteger
+            , Just (c, _) <- T.uncons digits, digitOrUnderscore c =
+                first ("." <>) (T.span digitOrUnderscore digits)
+            | otherwise = ("", afterInteger)
+          (exponent, afterExponent)
+            | Just (e, rest) <- T.uncons afterFraction, e `T.elem` exponents
+            , let (sign, digits) = case T.uncons rest of
+                    Just (s, following) | s == '+' || s == '-' -> (T.singleton s, following)
+                    _ -> ("", rest)
+            , Just (c, _) <- T.uncons digits, isDigit c =
+                first ((T.singleton e <> sign) <>)
+                  (T.span (\d -> isDigit d || d == '_') digits)
+            | otherwise = ("", afterFraction)
+      in (integer <> fraction <> exponent, afterExponent)
 
     -- Recognize just From <prefix> Require, allowing comments between tokens.
     -- This is not a vernacular parser; Import/Export and operands need only be
     -- copied until the command ends. Only this prefix may rename bare Coq.
     fromRequire text
       | not (T.null beforePrefix), not (T.null prefix)
-      , not ("." `T.isSuffixOf` prefix), not (T.null beforeRequire)
+      , not (T.null beforeRequire)
       , Just rest <- T.stripPrefix "Require" requireText
       , maybe True (not . isPathChar . fst) (T.uncons rest) =
-          Just ([beforePrefix, rocq9RenameModuleReference prefix, beforeRequire, "Require"], rest)
+          Just ([beforePrefix, renderPath (rocq9RenameModuleReference prefix) separators,
+                 beforeRequire, "Require"], rest)
       | otherwise = Nothing
       where
         (beforePrefix, prefixText) = trivia text
-        (prefix, afterPrefix) = T.span isPathChar prefixText
+        (prefix, separators, afterPrefix) = qualifiedPath prefixText
         (beforeRequire, requireText) = trivia afterPrefix
 
     trivia text =
@@ -548,14 +616,21 @@ rocq9RewriteText = T.concat . scan False
       | "Coq." `T.isPrefixOf` path, path /= "Coq." = rocq9RenameModuleReference path
       | otherwise = path
 
+    -- Rocq's Unicode.is_valid_ident_initial accepts Letter and IdentSep.
+    -- Numbers and non-spacing marks can continue, but cannot start identifiers.
+    isIdentInitial c = isLetter c || c == '_' || c == '\xa0'
+
+    isPathChar c = isIdentChar c || c == '.'
+
+    -- Continuation characters for whole identifiers.
     -- Rocq 9.0.1 clib/unicode.ml includes non-spacing marks in IdentPart
     -- and U+00A0 in IdentSep.
     -- Superscript decimal digits are symbols in both Coq 8.20.1 and Rocq 9.0.1.
     -- https://github.com/rocq-prover/rocq/blob/V9.0.1/clib/unicode.ml
-    isPathChar c
+    isIdentChar c
       | c `elem` ("\xb2\xb3\xb9\x2070\x2074\x2075\x2076\x2077\x2078\x2079" :: String) = False
       | otherwise = isAlphaNum c || generalCategory c == NonSpacingMark
-                 || c == '_' || c == '\'' || c == '\xa0' || c == '.'
+                 || c == '_' || c == '\'' || c == '\xa0'
 
 -- | The Rocq-version-aware text rewriter used by the driver for user-supplied
 -- preamble/midamble files. The Coq-8.20 target leaves text untouched (so the

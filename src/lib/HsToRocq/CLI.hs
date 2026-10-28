@@ -226,7 +226,10 @@ processArgs :: GhcMonad m => m Config
 processArgs = do
   ProgramArgs{..} <- liftIO $ customExecParser defaultPrefs{prefMultiSuffix="..."} argParserInfo
 
-  let defaultArgs = map (mkGeneralLocated "defaultArgs") $ words "-no-link -hidir=.ghc-tmp -odir=.ghc-tmp"
+  -- Translation needs types, not native objects. Shared source dependencies can
+  -- race on .o.tmp files when separate translator processes generate code.
+  let defaultArgs = map (mkGeneralLocated "defaultArgs") $
+        words "-no-link -fno-code -hidir=.ghc-tmp -odir=.ghc-tmp"
 
   let ghcArgs = let locate opt = mkGeneralLocated $ "command line (" ++ opt ++ ")"
                 in defaultArgs ++

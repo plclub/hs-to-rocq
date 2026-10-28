@@ -51,7 +51,13 @@ in user preambles and midambles.
 
 The text rewrite applies only to root ``Coq.*`` paths. User names such as
 ``MyCoq.add`` and ``Other.Coq.Init.Decimal`` remain unchanged, while root
-references after ``@`` or an opening parenthesis still rewrite.
+references after ``@``, an opening parenthesis, symbolic notation, a let-pattern
+apostrophe, or an adjacent numeral still rewrite. Symbolic notation can end in
+dots, as in ``+.Coq.Init.Logic.I``. Subscripts, apostrophes, and digits within
+user identifiers remain unchanged.
+Qualified paths may contain whitespace or comments before a field dot, as in
+``Coq.Program.Wf .WfExtensionality.fix_sub_eq_ext``. The tool matches the complete
+path and preserves those separators when rewriting it.
 In ``From Other Require Import Coq.Init.Decimal.``, the operand is relative to
 ``Other``, so it also remains unchanged. Comments and string literals are copied
 verbatim.
