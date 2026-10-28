@@ -1,0 +1,59 @@
+superclassCount:
+  Data.Functor.Classes.Eq2: '0'
+  Data.Functor.Classes.Ord1: '1'
+  Data.Functor.Classes.Eq1: '0'
+  Data.Functor.Classes.Ord2: '1'
+classTypes:
+  Data.Functor.Classes.Eq2: fromList []
+  Data.Functor.Classes.Ord1: fromList []
+  Data.Functor.Classes.Eq1: fromList []
+  Data.Functor.Classes.Ord2: fromList []
+classDefns:
+  Data.Functor.Classes.Eq2: ClassDefinition (Qualified "Data.Functor.Classes" "Eq2")
+    [Typed Ungeneralizable Explicit (Ident (Bare "f") :| []) (Arrow (Qualid (Bare
+    "Type")) (Arrow (Qualid (Bare "Type")) (Qualid (Bare "Type"))))] Nothing [(Qualified
+    "Data.Functor.Classes" "liftEq2",Forall (Typed Ungeneralizable Implicit (Ident
+    (Bare "a") :| []) (Qualid (Bare "Type")) :| []) (Forall (Typed Ungeneralizable
+    Implicit (Ident (Bare "b") :| []) (Qualid (Bare "Type")) :| []) (Forall (Typed
+    Ungeneralizable Implicit (Ident (Bare "c") :| []) (Qualid (Bare "Type")) :| [])
+    (Forall (Typed Ungeneralizable Implicit (Ident (Bare "d") :| []) (Qualid (Bare
+    "Type")) :| []) (Arrow (Arrow (Qualid (Bare "a")) (Arrow (Qualid (Bare "b")) (Qualid
+    (Bare "bool")))) (Arrow (Arrow (Qualid (Bare "c")) (Arrow (Qualid (Bare "d"))
+    (Qualid (Bare "bool")))) (Arrow (App (App (Qualid (Bare "f")) (PosArg (Qualid
+    (Bare "a")) :| [])) (PosArg (Qualid (Bare "c")) :| [])) (Arrow (App (App (Qualid
+    (Bare "f")) (PosArg (Qualid (Bare "b")) :| [])) (PosArg (Qualid (Bare "d")) :|
+    [])) (Qualid (Bare "bool"))))))))))]
+  Data.Functor.Classes.Ord1: ClassDefinition (Qualified "Data.Functor.Classes" "Ord1")
+    [Typed Ungeneralizable Explicit (Ident (Bare "f") :| []) (Arrow (Qualid (Bare
+    "Type")) (Qualid (Bare "Type"))),Generalized Implicit (App (Qualid (Qualified
+    "Data.Functor.Classes" "Eq1")) (PosArg (Qualid (Bare "f")) :| []))] Nothing [(Qualified
+    "Data.Functor.Classes" "liftCompare",Forall (Typed Ungeneralizable Implicit (Ident
+    (Bare "a") :| []) (Qualid (Bare "Type")) :| []) (Forall (Typed Ungeneralizable
+    Implicit (Ident (Bare "b") :| []) (Qualid (Bare "Type")) :| []) (Arrow (Arrow
+    (Qualid (Bare "a")) (Arrow (Qualid (Bare "b")) (Qualid (Bare "comparison"))))
+    (Arrow (App (Qualid (Bare "f")) (PosArg (Qualid (Bare "a")) :| [])) (Arrow (App
+    (Qualid (Bare "f")) (PosArg (Qualid (Bare "b")) :| [])) (Qualid (Bare "comparison")))))))]
+  Data.Functor.Classes.Eq1: ClassDefinition (Qualified "Data.Functor.Classes" "Eq1")
+    [Typed Ungeneralizable Explicit (Ident (Bare "f") :| []) (Arrow (Qualid (Bare
+    "Type")) (Qualid (Bare "Type")))] Nothing [(Qualified "Data.Functor.Classes" "liftEq",Forall
+    (Typed Ungeneralizable Implicit (Ident (Bare "a") :| []) (Qualid (Bare "Type"))
+    :| []) (Forall (Typed Ungeneralizable Implicit (Ident (Bare "b") :| []) (Qualid
+    (Bare "Type")) :| []) (Arrow (Arrow (Qualid (Bare "a")) (Arrow (Qualid (Bare "b"))
+    (Qualid (Bare "bool")))) (Arrow (App (Qualid (Bare "f")) (PosArg (Qualid (Bare
+    "a")) :| [])) (Arrow (App (Qualid (Bare "f")) (PosArg (Qualid (Bare "b")) :| []))
+    (Qualid (Bare "bool")))))))]
+  Data.Functor.Classes.Ord2: ClassDefinition (Qualified "Data.Functor.Classes" "Ord2")
+    [Typed Ungeneralizable Explicit (Ident (Bare "f") :| []) (Arrow (Qualid (Bare
+    "Type")) (Arrow (Qualid (Bare "Type")) (Qualid (Bare "Type")))),Generalized Implicit
+    (App (Qualid (Qualified "Data.Functor.Classes" "Eq2")) (PosArg (Qualid (Bare "f"))
+    :| []))] Nothing [(Qualified "Data.Functor.Classes" "liftCompare2",Forall (Typed
+    Ungeneralizable Implicit (Ident (Bare "a") :| []) (Qualid (Bare "Type")) :| [])
+    (Forall (Typed Ungeneralizable Implicit (Ident (Bare "b") :| []) (Qualid (Bare
+    "Type")) :| []) (Forall (Typed Ungeneralizable Implicit (Ident (Bare "c") :| [])
+    (Qualid (Bare "Type")) :| []) (Forall (Typed Ungeneralizable Implicit (Ident (Bare
+    "d") :| []) (Qualid (Bare "Type")) :| []) (Arrow (Arrow (Qualid (Bare "a")) (Arrow
+    (Qualid (Bare "b")) (Qualid (Bare "comparison")))) (Arrow (Arrow (Qualid (Bare
+    "c")) (Arrow (Qualid (Bare "d")) (Qualid (Bare "comparison")))) (Arrow (App (App
+    (Qualid (Bare "f")) (PosArg (Qualid (Bare "a")) :| [])) (PosArg (Qualid (Bare
+    "c")) :| [])) (Arrow (App (App (Qualid (Bare "f")) (PosArg (Qualid (Bare "b"))
+    :| [])) (PosArg (Qualid (Bare "d")) :| [])) (Qualid (Bare "comparison"))))))))))]

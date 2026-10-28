@@ -18,7 +18,7 @@ module HsToRocq.CLI (
   -- * CLI configuration, parameters, etc.
   Config(..),
   outputFile, preambleFile, midambleFile, editsFiles, leniency, processingMode,
-  modulesFiles, modulesRoot, directInputFiles, ifaceDirs,
+  modulesFiles, modulesRoot, directInputFiles, ifaceDirs, cfgRocqVersion,
   processArgs,
   ProgramArgs(..),
   argParser, argParserInfo,
@@ -40,6 +40,7 @@ import Control.Monad.Except
 
 import System.FilePath
 import System.Directory
+import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import System.IO
 import System.Exit
@@ -75,6 +76,7 @@ import HsToRocq.PrettyPrint hiding ((</>))
 import HsToRocq.Rocq.Gallina.Util
 import HsToRocq.Util.FVs
 import HsToRocq.Rocq.Pretty
+import HsToRocq.Rocq.Gallina (RocqVersion(..), Sentence)
 import HsToRocq.Rocq.Preamble
 import HsToRocq.ProcessFiles
 import HsToRocq.ConvertHaskell
@@ -105,6 +107,7 @@ data ProgramArgs = ProgramArgs { outputFileArg          :: !(Maybe FilePath)
                                , ghcTreeDirsArgs        :: ![FilePath]
                                , ghcOptionsArgs         :: ![String]
                                , directInputFilesArgs   :: ![FilePath]
+                               , rocqVersionArg         :: !RocqVersion
                                }
                  deriving (Eq, Ord, Show, Read)
 
@@ -184,6 +187,17 @@ argParser = ProgramArgs <$> optional (strOption       $  long    "output"
                         <*> many     (strArgument     $  metavar "FILES"
                                                       <> help    "Haskell files to translate into Coq")
 
+                        <*> option   (eitherReader parseRocqVersion)
+                                                      (  long    "target-version"
+                                                      <> metavar "VERSION"
+                                                      <> value   Rocq_8_20
+                                                      <> help    "Target Rocq version: 8.20 (default) or 9.0")
+
+parseRocqVersion :: String -> Either String RocqVersion
+parseRocqVersion "8.20" = Right Rocq_8_20
+parseRocqVersion "9.0"  = Right Rocq_9_0
+parseRocqVersion s      = Left $ "Unknown Rocq version '" ++ s ++ "'. Supported: 8.20, 9.0"
+
 argParserInfo :: ParserInfo ProgramArgs
 argParserInfo = info (helper <*> argParser) $  fullDesc
                                             <> progDesc "Convert Haskell source files to Coq"
@@ -199,6 +213,7 @@ data Config = Config { _outputFile          :: !(Maybe FilePath)
                      , _directInputFiles    :: ![FilePath]
                      , _ifaceDirs           :: ![FilePath]
                      , _dependencyDir       :: !(Maybe FilePath)
+                     , _cfgRocqVersion      :: !RocqVersion
                      }
             deriving (Eq, Ord, Show, Read)
 makeLenses ''Config
@@ -211,7 +226,10 @@ processArgs :: GhcMonad m => m Config
 processArgs = do
   ProgramArgs{..} <- liftIO $ customExecParser defaultPrefs{prefMultiSuffix="..."} argParserInfo
 
-  let defaultArgs = map (mkGeneralLocated "defaultArgs") $ words "-no-link -hidir=.ghc-tmp -odir=.ghc-tmp"
+  -- Translation needs types, not native objects. Shared source dependencies can
+  -- race on .o.tmp files when separate translator processes generate code.
+  let defaultArgs = map (mkGeneralLocated "defaultArgs") $
+        words "-no-link -fno-code -hidir=.ghc-tmp -odir=.ghc-tmp"
 
   let ghcArgs = let locate opt = mkGeneralLocated $ "command line (" ++ opt ++ ")"
                 in defaultArgs ++
@@ -248,6 +266,7 @@ processArgs = do
                 , _directInputFiles    = directInputFilesArgs
                 , _ifaceDirs           = ifaceDirsArgs
                 , _dependencyDir       = dependencyDirArg
+                , _cfgRocqVersion      = rocqVersionArg
                 }
 
 parseModulesFiles :: (MonadIO m, MonadError String m)
@@ -286,15 +305,17 @@ processFilesMain process = do
                   (++) <$> parseModulesFiles (conf^.modulesRoot.non "") (conf^.modulesFiles)
                        <*> pure (conf^.directInputFiles)
 
+  let rewriteVFileContent s = rewriteTextFor (conf^.cfgRocqVersion) (T.pack s)
+
   preambles <- liftIO $ traverse readFile (conf^.preambleFile)
   let printPreambles hOut = liftIO $ do
-        T.hPutStr hOut staticPreamble
+        T.hPutStr hOut (staticPreamble (conf^.cfgRocqVersion))
         hPutStrLn hOut ""
         unless (null preambles) $ do
           hPutStrLn hOut "(* Preamble *)"
           hPutStrLn hOut ""
         for_ preambles $ \contents -> do
-            hPutStr   hOut contents
+            T.hPutStr hOut (rewriteVFileContent contents)
             hPutStrLn hOut ""
             hFlush    hOut
 
@@ -304,7 +325,7 @@ processFilesMain process = do
           hPutStrLn hOut "(* Midamble *)"
           hPutStrLn hOut ""
         for_ midambles $ \contents -> do
-            hPutStr   hOut contents
+            T.hPutStr hOut (rewriteVFileContent contents)
             hPutStrLn hOut ""
             hFlush    hOut
 
@@ -334,7 +355,7 @@ processFilesMain process = do
               liftIO $ hPutStrLn hOut $ path ++ ": " ++ unwords deps
 
 
-  runGlobalMonad edits (conf^.translationLeniency) (conf^.ifaceDirs) $
+  runGlobalMonad edits (conf^.translationLeniency) (conf^.ifaceDirs) (conf^.cfgRocqVersion) $
     traverse_ (process withModulePrinter) =<< processFiles (conf^.processingMode) inputFiles
 
 printConvertedModule :: GlobalMonad r m
@@ -343,9 +364,17 @@ printConvertedModule :: GlobalMonad r m
                      -> m ()
 printConvertedModule withModulePrinter cmod@ConvertedModule{..} = do
   ModuleDeclarations{..} <- moduleDeclarations cmod
-  
-  let fvs = toList . getFVs $ foldScopes bvOf (moduleTypeDeclarations ++ moduleValueDeclarations) mempty
-      
+
+  version <- view rocqVersion
+  let rewrite :: [Sentence] -> [Sentence]
+      rewrite = rewriteASTFor version
+
+      imports'  = rewrite convModImports
+      typDecls' = rewrite moduleTypeDeclarations
+      valDecls' = rewrite moduleValueDeclarations
+
+  let fvs = toList . getFVs $ foldScopes bvOf (typDecls' ++ valDecls') mempty
+
       printUnbound out =
         unless (null fvs) $ do
           hPrettyPrint out $
@@ -355,10 +384,10 @@ printConvertedModule withModulePrinter cmod@ConvertedModule{..} = do
           hFlush out
 
       printImportsTypes out = liftIO $ do
-          printThe out "imports"            mempty convModImports          <* gap out
-          printThe out "type declarations"  line   moduleTypeDeclarations  <* gap out
+          printThe out "imports"            mempty imports'   <* gap out
+          printThe out "type declarations"  line   typDecls'  <* gap out
       printValues out = liftIO $ do
-          printThe out "value declarations" line   moduleValueDeclarations <* hFlush out
+          printThe out "value declarations" line   valDecls'  <* hFlush out
           printUnbound out
 
   withModulePrinter convModName printImportsTypes printValues

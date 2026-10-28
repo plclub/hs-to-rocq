@@ -81,6 +81,9 @@ module HsToRocq.Rocq.Gallina (
   ArgumentSpec(..),
   ArgumentExplicitness(..),
   IsExistingClass(..),
+
+  -- * Target version
+  RocqVersion(..),
   ) where
 
 import           Prelude            hiding (Num)
@@ -92,6 +95,10 @@ import           Data.List.NonEmpty (NonEmpty ())
 
 import           Data.Data          (Data (..))
 import           Data.Typeable
+
+-- | Target Rocq/Coq version for code generation
+data RocqVersion = Rocq_8_20 | Rocq_9_0
+  deriving (Eq, Ord, Show, Read, Enum, Bounded, Typeable, Data)
 
 -- $Lexical
 -- <https://coq.inria.fr/distrib/V8.12.0/refman/language/core/basic.html#lexical-conventions §1.1, \"Lexical conventions\", in the Coq reference manual.>

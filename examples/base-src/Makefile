@@ -1,115 +1,13 @@
 include ../../common.mk
 
 OUT=../../base
+BASE_SRC=.
 
 # Not all of these need to be handwritten. Eventually we should be able to
 # generate some of these modules as hs-to-rocq is improved.
 # see [notes.md] for discussion of issues
 
-# Handwritten modules (usually by modification of generated version)
-HANDMOD = \
-  HsToRocq/Wf \
-  HsToRocq/Skip \
-  HsToRocq/DeferredFix \
-  HsToRocq/DeferredFixImpl \
-  HsToRocq/Unpeel \
-  GHC/Num \
-  GHC/Char \
-  GHC/Real \
-  GHC/Enum \
-  Data/Bits \
-  Data/Functor/Classes \
-  GHC/Prim \
-  GHC/Types \
-  GHC/Tuple \
-  Data/Type/Equality \
-  HsToRocq/Err \
-  GHC/Err \
-  HsToRocq/Nat \
-  GHC/Unicode \
-  Prelude\
-
-# Generated modules that must be listed early in _CoqProject
-# (before other generated modules) to avoid Coq stack overflow
-# in typeclass resolution. These were formerly in HANDMOD.
-EARLY_GHC_INTERNAL_MODULES = \
-  Data/Functor/Identity \
-  Data/Traversable
-
-# No early base modules currently needed
-EARLY_BASE_MODULES =
-
-# Generated modules from ghc-internal
-# Source at ghc-internal/src/GHC/Internal/...
-# For Data/* and Control/* modules: ghc-internal/src/GHC/Internal/$*.hs
-# For GHC/* modules: need explicit rules (GHC/List -> GHC/Internal/List.hs)
-GHC_INTERNAL_MODULES = \
-  Data/Maybe \
-  Data/List \
-  Data/OldList \
-  Data/Bool \
-  Data/Tuple \
-  Data/Void \
-  Data/Function \
-  Data/Ord \
-  Data/Functor \
-  Data/Either \
-  Data/Proxy \
-  Control/Monad \
-  Data/Monoid \
-  Data/Functor/Utils \
-  Control/Monad/Fail \
-  Data/Foldable \
-  Data/Functor/Const \
-  Control/Category \
-  Control/Arrow
-
-# GHC/* modules in ghc-internal that need special path mapping
-# GHC/List -> ghc-internal/src/GHC/Internal/List.hs (not GHC/Internal/GHC/List.hs)
-GHC_INTERNAL_GHC_MODULES = \
-  GHC/List
-
-# Generated modules still in base/src/ (with real content, not re-exports)
-BASE_MODULES = \
-  Control/Applicative \
-  Data/Bifunctor \
-  Data/List/NonEmpty \
-  Data/Semigroup \
-  Data/Functor/Compose \
-  Data/Functor/Product \
-  Data/Functor/Sum \
-  Data/Bifoldable \
-  Data/Bitraversable \
-  Control/Monad/Zip
-
-# All generated modules (for _CoqProject etc.)
-MODULES = $(GHC_INTERNAL_MODULES) $(GHC_INTERNAL_GHC_MODULES) $(BASE_MODULES)
-EARLY_MODULES = $(EARLY_GHC_INTERNAL_MODULES) $(EARLY_BASE_MODULES)
-ALL_MODULES = $(EARLY_MODULES) $(MODULES)
-
-RENAMED = \
-  Data/SemigroupInternal \
-
-
-# generated from drop-in/
-DROPIN =
-
-# also generated from drop-in/
-SPECIAL_MODULES = \
-  GHC/Base
-
-VFILES_GHC_INTERNAL     = $(addprefix $(OUT)/,$(addsuffix .v,$(GHC_INTERNAL_MODULES)))
-VFILES_GHC_INTERNAL_GHC = $(addprefix $(OUT)/,$(addsuffix .v,$(GHC_INTERNAL_GHC_MODULES)))
-VFILES_BASE_GEN  = $(addprefix $(OUT)/,$(addsuffix .v,$(BASE_MODULES)))
-VFILES_EARLY_GHC_INTERNAL = $(addprefix $(OUT)/,$(addsuffix .v,$(EARLY_GHC_INTERNAL_MODULES)))
-VFILES_EARLY_BASE = $(addprefix $(OUT)/,$(addsuffix .v,$(EARLY_BASE_MODULES)))
-VFILES_GEN       = $(VFILES_GHC_INTERNAL) $(VFILES_GHC_INTERNAL_GHC) $(VFILES_BASE_GEN) $(VFILES_EARLY_GHC_INTERNAL) $(VFILES_EARLY_BASE)
-VFILES_RENAMED   = $(addprefix $(OUT)/,$(addsuffix .v,$(RENAMED)))
-VFILES_MAN       = $(addprefix $(OUT)/,$(addsuffix .v,$(HANDMOD)))
-VFILES_SPECIAL   = $(addprefix $(OUT)/,$(addsuffix .v,$(SPECIAL_MODULES)))
-VFILES_DROPIN    = $(addprefix $(OUT)/,$(addsuffix .v,$(DROPIN)))
-
-VFILES   = $(VFILES_MAN) $(VFILES_GEN) $(VFILES_SPECIAL) $(VFILES_DROPIN) $(VFILES_RENAMED)
+include modules.mk
 
 all:  vfiles coq base-thy
 
@@ -119,15 +17,7 @@ filelist:
 
 vfiles: $(OUT)/edits $(OUT)/README.md $(OUT)/_CoqProject $(OUT)/coq-hs-to-rocq-base.opam $(VFILES)
 
-$(OUT)/_CoqProject : Makefile
-	mkdir -p $(OUT)
-	> $@
-	echo '-Q . ""' >> $@
-	echo $(addsuffix .v,$(HANDMOD)) $(addsuffix .v,$(EARLY_MODULES)) >> $@
-	echo $(addsuffix .v,$(MODULES)) >> $@
-	echo $(addsuffix .v,$(RENAMED)) >> $@
-	echo $(addsuffix .v,$(SPECIAL_MODULES)) >> $@
-	echo $(addsuffix .v,$(DROPIN)) >> $@
+include $(BASE_SRC)/base-rules.mk
 
 $(OUT)/Makefile: $(OUT)/_CoqProject
 	cd $(OUT); coq_makefile -f _CoqProject -o Makefile
@@ -218,47 +108,51 @@ HS_TO_ROCQ_OPTS_BASE := \
     --ghc -this-unit-id --ghc base
 
 
-include deps/*.mk
+-include deps/*.mk
 
 .SECONDEXPANSION:
 
 # Rule for Data/* and Control/* modules from ghc-internal
 # Source: ghc-internal/src/GHC/Internal/$*.hs
 $(VFILES_GHC_INTERNAL) $(VFILES_EARLY_GHC_INTERNAL): $(OUT)/%.v : $$(wildcard module-edits/$$*/preamble.v) $$(wildcard module-edits/$$*/midamble.v)  $$(wildcard module-edits/$$*/edits) edits
+	rm -f $@
 	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard module-edits/$*/edits)) \
 	             $(addprefix -p , $(wildcard module-edits/$*/preamble.v)) \
 	             $(addprefix --midamble , $(wildcard module-edits/$*/midamble.v)) \
 		     $(HS_TO_ROCQ_OPTS_INTERNAL) \
-		     ghc-internal/src/GHC/Internal/$*.hs
+		     ghc-internal/src/GHC/Internal/$*.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $@
 
 # Rule for GHC/* modules from ghc-internal
 # GHC/List -> ghc-internal/src/GHC/Internal/List.hs
 $(VFILES_GHC_INTERNAL_GHC): $(OUT)/GHC/%.v : $$(wildcard module-edits/GHC/$$*/preamble.v) $$(wildcard module-edits/GHC/$$*/midamble.v)  $$(wildcard module-edits/GHC/$$*/edits) edits
+	rm -f $@
 	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard module-edits/GHC/$*/edits)) \
 	             $(addprefix -p , $(wildcard module-edits/GHC/$*/preamble.v)) \
 	             $(addprefix --midamble , $(wildcard module-edits/GHC/$*/midamble.v)) \
 		     $(HS_TO_ROCQ_OPTS_INTERNAL) \
-		     ghc-internal/src/GHC/Internal/$*.hs
+		     ghc-internal/src/GHC/Internal/$*.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $@
 
 # Rule for modules still in base/src
 $(VFILES_BASE_GEN) $(VFILES_EARLY_BASE): $(OUT)/%.v : $$(wildcard module-edits/$$*/preamble.v) $$(wildcard module-edits/$$*/midamble.v)  $$(wildcard module-edits/$$*/edits) edits
+	rm -f $@
 	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard module-edits/$*/edits)) \
 	             $(addprefix -p , $(wildcard module-edits/$*/preamble.v)) \
 	             $(addprefix --midamble , $(wildcard module-edits/$*/midamble.v)) \
 		     $(HS_TO_ROCQ_OPTS_BASE) \
-		     base/src/$*.hs
+		     base/src/$*.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $@
 
 # This is renamed, which confuses Make, so hence the special rule
 # Data/Semigroup/Internal is in ghc-internal
 $(OUT)/Data/SemigroupInternal.v : $(wildcard module-edits/Data/Semigroup/Internal/preamble.v) $(wildcard module-edits/Data/Semigroup/Internal/midamble.v)  $(wildcard module-edits/Data/Semigroup/Internal/edits) edits
+	rm -f $@
 	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard module-edits/Data/Semigroup/Internal/edits)) \
 	             $(addprefix -p , $(wildcard module-edits/Data/Semigroup/Internal/preamble.v)) \
 	             $(addprefix --midamble , $(wildcard module-edits/Data/Semigroup/Internal/midamble.v)) \
 		     $(HS_TO_ROCQ_OPTS_INTERNAL) \
-		     ghc-internal/src/GHC/Internal/Data/Semigroup/Internal.hs
+		     ghc-internal/src/GHC/Internal/Data/Semigroup/Internal.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $(OUT)/Data/SemigroupInternal.v
 
 # We merge GHC.Maybe into GHC.Base, which requires a special rule.
@@ -269,6 +163,7 @@ GHC_BASE_MID = $(wildcard module-edits/GHC/Base/midamble.v module-edits/GHC/Mayb
 GHC_BASE_EDITS = $(wildcard module-edits/GHC/Base/edits module-edits/GHC/Maybe/edits)
 
 $(OUT)/GHC/Base.v: $(GHC_BASE_PRE) $(GHC_BASE_MID) $(GHC_BASE_EDITS) edits
+	rm -f $@
 	cat /dev/null $(GHC_BASE_PRE) > Base_preamble.v
 	cat /dev/null $(GHC_BASE_MID) > Base_midamble.v
 	$(HS_TO_ROCQ) -p Base_preamble.v \
@@ -277,7 +172,7 @@ $(OUT)/GHC/Base.v: $(GHC_BASE_PRE) $(GHC_BASE_MID) $(GHC_BASE_EDITS) edits
 	             $(HS_TO_ROCQ_OPTS_GHC_BASE) \
 	             ghc-internal/src/GHC/Internal/Stack/Types.hs \
 	             gen-files/GHC/Internal/Exception/Context.hs \
-	             ghc-internal/src/GHC/Internal/Base.hs ghc-internal/src/GHC/Internal/Maybe.hs
+	             ghc-internal/src/GHC/Internal/Base.hs ghc-internal/src/GHC/Internal/Maybe.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $(OUT)/GHC/Base.v
 	rm -f Base_preamble.v Base_midamble.v
 
@@ -286,10 +181,12 @@ $(VFILES_MAN): $(OUT)/% : manual/%
 	lndir ../examples/base-src/manual $(OUT)/
 
 $(VFILES_DROPIN): $(OUT)/%.v : module-edits/%/edits edits module-edits/%/preamble.v drop-in/%.hs
+	rm -f $@
 	$(HS_TO_ROCQ) -e module-edits/$*/edits \
 	             -e edits \
 		     $(HS_TO_ROCQ_OPTS_BASE) \
-		     drop-in/$*.hs
+		     drop-in/$*.hs || { status=$$?; rm -f "$@"; exit $$status; }
+	test -e $@
 
 # Every rule that builds a .v also produces the corresponding interface file
 %.h2ci: %.v

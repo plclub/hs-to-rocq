@@ -1,0 +1,9 @@
+constructorFields:
+  Data.Functor.Compose.Mk_Compose: RecordFields [Qualified "Data.Functor.Compose"
+    "getCompose"]
+constructorTypes:
+  Data.Functor.Compose.Mk_Compose: Qualified "Data.Functor.Compose" "Compose"
+constructors:
+  Data.Functor.Compose.Compose: '[Qualified "Data.Functor.Compose" "Mk_Compose"]'
+recordFieldTypes:
+  Data.Functor.Compose.getCompose: Qualified "Data.Functor.Compose" "Compose"

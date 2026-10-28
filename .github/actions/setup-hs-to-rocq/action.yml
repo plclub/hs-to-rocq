@@ -1,0 +1,54 @@
+name: Set up hs-to-rocq
+description: >-
+  Shared setup for hs-to-rocq container CI jobs: fix Docker config permissions,
+  initialize requested submodules, install extra apt packages, restore the Stack
+  cache, and build hs-to-rocq. Callers must run actions/checkout@v7 before this
+  action (a local action is not available until after checkout).
+
+inputs:
+  submodules:
+    description: >-
+      Space-separated list of submodule paths to initialize with a full clone.
+    default: ''
+  shallow-submodules:
+    description: >-
+      Space-separated list of submodule paths to initialize with --depth 1.
+    default: ''
+  extra-apt-packages:
+    description: >-
+      Space-separated list of extra apt packages to install before building.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Fix Docker config permissions
+      shell: bash
+      run: mkdir -p /root/.docker && echo '{}' > /root/.docker/config.json
+    - name: Initialize required submodules
+      if: inputs.submodules != ''
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        for sm in ${{ inputs.submodules }}; do git submodule update --init "$sm"; done
+    - name: Initialize shallow submodules
+      if: inputs.shallow-submodules != ''
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        for sm in ${{ inputs.shallow-submodules }}; do git submodule update --init --depth 1 "$sm"; done
+    - name: Install extra apt packages
+      if: inputs.extra-apt-packages != ''
+      shell: bash
+      run: apt-get update && apt-get install -y ${{ inputs.extra-apt-packages }}
+    - name: Caching Stack
+      uses: actions/cache@v6
+      with:
+        path: |
+          /root/.stack
+          .stack-work
+        # Keep native build artifacts within the same Debian base image.
+        key: stack-bookworm-ghc9.10.3-${{ hashFiles('hs-to-rocq.cabal', 'stack.yaml', 'src/**') }}
+    - name: Build hs-to-rocq
+      shell: bash
+      run: stack --no-terminal --system-ghc --allow-different-user build

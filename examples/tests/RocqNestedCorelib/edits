@@ -1,0 +1,12 @@
+# Isolate qualified-name rewriting from nested-library import inference.
+skip module Coq.Init.Decimal.Little
+add RocqNestedCorelib Definition RocqNestedCorelib.littleSucc := Coq.Init.Decimal.Little.succ.
+
+add RocqNestedCorelib Theorem RocqNestedCorelib.littleSucc_carry :
+  RocqNestedCorelib.littleSucc (Coq.Init.Decimal.D9 Coq.Init.Decimal.Nil) =
+  Coq.Init.Decimal.D0 (Coq.Init.Decimal.D1 Coq.Init.Decimal.Nil).
+Proof.
+  Check littleSucc : Decimal.uint -> Decimal.uint.
+  reflexivity.
+Qed.
+order RocqNestedCorelib.littleSucc RocqNestedCorelib.littleSucc_carry

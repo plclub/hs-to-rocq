@@ -13,53 +13,71 @@ jobs:
   hlint:
     name: HLint
     runs-on: ubuntu-latest
+    env:
+      HLINT_VERSION: '3.6.1'
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up HLint
-        uses: haskell-actions/hlint-setup@v2
+      - uses: actions/checkout@v7
+      - name: Cache HLint
+        id: cache-hlint
+        uses: actions/cache@v6
         with:
-          version: '3.6.1'
+          path: ~/.local/bin/hlint
+          key: hlint-${{ runner.os }}-${{ runner.arch }}-${{ env.HLINT_VERSION }}
+      - name: Install HLint
+        if: steps.cache-hlint.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL \
+            "https://github.com/ndmitchell/hlint/releases/download/v${HLINT_VERSION}/hlint-${HLINT_VERSION}-x86_64-linux.tar.gz" \
+            -o hlint.tar.gz
+          tar -xzf hlint.tar.gz
+          install -m 0755 "hlint-${HLINT_VERSION}/hlint" "$HOME/.local/bin/hlint"
       - name: Run HLint
-        uses: haskell-actions/hlint-run@v2
-        with:
-          path: '["src/lib", "src/exe"]'
-          fail-on: suggestion
+        run: |
+          "$HOME/.local/bin/hlint" src/lib src/exe
 
   build-haskell:
     name: Build hs-to-rocq (GHC 9.10)
     runs-on: ubuntu-latest
     container:
-      image: haskell:9.10.3
+      image: haskell:9.10.3-bookworm
     env:
       HOME: /root
     steps:
-      - uses: actions/checkout@v4
-      - name: Fix Docker config permissions
-        run: mkdir -p /root/.docker && echo '{}' > /root/.docker/config.json
-      - name: Caching Stack
-        uses: actions/cache@v4
-        with:
-          path: |
-            /root/.stack
-            .stack-work
-          key: stack-ghc9.10.3-${{ hashFiles('hs-to-rocq.cabal', 'stack.yaml', 'src/**') }}
-      - name: Build hs-to-rocq
-        run: stack --no-terminal --system-ghc --allow-different-user build
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-hs-to-rocq
+      - name: Check target-version rewriting
+        run: stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs
+      - name: Check test-harness failure propagation
+        run: bash examples/tests/checks/harness.sh
+      - name: Check concurrent real translations
+        run: bash examples/tests/checks/concurrent.sh
 
   test-coq-files:
     name: Testing all Coq examples (Coq 8.20)
     runs-on: ubuntu-latest
+    env:
+      COQ_EXAMPLES_IMAGE: mathcomp/mathcomp:2.5.0-coq-8.20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - name: Pre-pull Coq image
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if docker pull "$COQ_EXAMPLES_IMAGE"; then
+              exit 0
+            fi
+            sleep $((attempt * 15))
+          done
+          docker pull "$COQ_EXAMPLES_IMAGE"
       - uses: coq-community/docker-coq-action@v1
         with:
-          custom_image: 'mathcomp/mathcomp:2.5.0-coq-8.20'
+          custom_image: ${{ env.COQ_EXAMPLES_IMAGE }}
           before_script: |
             startGroup "Workaround permission issue"
             sudo chown -R coq:coq .
             endGroup
             startGroup "Install coq-equations (needed by graph theories)"
-            opam install -y coq-equations
+            opam install -y coq-equations.1.3.1+8.20
             endGroup
           script: |
             startGroup "Lint opam files"
@@ -106,31 +124,26 @@ jobs:
   tests:
     name: Unit tests and examples
     runs-on: ubuntu-latest
+    needs: build-haskell
+    container:
+      image: haskell:9.10.3-bookworm
+    env:
+      HOME: /root
     steps:
-      - uses: actions/checkout@v4
-      - uses: haskell-actions/setup@v2
-        with:
-          ghc-version: '9.10.3'
-          enable-stack: true
-          stack-version: 'latest'
-      - name: Caching Stack
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.stack
-            .stack-work
-          key: stack-${{ runner.os }}-ghc9.10.3-${{ hashFiles('hs-to-rocq.cabal', 'stack.yaml', 'src/**') }}
-      - name: Build hs-to-rocq
-        run: stack --no-terminal --install-ghc build
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-hs-to-rocq
       - name: Set up Coq
         run: |
-          sudo apt-get update
-          sudo apt-get install -y opam
-          opam init -j 2 -n -y -c ocaml-base-compiler.4.14.2
-          opam repo add coq-released https://coq.inria.fr/opam/released || true
+          set -x
+          apt-get update
+          apt-get install -y opam libgmp-dev m4 pkg-config
+          opam --version
+          opam init -j 2 -n -y --disable-sandboxing -c ocaml-base-compiler.4.14.2
+          eval $(opam env)
+          opam repo add coq-released https://coq.inria.fr/opam/released
           # Only install coq + equations (not coq-mathcomp-ssreflect) to avoid
           # rocq-elpi build failures. mathcomp is tested in test-coq-files.
-          opam install -y coq.8.20.1 coq-equations
+          opam install -y coq.8.20.1 coq-equations.1.3.1+8.20
       - name: Build base
         run: |
           eval $(opam env)
@@ -139,13 +152,11 @@ jobs:
       - name: Run unit tests
         run: |
           eval $(opam env)
-          # The test Makefile uses make -k which returns exit 2 when
-          # TODO_PASS tests fail as expected. This is not a real failure.
-          make -C examples/tests || test $? -eq 2
+          make -C examples/tests
       - name: Run base-tests
         run: |
           eval $(opam env)
-          make -C examples/base-tests || test $? -eq 2
+          make -C examples/base-tests
       - name: Build base-thy and examples
         run: |
           eval $(opam env)
@@ -164,34 +175,82 @@ jobs:
           make -C examples/bag
           # resources/list_monad.v needs mathcomp; tested in test-coq-files job
 
-  test-translation:
-    name: Translation (ensures convenience copy is up-to-date)
+  test-rocq9:
+    name: Rocq 9.0 base + tests
     runs-on: ubuntu-latest
+    needs: build-haskell
     container:
-      image: haskell:9.10.3
+      image: haskell:9.10.3-bookworm
     env:
       HOME: /root
     steps:
-      - uses: actions/checkout@v4
-      - name: Fix Docker config permissions
-        run: mkdir -p /root/.docker && echo '{}' > /root/.docker/config.json
-      - name: Initialize required submodules
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git submodule update --init examples/ghc/ghc
-          git submodule update --init examples/containers/containers
-          git submodule update --init --depth 1 examples/graph/graph
-      - name: Installing dependencies
-        run: apt-get update && apt-get install -y xutils-dev
-      - name: Caching Stack
-        uses: actions/cache@v4
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-hs-to-rocq
         with:
-          path: |
-            /root/.stack
-            .stack-work
-          key: stack-ghc9.10.3-${{ hashFiles('hs-to-rocq.cabal', 'stack.yaml', 'src/**') }}
-      - name: Build hs-to-rocq
-        run: stack --no-terminal --system-ghc --allow-different-user build
+          submodules: examples/ghc/ghc
+      - name: Install Rocq 9.0
+        run: |
+          set -x
+          apt-get update
+          apt-get install -y opam libgmp-dev m4 pkg-config
+          opam --version
+          opam init -j 2 -n -y --disable-sandboxing -c ocaml-base-compiler.4.14.2
+          eval $(opam env)
+          opam repo add coq-released https://coq.inria.fr/opam/released
+          opam install -y \
+            rocq-prover.9.0.0 \
+            rocq-core.9.0.0 \
+            rocq-runtime.9.0.0 \
+            rocq-stdlib.9.0.0 \
+            rocq-equations.1.3.1+9.0
+      - name: Clean, regenerate, and build Rocq 9.0 base
+        run: |
+          eval $(opam env)
+          make -C examples/rocq9.0 clean
+          make -j2 -C examples/rocq9.0 base
+      - name: Run Rocq 9.0 unit tests
+        run: |
+          eval $(opam env)
+          make -C examples/rocq9.0/tests
+
+  test-rocq9-translation:
+    name: Rocq 9.0 translation (ensures convenience copy is up-to-date)
+    runs-on: ubuntu-latest
+    needs: build-haskell
+    container:
+      image: haskell:9.10.3-bookworm
+    env:
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-hs-to-rocq
+        with:
+          submodules: examples/ghc/ghc
+      - name: Regenerating Rocq 9.0 base
+        run: |
+          make -C examples/rocq9.0/base-src clean
+          make -C examples/rocq9.0/base-src vfiles
+      - name: Comparing convenience copy of Rocq 9.0 base
+        run: |
+          git add examples/rocq9.0/base
+          git status
+          git diff-index --cached --quiet HEAD -- examples/rocq9.0/base
+
+  test-translation:
+    name: Translation (ensures convenience copy is up-to-date)
+    runs-on: ubuntu-latest
+    needs: build-haskell
+    container:
+      image: haskell:9.10.3-bookworm
+    env:
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-hs-to-rocq
+        with:
+          submodules: examples/ghc/ghc examples/containers/containers
+          shallow-submodules: examples/graph/graph
+          extra-apt-packages: xutils-dev
       - name: Translating base
         run: |
           make -C examples/base-src clean

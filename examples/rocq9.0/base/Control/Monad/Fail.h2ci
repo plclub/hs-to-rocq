@@ -1,0 +1,12 @@
+classDefns:
+  Control.Monad.Fail.MonadFail: ClassDefinition (Qualified "Control.Monad.Fail" "MonadFail")
+    [Typed Ungeneralizable Explicit (Ident (Bare "m") :| []) (Arrow (Qualid (Bare
+    "Type")) (Qualid (Bare "Type"))),Generalized Implicit (App (Qualid (Qualified
+    "GHC.Base" "Monad")) (PosArg (Qualid (Bare "m")) :| []))] Nothing [(Qualified
+    "Control.Monad.Fail" "fail",Forall (Typed Ungeneralizable Implicit (Ident (Bare
+    "a") :| []) (Qualid (Bare "Type")) :| []) (Arrow (Qualid (Qualified "GHC.Base"
+    "String")) (App (Qualid (Bare "m")) (PosArg (Qualid (Bare "a")) :| []))))]
+classTypes:
+  Control.Monad.Fail.MonadFail: fromList []
+superclassCount:
+  Control.Monad.Fail.MonadFail: '3'

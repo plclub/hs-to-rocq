@@ -1,0 +1,12 @@
+constructorFields:
+  Control.Applicative.WrapArrow: RecordFields [Qualified "Control.Applicative" "unwrapArrow"]
+  Control.Applicative.WrapMonad: RecordFields [Qualified "Control.Applicative" "unwrapMonad"]
+constructorTypes:
+  Control.Applicative.WrapArrow: Qualified "Control.Applicative" "WrappedArrow"
+  Control.Applicative.WrapMonad: Qualified "Control.Applicative" "WrappedMonad"
+constructors:
+  Control.Applicative.WrappedArrow: '[Qualified "Control.Applicative" "WrapArrow"]'
+  Control.Applicative.WrappedMonad: '[Qualified "Control.Applicative" "WrapMonad"]'
+recordFieldTypes:
+  Control.Applicative.unwrapArrow: Qualified "Control.Applicative" "WrappedArrow"
+  Control.Applicative.unwrapMonad: Qualified "Control.Applicative" "WrappedMonad"

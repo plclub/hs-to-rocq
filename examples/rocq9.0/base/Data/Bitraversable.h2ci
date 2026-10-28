@@ -1,0 +1,25 @@
+classDefns:
+  Data.Bitraversable.Bitraversable: ClassDefinition (Qualified "Data.Bitraversable"
+    "Bitraversable") [Typed Ungeneralizable Explicit (Ident (Bare "t") :| []) (Arrow
+    (Qualid (Bare "Type")) (Arrow (Qualid (Bare "Type")) (Qualid (Bare "Type")))),Generalized
+    Implicit (App (Qualid (Qualified "Data.Bifunctor" "Bifunctor")) (PosArg (Qualid
+    (Bare "t")) :| [])),Generalized Implicit (App (Qualid (Qualified "Data.Bifoldable"
+    "Bifoldable")) (PosArg (Qualid (Bare "t")) :| []))] Nothing [(Qualified "Data.Bitraversable"
+    "bitraverse",Forall (Typed Ungeneralizable Implicit (Ident (Bare "f") :| []) (Arrow
+    (Qualid (Bare "Type")) (Qualid (Bare "Type"))) :| []) (Forall (Typed Ungeneralizable
+    Implicit (Ident (Bare "a") :| []) (Qualid (Bare "Type")) :| []) (Forall (Typed
+    Ungeneralizable Implicit (Ident (Bare "c") :| []) (Qualid (Bare "Type")) :| [])
+    (Forall (Typed Ungeneralizable Implicit (Ident (Bare "b") :| []) (Qualid (Bare
+    "Type")) :| []) (Forall (Typed Ungeneralizable Implicit (Ident (Bare "d") :| [])
+    (Qualid (Bare "Type")) :| []) (Forall (Generalized Implicit (App (Qualid (Qualified
+    "GHC.Base" "Applicative")) (PosArg (Qualid (Bare "f")) :| [])) :| []) (Arrow (Arrow
+    (Qualid (Bare "a")) (App (Qualid (Bare "f")) (PosArg (Qualid (Bare "c")) :| [])))
+    (Arrow (Arrow (Qualid (Bare "b")) (App (Qualid (Bare "f")) (PosArg (Qualid (Bare
+    "d")) :| []))) (Arrow (App (App (Qualid (Bare "t")) (PosArg (Qualid (Bare "a"))
+    :| [])) (PosArg (Qualid (Bare "b")) :| [])) (App (Qualid (Bare "f")) (PosArg (App
+    (App (Qualid (Bare "t")) (PosArg (Qualid (Bare "c")) :| [])) (PosArg (Qualid (Bare
+    "d")) :| [])) :| [])))))))))))]
+classTypes:
+  Data.Bitraversable.Bitraversable: fromList []
+superclassCount:
+  Data.Bitraversable.Bitraversable: '3'

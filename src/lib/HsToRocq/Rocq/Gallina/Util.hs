@@ -40,20 +40,31 @@ module HsToRocq.Rocq.Gallina.Util (
   normalizeType,
 
   -- * Manipulating 'Sentence's
-  isComment
+  isComment,
+
+  -- * Version-conditional rewriting
+  coqToStdlib,
+  rocq9RewriteText,
+  rewriteTextFor,
+  rewriteASTFor,
   ) where
 
 import Control.Lens
 
 import Data.Bifunctor
 import Data.Semigroup ((<>))
+import Data.Char (GeneralCategory(NonSpacingMark), generalCategory, isAlphaNum, isDigit, isHexDigit, isLetter, isSpace)
 import Data.Foldable
 import Data.Maybe
 import Data.List.NonEmpty (NonEmpty(..), nonEmpty)
 import qualified Data.List.NonEmpty as NEL
 
 import qualified Data.Text as T
+import qualified Data.Set as Set
+import Data.Set (Set)
 
+import Data.Data (Data)
+import Data.Generics (everywhere, mkT, extT)
 import GHC.Stack
 
 import HsToRocq.Util.Monad (ErrorString)
@@ -367,3 +378,309 @@ normalizeType (Parens t)                = normalizeType t
 normalizeType (App (App t args1) args2) = normalizeType $ App t $ args1 <> args2
 normalizeType (HasType t _)             = normalizeType t
 normalizeType t                         = t
+
+-- | Rewrite all @Coq.*@ references to their Rocq 9 equivalents in the AST.
+--
+-- Rocq 9 splits the old @Coq.*@ namespace between @Corelib.*@ and @Stdlib.*@.
+-- Many former @Coq.X.Y@ modules are now one-line re-exports inside
+-- @Stdlib.X.Y@ whose actual content lives at @Corelib.X.Y@. Fully-qualified
+-- names do not follow @Require Export@ aliases, so e.g.
+-- @Stdlib.Init.Datatypes.app@ does not resolve -- the correct path is
+-- @Corelib.Init.Datatypes.app@.
+--
+-- The set 'corelibShimModules' below lists every @Coq.X.Y@ path whose Stdlib
+-- counterpart is a Corelib re-export (derived from the Rocq 9.2 distribution).
+-- For those, we rewrite @Coq.@ -> @Corelib.@. Everything else becomes
+-- @Stdlib.@.
+coqToStdlib :: Data a => a -> a
+coqToStdlib = everywhere
+  (mkT renameQualid `extT` renameModuleSentence `extT` renameProof `extT` renameSentence)
+  where
+    renameQualid :: Qualid -> Qualid
+    renameQualid (Qualified modId accId)
+      -- An exact reference to the moved module puts its name in accId.
+      -- Keep accessor components intact, including the special .Z/.N form.
+      | modId == "Coq.Program.Wf"
+      , "WfExtensionality" `isModulePrefixOf` accId =
+          Qualified "Stdlib.Program.WfExtensionality" accId
+      | otherwise = Qualified (rocq9RenameModuleReference modId) accId
+    renameQualid q = q
+
+    -- ModuleIdent is a type alias for Text, so we can't use mkT on it directly.
+    -- Instead we pattern-match on ModuleSentence constructors that contain ModuleIdents.
+    renameModuleSentence :: ModuleSentence -> ModuleSentence
+    renameModuleSentence (ModuleImport ie mods) =
+      ModuleImport ie (fmap rocq9RenameModuleReference mods)
+    -- Require targets name library files, not the nested modules they contain.
+    -- With From, operands are relative to its prefix, not independent roots.
+    renameModuleSentence (Require (Just from) ie mods) =
+      Require (Just (rocq9RenameModule from)) ie mods
+    renameModuleSentence (Require Nothing ie mods) =
+      Require Nothing ie (fmap rocq9RenameModule mods)
+    renameModuleSentence (ModuleAssignment m1 m2) =
+      ModuleAssignment m1 (rocq9RenameModuleReference m2)
+
+    -- Tactics are raw Text, so rewrite only code-bearing payloads, not all Text.
+    renameProof :: Proof -> Proof
+    renameProof (ProofQed tactics) = ProofQed (rocq9RewriteText tactics)
+    renameProof (ProofDefined tactics) = ProofDefined (rocq9RewriteText tactics)
+    renameProof (ProofAdmitted tactics) = ProofAdmitted (rocq9RewriteText tactics)
+
+    renameSentence :: Sentence -> Sentence
+    renameSentence (ProgramSentence sentence tactics) =
+      ProgramSentence sentence (fmap rocq9RewriteText tactics)
+    renameSentence sentence = sentence
+
+-- | Rewrite a single module identifier from the Coq-8.20 @Coq.*@ namespace
+-- to its Rocq-9 equivalent (@Corelib.*@ for shim paths, @Stdlib.*@ otherwise).
+rocq9RenameModule :: ModuleIdent -> ModuleIdent
+rocq9RenameModule m
+  | m == "Coq"                           = "Stdlib"
+  | Just rest <- T.stripPrefix "Coq." m
+  , any (`isModulePrefixOf` rest) corelibShimModules = "Corelib." <> rest
+  | Just rest <- T.stripPrefix "Coq." m  = "Stdlib."  <> rest
+  | otherwise                            = m
+
+-- | References and Import/assignment targets can name the moved inner module.
+-- Its containing library is just Stdlib.Program.WfExtensionality.
+rocq9RenameModuleReference :: ModuleIdent -> ModuleIdent
+rocq9RenameModuleReference m
+  | old `isModulePrefixOf` m = new <> T.drop (T.length old) m
+  | otherwise = rocq9RenameModule m
+  where
+    old = "Coq.Program.Wf.WfExtensionality"
+    new = "Stdlib.Program.WfExtensionality.WfExtensionality"
+
+isModulePrefixOf :: ModuleIdent -> ModuleIdent -> Bool
+isModulePrefixOf prefix path = prefix == path || (prefix <> ".") `T.isPrefixOf` path
+
+-- | Apply the Rocq-9 @Coq.*@ -> @Corelib.*@/@Stdlib.*@ rewrite to plain text
+-- (used for preamble/midamble files and raw proof/obligation tactics).
+--
+-- Only root @Coq.*@ paths are rewritten: whole identifiers and qualified paths
+-- stay together, while symbolic and numeric tokens do not absorb a following
+-- root reference. From commands rewrite only their prefix,
+-- including bare @Coq@, leaving relative Require operands intact. Bare @Coq@
+-- names elsewhere stay unchanged.
+-- Comments and quoted string literals are copied verbatim, including nested
+-- comments and doubled quote escapes, without recognizing commands inside them.
+--
+-- Each complete path uses the same renaming as AST module references:
+-- @Coq.Program.Wf.WfExtensionality@ moves to
+-- @Stdlib.Program.WfExtensionality.WfExtensionality@, Corelib shim paths use
+-- @Corelib.@, and other paths use @Stdlib.@. Matching whole module components
+-- keeps @Coq.Program.WfExtensionality@ distinct from the @Coq.Program.Wf@ shim.
+--
+-- The Rocq-9 static preamble loads @Stdlib.Program.WfExtensionality@ once,
+-- independently of the spelling of user-supplied Require commands.
+rocq9RewriteText :: T.Text -> T.Text
+rocq9RewriteText = T.concat . scan False
+  where
+    -- Within a From Require command, module paths are relative until its final
+    -- dot. Consume whole paths so embedded Coq components never become roots.
+    scan relative text
+      | Just after <- T.stripPrefix "\"" text =
+          let (literal, rest) = quoted after
+          in ("\"" <> literal) : scan relative rest
+      | Just after <- T.stripPrefix "(*" text =
+          let (comment, rest) = commented 1 after
+          in ("(*" <> comment) : scan relative rest
+      | Just (c, _) <- T.uncons text, isDigit c =
+          let (number, rest) = numericToken text
+          in number : scan relative rest
+      | not (T.null path), relative =
+          renderPath path separators : scan True afterPath
+      | path == "From", Just (prefix, rest) <- fromRequire afterPath =
+          path : (prefix ++ scan True rest)
+      | not (T.null path) = renderPath (rewritePath path) separators : scan False afterPath
+      -- A single dot followed by an identifier is a FIELD token, not a root.
+      | Just after <- T.stripPrefix "." text
+      , let (field, fieldSeparators, rest) = qualifiedPath after
+      , not (T.null field) = ("." <> renderPath field fieldSeparators) : scan relative rest
+      | not (T.null symbols) =
+          symbols : scan (relative && not ("." `T.isSuffixOf` symbols)) afterSymbols
+      | Just (c, rest) <- T.uncons text = T.singleton c : scan relative rest
+      | otherwise = []
+      where
+        (path, separators, afterPath) = qualifiedPath text
+        (symbols, afterSymbols) = symbolicToken text
+
+    -- FIELD tokens can follow whitespace or comments, but their dot must be
+    -- immediately followed by an identifier start. Look ahead through trivia
+    -- without consuming it unless a field follows; command dots and notation
+    -- stay outside the path. Match canonical names, retaining each separator.
+    qualifiedPath text
+      | Just (c, _) <- T.uncons text, isIdentInitial c =
+          let (name, rest) = T.span isIdentChar text
+              (beforeDot, fieldText) = trivia rest
+          in case T.stripPrefix "." fieldText of
+            Just after
+              | let (suffix, separators, following) = qualifiedPath after
+              , not (T.null suffix) ->
+                  (name <> "." <> suffix, (beforeDot <> ".") : separators, following)
+            _ -> (name, [], rest)
+      | otherwise = ("", [], text)
+
+    -- All supported substitutions preserve the number of path components,
+    -- including the WfExtensionality move. Copy their original separators.
+    renderPath path separators =
+      T.concat $ zipWith (<>) ("" : separators) (T.splitOn "." path)
+
+    -- Keep punctuation together, including trailing dots and leading pattern
+    -- apostrophes. Comments and strings start separate lexical regions.
+    symbolicToken text =
+      let (symbols, _) = T.span (\c -> not (isIdentInitial c || isDigit c || isSpace c || c == '"')) text
+          (beforeComment, _) = T.breakOn "(*" symbols
+      in T.splitAt (T.length beforeComment) text
+
+    -- Follow Rocq's NumTok.Unsigned grammar, preserving the original spelling.
+    -- Hex digits can absorb C: 0x1Coq is a numeral followed by oq, not Coq.
+    numericToken text
+      | Just ('0', rest) <- T.uncons text
+      , Just (base, digits) <- T.uncons rest, base == 'x' || base == 'X'
+      , Just (c, _) <- T.uncons digits, isHexDigit c =
+          first (("0" <> T.singleton base) <>) (numberParts isHexDigit "pP" digits)
+      | otherwise = numberParts isDigit "eE" text
+
+    numberParts digit exponents text =
+      let digitOrUnderscore c = digit c || c == '_'
+          (integer, afterInteger) = T.span digitOrUnderscore text
+          (fraction, afterFraction)
+            | Just ('.', digits) <- T.uncons afterInteger
+            , Just (c, _) <- T.uncons digits, digitOrUnderscore c =
+                first ("." <>) (T.span digitOrUnderscore digits)
+            | otherwise = ("", afterInteger)
+          (exponent, afterExponent)
+            | Just (e, rest) <- T.uncons afterFraction, e `T.elem` exponents
+            , let (sign, digits) = case T.uncons rest of
+                    Just (s, following) | s == '+' || s == '-' -> (T.singleton s, following)
+                    _ -> ("", rest)
+            , Just (c, _) <- T.uncons digits, isDigit c =
+                first ((T.singleton e <> sign) <>)
+                  (T.span (\d -> isDigit d || d == '_') digits)
+            | otherwise = ("", afterFraction)
+      in (integer <> fraction <> exponent, afterExponent)
+
+    -- Recognize just From <prefix> Require, allowing comments between tokens.
+    -- This is not a vernacular parser; Import/Export and operands need only be
+    -- copied until the command ends. Only this prefix may rename bare Coq.
+    fromRequire text
+      | not (T.null beforePrefix), not (T.null prefix)
+      , not (T.null beforeRequire)
+      , Just rest <- T.stripPrefix "Require" requireText
+      , maybe True (not . isPathChar . fst) (T.uncons rest) =
+          Just ([beforePrefix, renderPath (rocq9RenameModuleReference prefix) separators,
+                 beforeRequire, "Require"], rest)
+      | otherwise = Nothing
+      where
+        (beforePrefix, prefixText) = trivia text
+        (prefix, separators, afterPrefix) = qualifiedPath prefixText
+        (beforeRequire, requireText) = trivia afterPrefix
+
+    trivia text =
+      let (space, rest) = T.span (\c -> isSpace c && not (isPathChar c)) text
+      in case T.stripPrefix "(*" rest of
+        Just after ->
+          let (comment, following) = commented 1 after
+              (more, remaining) = trivia following
+          in (space <> "(*" <> comment <> more, remaining)
+        Nothing -> (space, rest)
+
+    -- Rocq escapes a quote inside a string by doubling it.
+    quoted text
+      | T.null rest = (pre, "")
+      | Just after <- T.stripPrefix "\"\"" rest =
+          first ((pre <> "\"\"") <>) (quoted after)
+      | otherwise = (pre <> "\"", T.drop 1 rest)
+      where
+        (pre, rest) = T.breakOn "\"" text
+
+    -- Quotes inside a comment can themselves contain comment delimiters.
+    commented :: Int -> T.Text -> (T.Text, T.Text)
+    commented depth text
+      | Just after <- T.stripPrefix "(*" text =
+          first ("(*" <>) (commented (depth + 1) after)
+      | Just after <- T.stripPrefix "*)" text =
+          if depth == 1 then ("*)", after)
+          else first ("*)" <>) (commented (depth - 1) after)
+      | Just after <- T.stripPrefix "\"" text =
+          let (literal, rest) = quoted after
+          in first (("\"" <> literal) <>) (commented depth rest)
+      | not (T.null pre) = first (pre <>) (commented depth rest)
+      | Just (c, after) <- T.uncons text = first (T.cons c) (commented depth after)
+      | otherwise = ("", "")
+      where
+        (pre, rest) = T.break (`elem` ("(*\"" :: String)) text
+
+    rewritePath path
+      | "Coq." `T.isPrefixOf` path, path /= "Coq." = rocq9RenameModuleReference path
+      | otherwise = path
+
+    -- Rocq's Unicode.is_valid_ident_initial accepts Letter and IdentSep.
+    -- Numbers and non-spacing marks can continue, but cannot start identifiers.
+    isIdentInitial c = isLetter c || c == '_' || c == '\xa0'
+
+    isPathChar c = isIdentChar c || c == '.'
+
+    -- Continuation characters for whole identifiers.
+    -- Rocq 9.0.1 clib/unicode.ml includes non-spacing marks in IdentPart
+    -- and U+00A0 in IdentSep.
+    -- Superscript decimal digits are symbols in both Coq 8.20.1 and Rocq 9.0.1.
+    -- https://github.com/rocq-prover/rocq/blob/V9.0.1/clib/unicode.ml
+    isIdentChar c
+      | c `elem` ("\xb2\xb3\xb9\x2070\x2074\x2075\x2076\x2077\x2078\x2079" :: String) = False
+      | otherwise = isAlphaNum c || generalCategory c == NonSpacingMark
+                 || c == '_' || c == '\'' || c == '\xa0'
+
+-- | The Rocq-version-aware text rewriter used by the driver for user-supplied
+-- preamble/midamble files. The Coq-8.20 target leaves text untouched (so the
+-- default output is byte-identical to the pre-Rocq-9 tool); the Rocq-9 target
+-- applies 'rocq9RewriteText'.
+rewriteTextFor :: RocqVersion -> T.Text -> T.Text
+rewriteTextFor Rocq_9_0  = rocq9RewriteText
+rewriteTextFor Rocq_8_20 = id
+
+-- | The Rocq-version-aware AST rewriter used by the driver for generated
+-- declarations. The Coq-8.20 target is the identity; the Rocq-9 target applies
+-- 'coqToStdlib'.
+rewriteASTFor :: Data a => RocqVersion -> a -> a
+rewriteASTFor Rocq_9_0  = coqToStdlib
+rewriteASTFor Rocq_8_20 = id
+
+-- | @Coq.X.Y@ paths whose Stdlib counterpart is a one-line Corelib re-export
+-- in Rocq 9. Fully-qualified names beneath these paths must use @Corelib.@
+-- rather than @Stdlib.@.
+--
+-- Derived from the Rocq 9.2 distribution. The Corelib\/Stdlib split is stable
+-- across the Rocq 9.x series, and this list is verified against 9.0 by the
+-- @test-rocq9@ and @test-rocq9-translation@ CI jobs.
+corelibShimModules :: Set T.Text
+corelibShimModules = Set.fromList
+  [ "Array.ArrayAxioms", "Array.PrimArray"
+  , "BinNums.IntDef", "BinNums.NatDef", "BinNums.PosDef"
+  , "Classes.CMorphisms", "Classes.CRelationClasses", "Classes.Equivalence"
+  , "Classes.Init", "Classes.Morphisms", "Classes.Morphisms_Prop"
+  , "Classes.RelationClasses", "Classes.SetoidTactics"
+  , "Compat.Coq818", "Compat.Coq819", "Compat.Coq820"
+  , "Floats.FloatAxioms", "Floats.FloatClass", "Floats.FloatOps"
+  , "Floats.PrimFloat", "Floats.SpecFloat"
+  , "Init.Byte", "Init.Datatypes", "Init.Decimal", "Init.Hexadecimal"
+  , "Init.Logic", "Init.Ltac", "Init.Nat", "Init.Notations", "Init.Number"
+  , "Init.Peano", "Init.Prelude", "Init.Specif", "Init.Sumbool"
+  , "Init.Tactics", "Init.Tauto", "Init.Wf"
+  , "Lists.ListDef"
+  , "Numbers.BinNums"
+  , "Numbers.Cyclic.Int63.CarryType"
+  , "Numbers.Cyclic.Int63.PrimInt63"
+  , "Numbers.Cyclic.Int63.Sint63Axioms"
+  , "Numbers.Cyclic.Int63.Uint63Axioms"
+  , "Program.Basics", "Program.Tactics", "Program.Utils", "Program.Wf"
+  , "Relations.Relation_Definitions"
+  , "Setoids.Setoid"
+  , "Strings.PrimString", "Strings.PrimStringAxioms"
+  , "derive.Derive"
+  , "extraction.ExtrHaskellBasic", "extraction.ExtrOcamlBasic", "extraction.Extraction"
+  , "ssr.ssrbool", "ssr.ssrclasses", "ssr.ssreflect", "ssr.ssrfun"
+  , "ssr.ssrsetoid", "ssr.ssrunder"
+  , "ssrmatching.ssrmatching"
+  ]

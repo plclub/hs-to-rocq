@@ -12,7 +12,7 @@ module HsToRocq.ConvertHaskell.Monad (
   GlobalEnv(..), ModuleEnv(..), LocalEnv(..),
   -- * Constraints
   GlobalMonad, ConversionMonad, LocalConvMonad,
-  HasEdits(..), HasLeniency(..), HasCurrentModule(..), HasCurrentDefinition(..),
+  HasEdits(..), HasLeniency(..), HasRocqVersion(..), HasCurrentModule(..), HasCurrentDefinition(..),
   runGlobalMonad,
   withCurrentModule,
   withCurrentDefinition,
@@ -55,7 +55,7 @@ import Control.Monad.Reader
 
 import Data.Set (Set)
 
-import HsToRocq.Rocq.Gallina (Qualid, Qualid(..), Ident)
+import HsToRocq.Rocq.Gallina (Qualid, Qualid(..), Ident, RocqVersion(..))
 import HsToRocq.Rocq.Pretty
 import HsToRocq.Util.GHC.Module (moduleNameText, ModuleData, modName)
 
@@ -110,19 +110,22 @@ data Leniency = Permissive -- ^Try to recover by e.g. introducing an axiom
 
 
 data GlobalEnv = GlobalEnv
-    { _globalEnvEdits    :: !Edits
-    , _globalEnvLeniency :: !Leniency
+    { _globalEnvEdits       :: !Edits
+    , _globalEnvLeniency    :: !Leniency
+    , _globalEnvRocqVersion :: !RocqVersion
     } deriving Show
 
 data ModuleEnv = ModuleEnv
     { _moduleEnvEdits         :: !Edits
     , _moduleEnvLeniency      :: !Leniency
+    , _moduleEnvRocqVersion   :: !RocqVersion
     , _moduleEnvCurrentModule :: !ModuleData
     }
 
 data LocalEnv = LocalEnv
     { _localEnvEdits             :: !Edits
     , _localEnvLeniency          :: !Leniency
+    , _localEnvRocqVersion       :: !RocqVersion
     , _localEnvCurrentModule     :: !ModuleData
     , _localEnvCurrentDefinition :: !Qualid
     }
@@ -188,6 +191,7 @@ type GlobalMonad r m =
         , MonadReader r m
         , HasEdits r Edits
         , HasLeniency r Leniency
+        , HasRocqVersion r RocqVersion
         )
 
 -- | The global monad, used for top-level bindings.
@@ -208,11 +212,12 @@ runGlobalMonad :: GhcMonad m =>
     Edits ->
     Leniency ->
     TypeInfoConfig ->
+    RocqVersion ->
     (forall r m. GlobalMonad r m => m a) ->
     m a
-runGlobalMonad initEdits leniency paths act =
+runGlobalMonad initEdits leniency paths version act =
     runTypeInfoMonad paths $
-    runReaderT ?? GlobalEnv{_globalEnvEdits = initEdits, _globalEnvLeniency = leniency} $
+    runReaderT ?? GlobalEnv{_globalEnvEdits = initEdits, _globalEnvLeniency = leniency, _globalEnvRocqVersion = version} $
     act
 
 withCurrentModule :: GlobalMonad r m =>
@@ -222,10 +227,12 @@ withCurrentModule :: GlobalMonad r m =>
 withCurrentModule newModule act = do
     _edits    <- view edits
     _leniency <- view leniency
+    _version  <- view rocqVersion
     isProcessedModule (moduleNameText (newModule ^. modName)) -- Start collecting the interface
     runReaderT act $ ModuleEnv
         { _moduleEnvEdits         = _edits
         , _moduleEnvLeniency      = _leniency
+        , _moduleEnvRocqVersion   = _version
         , _moduleEnvCurrentModule = newModule
         }
 
@@ -243,10 +250,12 @@ withCurrentDefinition newDef act = do
     let edits_final = subtractEdits edits_in_scope excluded_edits
     
     _leniency      <- view leniency
+    _version       <- view rocqVersion
     _currentModule <- view currentModule
     runCounterT . runReaderT act $ LocalEnv
         { _localEnvEdits             = edits_final
         , _localEnvLeniency          = _leniency
+        , _localEnvRocqVersion       = _version
         , _localEnvCurrentModule     = _currentModule
         , _localEnvCurrentDefinition = newDef
         }

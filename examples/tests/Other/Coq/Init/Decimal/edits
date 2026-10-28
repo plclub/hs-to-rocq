@@ -1,0 +1,1 @@
+add Other.Coq.Init.Decimal Definition Other.Coq.Init.Decimal.fromUserLibrary : bool := true.

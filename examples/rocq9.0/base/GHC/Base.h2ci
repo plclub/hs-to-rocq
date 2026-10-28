@@ -1,0 +1,117 @@
+classDefns:
+  GHC.Base.Applicative: ClassDefinition (Qualified "GHC.Base" "Applicative") [Typed
+    Ungeneralizable Explicit (Ident (Bare "f") :| []) (Arrow (Qualid (Bare "Type"))
+    (Qualid (Bare "Type"))),Generalized Implicit (App (Qualid (Qualified "GHC.Base"
+    "Functor")) (PosArg (Qualid (Bare "f")) :| []))] Nothing [(Qualified "GHC.Base"
+    "liftA2",Forall (Typed Ungeneralizable Implicit (Ident (Bare "a") :| []) (Qualid
+    (Bare "Type")) :| []) (Forall (Typed Ungeneralizable Implicit (Ident (Bare "b")
+    :| []) (Qualid (Bare "Type")) :| []) (Forall (Typed Ungeneralizable Implicit (Ident
+    (Bare "c") :| []) (Qualid (Bare "Type")) :| []) (Arrow (Arrow (Qualid (Bare "a"))
+    (Arrow (Qualid (Bare "b")) (Qualid (Bare "c")))) (Arrow (App (Qualid (Bare "f"))
+    (PosArg (Qualid (Bare "a")) :| [])) (Arrow (App (Qualid (Bare "f")) (PosArg (Qualid
+    (Bare "b")) :| [])) (App (Qualid (Bare "f")) (PosArg (Qualid (Bare "c")) :| [])))))))),(Qualified
+    "GHC.Base" "op_zlztzg__",Forall (Typed Ungeneralizable Implicit (Ident (Bare "a")
+    :| []) (Qualid (Bare "Type")) :| []) (Forall (Typed Ungeneralizable Implicit (Ident
+    (Bare "b") :| []) (Qualid (Bare "Type")) :| []) (Arrow (App (Qualid (Bare "f"))
+    (PosArg (Arrow (Qualid (Bare "a")) (Qualid (Bare "b"))) :| [])) (Arrow (App (Qualid
+    (Bare "f")) (PosArg (Qualid (Bare "a")) :| [])) (App (Qualid (Bare "f")) (PosArg
+    (Qualid (Bare "b")) :| [])))))),(Qualified "GHC.Base" "op_ztzg__",Forall (Typed
+    Ungeneralizable Implicit (Ident (Bare "a") :| []) (Qualid (Bare "Type")) :| [])
+    (Forall (Typed Ungeneralizable Implicit (Ident (Bare "b") :| []) (Qualid (Bare
+    "Type")) :| []) (Arrow (App (Qualid (Bare "f")) (PosArg (Qualid (Bare "a")) :|
+    [])) (Arrow (App (Qualid (Bare "f")) (PosArg (Qualid (Bare "b")) :| [])) (App
+    (Qualid (Bare "f")) (PosArg (Qualid (Bare "b")) :| [])))))),(Qualified "GHC.Base"
+    "pure",Forall (Typed Ungeneralizable Implicit (Ident (Bare "a") :| []) (Qualid
+    (Bare "Type")) :| []) (Arrow (Qualid (Bare "a")) (App (Qualid (Bare "f")) (PosArg
+    (Qualid (Bare "a")) :| []))))]
+  GHC.Base.Functor: ClassDefinition (Qualified "GHC.Base" "Functor") [Typed Ungeneralizable
+    Explicit (Ident (Bare "f") :| []) (Arrow (Qualid (Bare "Type")) (Qualid (Bare
+    "Type")))] Nothing [(Qualified "GHC.Base" "fmap",Forall (Typed Ungeneralizable
+    Implicit (Ident (Bare "a") :| []) (Qualid (Bare "Type")) :| []) (Forall (Typed
+    Ungeneralizable Implicit (Ident (Bare "b") :| []) (Qualid (Bare "Type")) :| [])
+    (Arrow (Arrow (Qualid (Bare "a")) (Qualid (Bare "b"))) (Arrow (App (Qualid (Bare
+    "f")) (PosArg (Qualid (Bare "a")) :| [])) (App (Qualid (Bare "f")) (PosArg (Qualid
+    (Bare "b")) :| [])))))),(Qualified "GHC.Base" "op_zlzd__",Forall (Typed Ungeneralizable
+    Implicit (Ident (Bare "a") :| []) (Qualid (Bare "Type")) :| []) (Forall (Typed
+    Ungeneralizable Implicit (Ident (Bare "b") :| []) (Qualid (Bare "Type")) :| [])
+    (Arrow (Qualid (Bare "a")) (Arrow (App (Qualid (Bare "f")) (PosArg (Qualid (Bare
+    "b")) :| [])) (App (Qualid (Bare "f")) (PosArg (Qualid (Bare "a")) :| []))))))]
+  GHC.Base.Monad: ClassDefinition (Qualified "GHC.Base" "Monad") [Typed Ungeneralizable
+    Explicit (Ident (Bare "m") :| []) (Arrow (Qualid (Bare "Type")) (Qualid (Bare
+    "Type"))),Generalized Implicit (App (Qualid (Qualified "GHC.Base" "Applicative"))
+    (PosArg (Qualid (Bare "m")) :| []))] Nothing [(Qualified "GHC.Base" "op_zgzg__",Forall
+    (Typed Ungeneralizable Implicit (Ident (Bare "a") :| []) (Qualid (Bare "Type"))
+    :| []) (Forall (Typed Ungeneralizable Implicit (Ident (Bare "b") :| []) (Qualid
+    (Bare "Type")) :| []) (Arrow (App (Qualid (Bare "m")) (PosArg (Qualid (Bare "a"))
+    :| [])) (Arrow (App (Qualid (Bare "m")) (PosArg (Qualid (Bare "b")) :| [])) (App
+    (Qualid (Bare "m")) (PosArg (Qualid (Bare "b")) :| [])))))),(Qualified "GHC.Base"
+    "op_zgzgze__",Forall (Typed Ungeneralizable Implicit (Ident (Bare "a") :| [])
+    (Qualid (Bare "Type")) :| []) (Forall (Typed Ungeneralizable Implicit (Ident (Bare
+    "b") :| []) (Qualid (Bare "Type")) :| []) (Arrow (App (Qualid (Bare "m")) (PosArg
+    (Qualid (Bare "a")) :| [])) (Arrow (Arrow (Qualid (Bare "a")) (App (Qualid (Bare
+    "m")) (PosArg (Qualid (Bare "b")) :| []))) (App (Qualid (Bare "m")) (PosArg (Qualid
+    (Bare "b")) :| [])))))),(Qualified "GHC.Base" "return_",Forall (Typed Ungeneralizable
+    Implicit (Ident (Bare "a") :| []) (Qualid (Bare "Type")) :| []) (Arrow (Qualid
+    (Bare "a")) (App (Qualid (Bare "m")) (PosArg (Qualid (Bare "a")) :| []))))]
+  GHC.Base.Monoid: ClassDefinition (Qualified "GHC.Base" "Monoid") [Typed Ungeneralizable
+    Explicit (Ident (Bare "a") :| []) (Qualid (Bare "Type")),Generalized Implicit
+    (App (Qualid (Qualified "GHC.Base" "Semigroup")) (PosArg (Qualid (Bare "a")) :|
+    []))] Nothing [(Qualified "GHC.Base" "mappend",Arrow (Qualid (Bare "a")) (Arrow
+    (Qualid (Bare "a")) (Qualid (Bare "a")))),(Qualified "GHC.Base" "mconcat",Arrow
+    (App (Qualid (Bare "list")) (PosArg (Qualid (Bare "a")) :| [])) (Qualid (Bare
+    "a"))),(Qualified "GHC.Base" "mempty",Qualid (Bare "a"))]
+  GHC.Base.Semigroup: ClassDefinition (Qualified "GHC.Base" "Semigroup") [Typed Ungeneralizable
+    Explicit (Ident (Bare "a") :| []) (Qualid (Bare "Type"))] Nothing [(Qualified
+    "GHC.Base" "op_zlzlzgzg__",Arrow (Qualid (Bare "a")) (Arrow (Qualid (Bare "a"))
+    (Qualid (Bare "a"))))]
+classTypes:
+  GHC.Base.Applicative: fromList []
+  GHC.Base.Functor: fromList []
+  GHC.Base.Monad: fromList []
+  GHC.Base.Monoid: fromList []
+  GHC.Base.Semigroup: fromList []
+constructorFields:
+  GHC.Base.NEcons: NonRecordFields 2
+constructorTypes:
+  GHC.Base.NEcons: Qualified "GHC.Base" "NonEmpty"
+constructors:
+  GHC.Base.NonEmpty: '[Qualified "GHC.Base" "NEcons"]'
+  GHC.Base.Void: '[]'
+defaultMethods:
+  GHC.Base.Applicative: fromList [(Qualified "GHC.Base" "liftA2",Fun (ExplicitBinder
+    (Ident (Bare "f")) :| [ExplicitBinder (Ident (Bare "x"))]) (App (Qualid (Qualified
+    "GHC.Base" "op_zlztzg__")) (PosArg (Parens (App (App (Qualid (Qualified "GHC.Base"
+    "fmap")) (PosArg (Qualid (Bare "f")) :| [])) (PosArg (Qualid (Bare "x")) :| [])))
+    :| []))),(Qualified "GHC.Base" "op_zlzt__",App (Qualid (Qualified "GHC.Base" "liftA2"))
+    (PosArg (Qualid (Qualified "GHC.Base" "const")) :| [])),(Qualified "GHC.Base"
+    "op_zlztzg__",App (Qualid (Qualified "GHC.Base" "liftA2")) (PosArg (Qualid (Qualified
+    "GHC.Base" "id")) :| [])),(Qualified "GHC.Base" "op_ztzg__",Fun (ExplicitBinder
+    (Ident (Bare "a1")) :| [ExplicitBinder (Ident (Bare "a2"))]) (App (Qualid (Qualified
+    "GHC.Base" "op_zlztzg__")) (PosArg (Parens (App (Qualid (Qualified "GHC.Base"
+    "op_zlzd__")) (PosArg (Qualid (Qualified "GHC.Base" "id")) :| [PosArg (Qualid
+    (Bare "a1"))]))) :| [PosArg (Qualid (Bare "a2"))])))]
+  GHC.Base.Functor: fromList [(Qualified "GHC.Base" "op_zlzd__",App (Qualid (Qualified
+    "GHC.Base" "op_z2218U__")) (PosArg (Qualid (Qualified "GHC.Base" "fmap")) :| [PosArg
+    (Qualid (Qualified "GHC.Base" "const"))]))]
+  GHC.Base.Monad: fromList [(Qualified "GHC.Base" "op_zgzg__",Fun (ExplicitBinder
+    (Ident (Bare "m")) :| [ExplicitBinder (Ident (Bare "k"))]) (App (Qualid (Qualified
+    "GHC.Base" "op_zgzgze__")) (PosArg (Qualid (Bare "m")) :| [PosArg (Fun (ExplicitBinder
+    (Ident (Bare "arg_0__")) :| []) (Qualid (Bare "k")))]))),(Qualified "GHC.Base"
+    "return_",Qualid (Qualified "GHC.Base" "pure"))]
+  GHC.Base.Monoid: fromList [(Qualified "GHC.Base" "mappend",Qualid (Qualified "GHC.Base"
+    "op_zlzlzgzg__")),(Qualified "GHC.Base" "mconcat",App (App (Qualid (Qualified
+    "GHC.Base" "foldr")) (PosArg (Qualid (Qualified "GHC.Base" "mappend")) :| []))
+    (PosArg (Qualid (Qualified "GHC.Base" "mempty")) :| [])),(Qualified "GHC.Base"
+    "mempty",App (Qualid (Qualified "GHC.Base" "mconcat")) (PosArg (Qualid (Bare "nil"))
+    :| []))]
+  GHC.Base.Semigroup: fromList [(Qualified "GHC.Base" "op_zlzlzgzg__",Fun (ExplicitBinder
+    (Ident (Bare "a")) :| [ExplicitBinder (Ident (Bare "b"))]) (App (Qualid (Qualified
+    "GHC.Base" "sconcat")) (PosArg (Parens (App (Qualid (Qualified "GHC.Base" "NEcons"))
+    (PosArg (Qualid (Bare "a")) :| [PosArg (App (Qualid (Bare "cons")) (PosArg (Qualid
+    (Bare "b")) :| [PosArg (Qualid (Bare "nil"))]))]))) :| [])))]
+superclassCount:
+  GHC.Base.Applicative: '1'
+  GHC.Base.Functor: '0'
+  GHC.Base.Monad: '2'
+  GHC.Base.Monoid: '1'
+  GHC.Base.Semigroup: '0'

@@ -12,9 +12,9 @@ authors: [
   "Stephanie Weirich"
 ]
 license: "MIT"
-homepage: "https://github.com/plclub/hs-to-coq"
-bug-reports: "https://github.com/plclub/hs-to-coq/issues"
-dev-repo: "git+https://github.com/plclub/hs-to-coq.git"
+homepage: "https://github.com/plclub/hs-to-rocq"
+bug-reports: "https://github.com/plclub/hs-to-rocq/issues"
+dev-repo: "git+https://github.com/plclub/hs-to-rocq.git"
 depends: [
   "coq" {>= "8.20" & < "8.21~"}
   "coq-hs-to-rocq-base" {= version}

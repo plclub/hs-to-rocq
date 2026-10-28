@@ -1,0 +1,8 @@
+constructorFields:
+  Data.Ord.Mk_Down: RecordFields [Qualified "Data.Ord" "getDown"]
+constructorTypes:
+  Data.Ord.Mk_Down: Qualified "Data.Ord" "Down"
+constructors:
+  Data.Ord.Down: '[Qualified "Data.Ord" "Mk_Down"]'
+recordFieldTypes:
+  Data.Ord.getDown: Qualified "Data.Ord" "Down"
