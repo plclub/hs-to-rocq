@@ -1,3 +1,4 @@
 /*.v
 /Other/Coq/Init/Decimal.v
+/ModuleEdits/Support.v
 *.h2ci

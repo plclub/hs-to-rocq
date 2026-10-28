@@ -1,0 +1,34 @@
+# This directive keys the source synonym's unqualified name.
+type synonym Small :-> typeEditsSort
+data type arguments TypeEdits.Product (parameters: a) (indices: b)
+
+delete unused type variables TypeEdits.MkTrimmed
+
+set type TypeEdits.explicitSignature : typeEditsBool
+set type TypeEdits.inferredOverride : typeEditsBool
+in TypeEdits.erasedSignature rename type GHC.Types.Bool = typeEditsBool
+set type TypeEdits.erasedSignature no type
+
+in TypeEdits.scopedValue rename value GHC.Types.True = typeEditsValue
+in TypeEdits.defaultValue rename value GHC.Types.True = typeEditsValue
+add scope type_edits_value for value TypeEdits.scopedValue
+
+in TypeEdits.ScopedBool rename type GHC.Types.Bool = typeEditsCarrier
+in TypeEdits.DefaultUnit rename type GHC.Types.Bool = typeEditsCarrier
+add scope type_edits_constructor for constructor TypeEdits.ScopedBool
+
+add TypeEdits Theorem TypeEdits.signature_assertions : True.
+Proof.
+  let ty := type of explicitSignature in constr_eq ty typeEditsBool.
+  let ty := type of inferredOverride in constr_eq ty typeEditsBool.
+  let ty := type of erasedSignature in constr_eq ty bool.
+  exact I.
+Qed.
+
+add TypeEdits Theorem TypeEdits.value_scope_assertions :
+  (TypeEdits.scopedValue = true) /\ (TypeEdits.defaultValue = false).
+Proof. split; reflexivity. Qed.
+
+add TypeEdits Theorem TypeEdits.used_binder_assertion :
+  @TypeEdits.keepBoth bool unit false tt = false.
+Proof. reflexivity. Qed.

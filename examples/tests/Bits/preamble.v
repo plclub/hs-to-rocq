@@ -66,3 +66,12 @@ Instance __Num_Z__ : Num Z. Admitted.
 
 
 Notation "'#' n" := (fromInteger n) (at level 1, format "'#' n").
+
+(* Keep this fixture independent of the base library's deferred-fixpoint module.
+   An opaque helper lets reflexivity distinguish its use from ordinary fix. *)
+Module HsToRocq.
+Module DeferredFix.
+Parameter deferredFix2 : forall {a b r : Type},
+  ((a -> b -> r) -> a -> b -> r) -> a -> b -> r.
+End DeferredFix.
+End HsToRocq.

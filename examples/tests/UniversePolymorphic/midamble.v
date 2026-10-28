@@ -13,7 +13,7 @@ Fail Check @MkPair@{Set Set}.
 (* === Cumulativity tests === *)
 (* Cumulative types allow universe-level subtyping (upcasts); polymorphic-only
    types do not.  The key is using a polymorphic Definition with explicit universe
-   constraints — this forces Coq to check cumulativity rather than infer fresh
+   constraints - this forces Coq to check cumulativity rather than infer fresh
    instances. *)
 
 #[universes(polymorphic)]
@@ -32,6 +32,14 @@ Check @MkBox@{Set}.
 
 (* Coinductive + polymorphic *)
 Check @SCons@{Set}.
+
+(* Productive corecursion requires Stream to be coinductive. *)
+CoFixpoint repeat_stream {a : Type} (x : a) : Stream a :=
+  SCons x (repeat_stream x).
+
+Example repeat_stream_head :
+  match repeat_stream true with SCons x _ => x end = true.
+Proof. reflexivity. Qed.
 
 (* === Mutual inductive tests === *)
 (* In Coq, #[universes(polymorphic)] is a sentence-level attribute that applies

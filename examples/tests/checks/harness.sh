@@ -18,12 +18,14 @@ case "${1:-}" in
         translator_args=("$@")
         module=
         renamed=false
+        module_edits=false
         output=.
         dependency_dir=
         while [[ $# -gt 0 ]]; do
             arg=$1
             case "$arg" in
                 */RenameMe.hs|RenameMe.hs) renamed=true ;;
+                */ModuleEdits.hs|ModuleEdits.hs) module_edits=true ;;
             esac
             case "$arg" in
                 -o) shift; output=$1 ;;
@@ -59,6 +61,7 @@ case "${1:-}" in
         done
         test -n "$module"
         if "$renamed"; then module=Renamed; fi
+        if "$module_edits"; then module=ModuleEdits; fi
         log_call translate "$module" "${translator_args[@]}"
         mode=success
         if [[ "$module" == Renamed ]]; then
@@ -119,9 +122,11 @@ case "${1:-}" in
         if [[ "$module" == "${COMPILER_FAULT_MODULE:-Probe}" && ${COMPILER_MODE:-success} == error ]]; then
             exit 43
         fi
-        if [[ "$module" == RocqFromImports || "$source" == Other/Coq/Init/Decimal.v ]]; then
+        if [[ "$module" == RocqFromImports || "$source" == Other/Coq/Init/Decimal.v ||
+              "$module" == ModuleEdits || "$source" == ModuleEdits/Support.v ]]; then
             "$local_load_path" || exit 45
             if [[ "$module" == RocqFromImports ]]; then test -f Other/Coq/Init/Decimal.vo; fi
+            if [[ "$module" == ModuleEdits ]]; then test -f ModuleEdits/Support.vo; fi
         fi
         : > "${source%.v}.vo"
         : > "${source%.v}.vok"
@@ -244,6 +249,14 @@ new_case() {
             ln -s "$workspace/examples/tests/Other/Coq/Init/Decimal/edits" "$test_dir/$source/Other/Coq/Init/Decimal/edits"
             ln -s "$workspace/examples/tests/RocqFromImports.hs" "$test_dir/$source/RocqFromImports.hs"
             ln -s "$workspace/examples/tests/RocqFromImports" "$test_dir/$source/RocqFromImports"
+            mkdir -p "$test_dir/$source/ModuleEdits/Support"
+            ln -s "$workspace/examples/tests/ModuleEdits.hs" "$test_dir/$source/ModuleEdits.hs"
+            for module in Abstract Support; do
+                ln -s "$workspace/examples/tests/ModuleEdits/$module.hs" "$test_dir/$source/ModuleEdits/$module.hs"
+            done
+            for module in edits preamble.v midamble.v Support/edits Support/preamble.v; do
+                ln -s "$workspace/examples/tests/ModuleEdits/$module" "$test_dir/$source/ModuleEdits/$module"
+            done
         else
             ln -s "$workspace/examples/base-tests/Makefile" "$test_dir/Makefile"
         fi
@@ -278,6 +291,7 @@ run_make() {
         FOREIGN_HS_TO_ROCQ=1 "HS_TO_ROCQ_DIR=$workspace"
         "HS_TO_ROCQ=bash \"$script\" --fake-translator"
         "PASS=$pass_modules" "TODO_PASS=$todo_pass_modules"
+        EDIT_CHECKS=
     )
     if [[ "$suite" == shared || "$suite" == rocq-tests ]]; then
         args+=("TODO_TRANSLATE=$todo_translate_modules")
@@ -353,6 +367,46 @@ assert_base_project() {
 passed() {
     checks=$((checks + 1))
     printf 'ok %d - %s/%s\n' "$checks" "$suite" "$name"
+}
+
+check_helper_retries() {
+    local retry_suite=$1 prefix=$2 jobs=$3 helper=$4 consumer=$5
+    local compiler_module=${helper##*/} mode expected_compiles output
+    for mode in error partial missing compiler-error; do
+        new_case "$retry_suite" "$prefix-retry-j$jobs-$mode"
+        pass_modules=$consumer
+        fault_module=$helper
+        expected_compiles=0
+        output=absent
+        if [[ "$mode" == compiler-error ]]; then
+            compiler_fault_module=$compiler_module
+            compiler_mode=error
+            expected_compiles=1
+            output=present
+        else
+            translator_mode=$mode
+        fi
+        mkdir -p "$test_dir/${helper%/*}"
+        printf 'stale output\n' > "$test_dir/$helper.v"
+        run_make 2 "-j$jobs" "$consumer.pass"
+        assert_calls translate "$helper" 1
+        assert_calls compile "$compiler_module" "$expected_compiles"
+        assert_calls translate "$consumer" 0
+        assert_calls compile "$consumer" 0
+        assert_output "$helper.v" "$output"
+        assert_output "$consumer.v" absent
+
+        translator_mode=success
+        compiler_mode=success
+        run_make 0 "-j$jobs" "$consumer.pass"
+        assert_calls translate "$helper" 2
+        assert_calls compile "$compiler_module" "$((expected_compiles + 1))"
+        assert_calls translate "$consumer" 1
+        assert_calls compile "$consumer" 1
+        assert_output "$helper.v" present
+        assert_output "$consumer.v" present
+        passed
+    done
 }
 
 # Concurrent fake tools must each leave one complete, uniquely identifiable
@@ -547,41 +601,51 @@ for suite_name in shared rocq-tests; do
             translate:Other/Coq/Init/Decimal compile:Decimal translate:RocqFromImports compile:RocqFromImports
         passed
 
-        for mode in error partial missing compiler-error; do
-            new_case "$suite_name" "from-imports-retry-j$jobs-$mode"
-            pass_modules=RocqFromImports
-            fault_module=Other/Coq/Init/Decimal
-            expected_compiles=0
-            output=absent
-            if [[ "$mode" == compiler-error ]]; then
-                compiler_fault_module=Decimal
-                compiler_mode=error
-                expected_compiles=1
-                output=present
-            else
-                translator_mode=$mode
-            fi
-            mkdir -p "$test_dir/Other/Coq/Init"
-            printf 'stale output\n' > "$test_dir/Other/Coq/Init/Decimal.v"
-            run_make 2 "-j$jobs" RocqFromImports.pass
-            assert_calls translate Other/Coq/Init/Decimal 1
-            assert_calls compile Decimal "$expected_compiles"
-            assert_calls translate RocqFromImports 0
-            assert_calls compile RocqFromImports 0
-            assert_output Other/Coq/Init/Decimal.v "$output"
-            assert_output RocqFromImports.v absent
+        check_helper_retries "$suite_name" from-imports "$jobs" Other/Coq/Init/Decimal RocqFromImports
+    done
+done
 
-            translator_mode=success
-            compiler_mode=success
-            run_make 0 "-j$jobs" RocqFromImports.pass
-            assert_calls translate Other/Coq/Init/Decimal 2
-            assert_calls compile Decimal "$((expected_compiles + 1))"
-            assert_calls translate RocqFromImports 1
-            assert_calls compile RocqFromImports 1
-            assert_output Other/Coq/Init/Decimal.v present
-            assert_output RocqFromImports.v present
-            passed
-        done
+# Both source modules merge into ModuleEdits after its separate helper compiles.
+for suite_name in shared rocq-tests; do
+    for jobs in 1 2; do
+        new_case "$suite_name" "module-edits-forced-j$jobs"
+        pass_modules=ModuleEdits
+        run_make 0 "-j$jobs" ModuleEdits.pass
+        generation=second
+        run_make 0 "-j$jobs" ModuleEdits.pass
+        assert_output ModuleEdits/Support.v present
+        assert_output ModuleEdits/Support.h2ci present
+        assert_output ModuleEdits.v present
+        assert_output ModuleEdits.h2ci present
+        assert_output Support.v absent
+        assert_output ModuleEdits/Abstract.v absent
+        assert_calls translate ModuleEdits/Support 2
+        assert_calls translate ModuleEdits 2
+        assert_calls compile Support 2
+        assert_calls compile ModuleEdits 2
+        assert_contains tools.log "<$fixture_source/ModuleEdits.hs> <$fixture_source/ModuleEdits/Abstract.hs>"
+        assert_contains tools.log "compile:Support $compiler_options <-Q> <.> <> <ModuleEdits/Support.v>"
+        assert_contains tools.log "compile:ModuleEdits $compiler_options <-Q> <.> <> <ModuleEdits.v>"
+        assert_call_order \
+            translate:ModuleEdits/Support compile:Support translate:ModuleEdits compile:ModuleEdits \
+            translate:ModuleEdits/Support compile:Support translate:ModuleEdits compile:ModuleEdits
+        passed
+
+        check_helper_retries "$suite_name" module-edits-helper "$jobs" ModuleEdits/Support ModuleEdits
+    done
+
+    for mode in error partial missing; do
+        new_case "$suite_name" "module-edits-merged-$mode"
+        pass_modules=ModuleEdits
+        fault_module=ModuleEdits
+        translator_mode=$mode
+        printf 'stale output\n' > "$test_dir/ModuleEdits.v"
+        run_make 2 -j2 ModuleEdits.pass
+        assert_calls compile Support 1
+        assert_calls translate ModuleEdits 1
+        assert_calls compile ModuleEdits 0
+        assert_output ModuleEdits.v absent
+        passed
     done
 done
 
@@ -950,28 +1014,29 @@ done
 # including nested helper outputs, while preserving source fixtures for a retry.
 for suite_name in shared rocq-tests; do
     new_case "$suite_name" clean-rebuild
-    pass_modules='Probe Renamed RocqFromImports'
+    pass_modules='Probe Renamed RocqFromImports ModuleEdits'
     run_make 0 -j2
-    for stem in Probe Renamed RocqFromImports Other/Coq/Init/Decimal; do
+    for stem in Probe Renamed RocqFromImports Other/Coq/Init/Decimal ModuleEdits ModuleEdits/Support; do
         for suffix in v h2ci vo vok vos glob; do
             [[ -f "$test_dir/$stem.$suffix" ]] || fail "$suite/$name: missing pre-clean artifact $stem.$suffix"
         done
     done
-    for file in .Probe.aux .Renamed.aux .RocqFromImports.aux Other/Coq/Init/.Decimal.aux; do
+    for file in .Probe.aux .Renamed.aux .RocqFromImports.aux Other/Coq/Init/.Decimal.aux .ModuleEdits.aux ModuleEdits/.Support.aux; do
         [[ -f "$test_dir/$file" ]] || fail "$suite/$name: missing pre-clean artifact $file"
     done
     run_make 0 clean
-    for stem in Probe Renamed RocqFromImports Other/Coq/Init/Decimal; do
+    for stem in Probe Renamed RocqFromImports Other/Coq/Init/Decimal ModuleEdits ModuleEdits/Support; do
         for suffix in v h2ci vo vok vos glob; do assert_output "$stem.$suffix" absent; done
     done
-    for file in .Probe.aux .Renamed.aux .RocqFromImports.aux Other/Coq/Init/.Decimal.aux; do
+    for file in .Probe.aux .Renamed.aux .RocqFromImports.aux Other/Coq/Init/.Decimal.aux .ModuleEdits.aux ModuleEdits/.Support.aux; do
         assert_output "$file" absent
     done
-    [[ -f "$test_dir/$fixture_source/Probe.hs" && -f "$test_dir/$fixture_source/Other/Coq/Init/Decimal.hs" ]] ||
+    [[ -f "$test_dir/$fixture_source/Probe.hs" && -f "$test_dir/$fixture_source/Other/Coq/Init/Decimal.hs" &&
+       -f "$test_dir/$fixture_source/ModuleEdits/Support.hs" ]] ||
         fail "$suite/$name: clean removed a source fixture"
     generation=second
     run_make 0 -j2
-    for stem in Probe Renamed RocqFromImports Other/Coq/Init/Decimal; do
+    for stem in Probe Renamed RocqFromImports Other/Coq/Init/Decimal ModuleEdits ModuleEdits/Support; do
         assert_output "$stem.v" present
         assert_output "$stem.h2ci" present
         assert_calls translate "$stem" 2
@@ -980,6 +1045,8 @@ for suite_name in shared rocq-tests; do
     assert_calls compile Renamed 2
     assert_calls compile Decimal 2
     assert_calls compile RocqFromImports 2
+    assert_calls compile ModuleEdits 2
+    assert_calls compile Support 2
     passed
 done
 

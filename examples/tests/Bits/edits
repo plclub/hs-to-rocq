@@ -1,1 +1,10 @@
-termination Bits.popCountDefault deferred
+in Bits.popCountDefault termination go deferred
+skip module HsToRocq.DeferredFix
+
+add Bits Theorem Bits.popCountDefault_deferred {a} {bits : Bits a}
+  (zero : a) (inc dec : a -> a) (isZero : a -> bool) :
+  popCountDefault zero inc dec isZero =
+  HsToRocq.DeferredFix.deferredFix2
+    (fun go c w => if isZero w then c else go (inc c) (w Bits..&. dec w)) zero.
+Proof. reflexivity. Qed.
+order Bits.popCountDefault Bits.popCountDefault_deferred

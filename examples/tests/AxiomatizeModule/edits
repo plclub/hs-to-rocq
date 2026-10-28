@@ -4,3 +4,14 @@ unaxiomatize definition AxiomatizeModule.saccharine
 
 # We don't include GHC
 skip AxiomatizeModule.Default__Sweet
+
+# An axiom with the same type cannot satisfy this computation by reflexivity.
+add AxiomatizeModule Theorem AxiomatizeModule.kind_computes {a} {benign_a : Benign a} :
+  kind = Helpful benign Polite.
+Proof. reflexivity. Qed.
+order AxiomatizeModule.kind AxiomatizeModule.kind_computes
+
+add AxiomatizeModule Theorem AxiomatizeModule.saccharine_computes :
+  saccharine = Helpful Sugar (Helpful Sugar Polite).
+Proof. reflexivity. Qed.
+order AxiomatizeModule.saccharine AxiomatizeModule.saccharine_computes

@@ -9,5 +9,10 @@ redefine Definition ParserTests.a2 {a} {b} : (a -> b) -> a -> b := fun x => x.
 # Let-tick syntax
 skip module GHC.Err
 skip ParserTests.Default__Foo
-add ParserTests Definition ParserTests.letTick : (ParserTests.Test -> ParserTests.Foo) 
+add ParserTests Definition ParserTests.letTick : (ParserTests.Test -> ParserTests.Foo)
   := fun x => let ' MkTest y := x in y.
+
+add ParserTests Theorem ParserTests.letTick_computes (x : Foo) :
+  letTick (MkTest x) = x.
+Proof. reflexivity. Qed.
+order ParserTests.letTick ParserTests.letTick_computes

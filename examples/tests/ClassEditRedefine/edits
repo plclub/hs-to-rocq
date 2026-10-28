@@ -1,0 +1,21 @@
+redefine Definition ClassEditRedefine.result := fun _ => FromDefault.
+redefine Definition ClassEditRedefine.Patched__InstanceCase_result (_ : InstanceCase) : Result := FromInstance.
+skip ClassEditRedefine.Default__Result
+skip ClassEditRedefine.Default__DefaultCase
+skip ClassEditRedefine.Default__InstanceCase
+skip ClassEditRedefine.Default__PlainCase
+
+add ClassEditRedefine Theorem ClassEditRedefine.default_redefined :
+  result DefaultInput = FromDefault.
+Proof. reflexivity. Qed.
+order ClassEditRedefine.Patched__DefaultCase ClassEditRedefine.default_redefined
+
+add ClassEditRedefine Theorem ClassEditRedefine.explicit_preserved :
+  result PlainInput = FromSource.
+Proof. reflexivity. Qed.
+order ClassEditRedefine.Patched__PlainCase ClassEditRedefine.explicit_preserved
+
+add ClassEditRedefine Theorem ClassEditRedefine.instance_redefined :
+  result InstanceInput = FromInstance.
+Proof. reflexivity. Qed.
+order ClassEditRedefine.Patched__InstanceCase ClassEditRedefine.instance_redefined

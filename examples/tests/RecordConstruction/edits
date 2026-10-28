@@ -1,0 +1,6 @@
+skip RecordConstruction.Default__R
+
+add RecordConstruction Theorem RecordConstruction.named_field_constructed :
+  (RecordConstruction.r = RecordConstruction.MkR true) /\
+  (RecordConstruction.a RecordConstruction.r = true).
+Proof. split; reflexivity. Qed.

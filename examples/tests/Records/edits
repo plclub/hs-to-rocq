@@ -1,0 +1,6 @@
+skip Records.Default__Rec
+
+add Records Theorem Records.update_sets_field :
+  (Records.foo (Records.MkRec false) = Records.MkRec true) /\
+  (Records.bar (Records.MkRec true) = Records.MkRec true).
+Proof. split; reflexivity. Qed.

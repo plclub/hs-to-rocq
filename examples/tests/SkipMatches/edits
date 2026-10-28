@@ -8,4 +8,18 @@ in SkipMatches.skipCasePattern       skip case pattern _
 in SkipMatches.skipLambdaCasePattern skip case pattern _
 
 skip case pattern ignore
-in SkipMatches.redundant skip case pattern _
+
+# Keep the nonredundant wildcard in preserveCasePattern and check all inputs.
+add SkipMatches Theorem SkipMatches.skipped_matches_preserve_results :
+  forall x y,
+    and (skipEquation x = negb x)
+    (and (skipEquationMultipleArgs x y = negb x)
+    (and (skipCasePattern x = negb x)
+    (and (skipLambdaCasePattern x = negb x)
+         (preserveCasePattern x = negb x)))).
+Proof. intros x y; destruct x, y; repeat split; reflexivity. Qed.
+order SkipMatches.skipEquation SkipMatches.skipped_matches_preserve_results
+order SkipMatches.skipEquationMultipleArgs SkipMatches.skipped_matches_preserve_results
+order SkipMatches.skipCasePattern SkipMatches.skipped_matches_preserve_results
+order SkipMatches.skipLambdaCasePattern SkipMatches.skipped_matches_preserve_results
+order SkipMatches.preserveCasePattern SkipMatches.skipped_matches_preserve_results

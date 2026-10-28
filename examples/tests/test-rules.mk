@@ -5,11 +5,15 @@
 #   SRC_DIR    - source directory for .hs fixtures (default: .)
 #   HS_EXTRA   - extra hs-to-rocq flags (default: empty; --target-version 9.0)
 #   HS_IMPORT  - extra GHC import-path flags (default: empty; -i $(SRC_DIR))
+#   EDIT_CHECK_VERSION - target for real CLI checks (default: 8.20)
 
 COMPILER  ?= coqc
 SRC_DIR   ?= .
 HS_EXTRA  ?=
 HS_IMPORT ?=
+# The fake-tool harness overrides this list: it tests recipes, not edit semantics.
+EDIT_CHECKS ?= edit-checks
+EDIT_CHECK_VERSION ?= 8.20
 
 # typecheck *quietly*
 TYPECHECK = $(COMPILER) 1>/dev/null
@@ -68,6 +72,20 @@ PASS = \
   RocqQuotedText \
   RocqWfInnerImport \
   RocqFromImports \
+  ClassEdits \
+  ClassEditSimple \
+  ClassEditRedefine \
+  ScopedMethods \
+  NewtypeEdits \
+  RecursionEdits \
+  StructuralEdits \
+  InlineMutualEdits \
+  TypeEdits \
+  ModuleEdits \
+  PhaseEdits \
+  InvariantEdits \
+  Records \
+  RecordConstruction \
 
 # tests that *should* pass but currently fail
 TODO_PASS = \
@@ -90,7 +108,11 @@ main:
 	# even if some fail
 	$(MAKE) -k all
 
-all:  $(VFILES) pass todo_pass todo_translate
+all:  $(VFILES) $(EDIT_CHECKS) pass todo_pass todo_translate
+
+edit-checks:
+	stack --allow-different-user exec -- runghc -package=hs-to-rocq $(SRC_DIR)/checks/Edits.hs
+	bash $(SRC_DIR)/checks/edits.sh --target-version $(EDIT_CHECK_VERSION)
 
 pass: $(addsuffix .pass,$(PASS))
 	@echo
@@ -174,13 +196,27 @@ Other/Coq/Init/Decimal.v: FORCE $(SRC_DIR)/Other/Coq/Init/Decimal.hs $(SRC_DIR)/
 	$(HS_TO_ROCQ) $(HS_EXTRA) -N -e $(SRC_DIR)/Other/Coq/Init/Decimal/edits -e $(SRC_DIR)/renamings $(HS_IMPORT) -o . $(SRC_DIR)/Other/Coq/Init/Decimal.hs 1>/dev/null || { rm -f $@; exit 1; }
 	@test -e $@ || { echo "$@: translation produced no output" >&2; exit 1; }
 
+ModuleEdits.pass: TYPECHECK = $(COMPILER) -Q . "" 1>/dev/null
+
+# Abstract is merged into ModuleEdits; Support remains a separately built import.
+ModuleEdits.v: FORCE ModuleEdits/Support.vo $(SRC_DIR)/ModuleEdits.hs $(SRC_DIR)/ModuleEdits/Abstract.hs $(SRC_DIR)/ModuleEdits/edits $(SRC_DIR)/ModuleEdits/preamble.v $(SRC_DIR)/ModuleEdits/midamble.v
+	@rm -f $@
+	$(HS_TO_ROCQ) $(HS_EXTRA) -N -e $(SRC_DIR)/ModuleEdits/edits -e $(SRC_DIR)/renamings $(HS_IMPORT) --preamble $(SRC_DIR)/ModuleEdits/preamble.v --midamble $(SRC_DIR)/ModuleEdits/midamble.v -o . $(SRC_DIR)/ModuleEdits.hs $(SRC_DIR)/ModuleEdits/Abstract.hs 1>/dev/null || { rm -f $@; exit 1; }
+	@test -e $@ || { echo "$@: translation produced no output" >&2; exit 1; }
+
+ModuleEdits/Support.v: FORCE $(SRC_DIR)/ModuleEdits/Support.hs $(SRC_DIR)/ModuleEdits/Support/edits $(SRC_DIR)/ModuleEdits/Support/preamble.v
+	@rm -f $@
+	$(HS_TO_ROCQ) $(HS_EXTRA) -N -e $(SRC_DIR)/ModuleEdits/Support/edits -e $(SRC_DIR)/renamings $(HS_IMPORT) --preamble $(SRC_DIR)/ModuleEdits/Support/preamble.v -o . $(SRC_DIR)/ModuleEdits/Support.hs 1>/dev/null || { rm -f $@; exit 1; }
+	@test -e $@ || { echo "$@: translation produced no output" >&2; exit 1; }
+
 # We always want to re-build the .v files, to test the current build of hs-to-rocq
 FORCE:
 
 clean:
 	rm -rf */*.vo */*.glob */*.v.d *.vo *.vok *.vos *.v.d *.glob *.h2ci .*.aux *.hi *.o *.hi-boot *.o-boot $(VFILES) Renamed.v _CoqProject Makefile.coq *~
 	rm -f Other/Coq/Init/Decimal.v Other/Coq/Init/Decimal.h2ci Other/Coq/Init/Decimal.vo Other/Coq/Init/Decimal.vok Other/Coq/Init/Decimal.vos Other/Coq/Init/Decimal.glob Other/Coq/Init/.Decimal.aux
+	rm -f ModuleEdits/Support.v ModuleEdits/Support.h2ci ModuleEdits/Support.vo ModuleEdits/Support.vok ModuleEdits/Support.vos ModuleEdits/Support.glob ModuleEdits/.Support.aux
 
-.SECONDARY: $(VFILES) Other/Coq/Init/Decimal.v
+.SECONDARY: $(VFILES) Other/Coq/Init/Decimal.v ModuleEdits/Support.v
 
-.PHONY: main all pass todo_pass todo_translate FORCE clean
+.PHONY: main all edit-checks pass todo_pass todo_translate FORCE clean

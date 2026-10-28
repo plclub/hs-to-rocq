@@ -1,1 +1,8 @@
 rewrite forall x y, (x BitsRewrite..&. (BitsRewrite.complement y)) = (xor x (x .&. y))
+
+# No laws relate the class methods, so this equality requires the rewrite.
+add BitsRewrite Theorem BitsRewrite.foo_bar {a} {bits : Bits a} :
+  @foo a bits = @bar a bits.
+Proof. reflexivity. Qed.
+order BitsRewrite.foo BitsRewrite.foo_bar
+order BitsRewrite.bar BitsRewrite.foo_bar

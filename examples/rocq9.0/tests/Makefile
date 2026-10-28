@@ -9,5 +9,6 @@ COMPILER  = rocq c -w +deprecated-dirpath-Coq
 SRC_DIR   = ../../tests
 HS_EXTRA  = --target-version 9.0
 HS_IMPORT = -i $(SRC_DIR)
+EDIT_CHECK_VERSION = 9.0
 
 include $(SRC_DIR)/test-rules.mk

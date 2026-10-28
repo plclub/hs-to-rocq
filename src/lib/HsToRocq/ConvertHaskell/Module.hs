@@ -170,7 +170,14 @@ toEquationsSentence :: ConversionMonad r m
                     => ConvertedDefinition -> Maybe TerminationArgument -> m [Sentence]
 toEquationsSentence cdef mterm = do
   let name = cdef^.convDefName
-      args = cdef^.convDefArgs
+  -- Reject incompatible edits before inspecting the transformed recursive body.
+  case mterm of
+    Just Deferred ->
+      editFailure $ "equations edit for " ++ show name ++ " is incompatible with deferred termination (use deferredFix instead)"
+    Just Corecursive ->
+      editFailure $ "equations edit for " ++ show name ++ " is incompatible with corecursive termination"
+    _ -> pure ()
+  let args = cdef^.convDefArgs
       mty  = cdef^.convDefType
       body = cdef^.convDefBody
       -- Decompose the body: extract binders and the inner expression.
@@ -256,10 +263,6 @@ toEquationsSentence cdef mterm = do
             Just (StructOrderTA _) ->
               -- Note, not error: Equations handles structural recursion automatically
               Nothing <$ liftIO (hPutStrLn stderr $ "Note: equations edit for " ++ show name ++ " ignores structural termination hint (Equations infers structural recursion automatically)")
-            Just Deferred ->
-              editFailure $ "equations edit for " ++ show name ++ " is incompatible with deferred termination (use deferredFix instead)"
-            Just Corecursive ->
-              editFailure $ "equations edit for " ++ show name ++ " is incompatible with corecursive termination"
             _ -> pure Nothing
       neClauses <- case Data.List.NonEmpty.nonEmpty renamedEqns of
                      Just ne -> pure ne

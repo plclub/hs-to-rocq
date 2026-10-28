@@ -1,0 +1,27 @@
+promote PhaseEdits.promotedLeaf
+axiomatize definition PhaseEdits.opaqueIdentity
+
+add type PhaseEdits Definition PhaseEdits.typePhaseValue : bool := PhaseEdits.promotedLeaf.
+add PhaseEdits Definition PhaseEdits.termPhaseValue : bool := false.
+
+# Proof text is not a dependency edge; order must place zOrdered before aOrdered.
+add PhaseEdits Definition PhaseEdits.zOrdered : bool := true.
+add PhaseEdits Theorem PhaseEdits.aOrdered : True.
+Proof. pose proof zOrdered; exact I. Qed.
+order PhaseEdits.zOrdered PhaseEdits.aOrdered
+
+# An order edge cannot promote an ordinary addition across the midamble.
+order PhaseEdits.termPhaseValue PhaseEdits.typePhaseValue
+
+add PhaseEdits Theorem PhaseEdits.term_phase_assertions :
+  (PhaseEdits.termPhaseValue = false) /\
+  ((PhaseEdits.ordinaryValue = false) /\
+   (PhaseEdits.transparentIdentity true = true)).
+Proof. repeat split; reflexivity. Qed.
+
+add PhaseEdits Theorem PhaseEdits.specific_axiom_assertion :
+  PhaseEdits.opaqueIdentity false = PhaseEdits.opaqueIdentity false.
+Proof.
+  Fail unfold opaqueIdentity.
+  reflexivity.
+Qed.

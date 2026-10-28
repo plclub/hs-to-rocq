@@ -1,0 +1,26 @@
+termination RecursionEdits.byWf {wf shorter xs}
+obligations RecursionEdits.byWf solve_shorter @copy_length
+# Tactic references are not declaration dependencies; these orders are required.
+order RecursionEdits.copy_length RecursionEdits.byWf
+# A list-valued measure requires the explicit custom relation.
+termination RecursionEdits.byMeasure {measure (copy xs) (shorter)}
+obligations RecursionEdits.byMeasure solve_shorter @copy_length
+order RecursionEdits.copy_length RecursionEdits.byMeasure
+coinductive RecursionEdits.Stream
+termination RecursionEdits.repeatStream corecursive
+
+add RecursionEdits Theorem RecursionEdits.copy_length (xs : list bool) :
+  length (copy xs) = length xs.
+Proof. induction xs; simpl; congruence. Qed.
+
+add RecursionEdits Theorem RecursionEdits.byWf_example :
+  byWf (cons false (cons true nil)) = cons true (cons true nil).
+Proof. vm_compute. reflexivity. Qed.
+
+add RecursionEdits Theorem RecursionEdits.byMeasure_example :
+  byMeasure (cons false (cons true (cons false nil))) = true.
+Proof. vm_compute. reflexivity. Qed.
+
+add RecursionEdits Theorem RecursionEdits.repeatStream_productive :
+  headStream (tailStream (tailStream (repeatStream true))) = true.
+Proof. reflexivity. Qed.

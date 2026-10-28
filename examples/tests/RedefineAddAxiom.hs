@@ -1,6 +1,6 @@
 module RedefineAddAxiom where
 
--- TODO this test could probably be more comprehensive
+-- The edits axiomatize Fix, roll, and unroll, and add a polymorphic axiom.
 
 data Fix f a = Fix (f (Fix f a))
 

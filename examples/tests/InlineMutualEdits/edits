@@ -1,0 +1,24 @@
+# forward depends on relay, so inlining must preserve transitive dependencies.
+inline mutual InlineMutualEdits.forward
+inline mutual InlineMutualEdits.relay
+# Rewrite the source identity to equivalent, scope-local notation.
+skip InlineMutualEdits.marker
+in InlineMutualEdits.post rewrite forall xs, InlineMutualEdits.marker xs = identity_step xs
+# Specialize the helper's public API while keeping its source polymorphic.
+set type InlineMutualEdits.post : list bool -> list bool
+add scope inline_list for value InlineMutualEdits.post
+
+add InlineMutualEdits Theorem InlineMutualEdits.walk_example :
+  walk (cons true (cons false nil)) = cons true (cons false nil).
+Proof. reflexivity. Qed.
+
+add InlineMutualEdits Theorem InlineMutualEdits.forward_example :
+  forward (cons false (cons true nil)) = cons false (cons true nil).
+Proof. reflexivity. Qed.
+
+add InlineMutualEdits Theorem InlineMutualEdits.post_bool_only :
+  post (nil : list bool) = nil.
+Proof.
+  Fail Check (post (nil : list nat)).
+  reflexivity.
+Qed.

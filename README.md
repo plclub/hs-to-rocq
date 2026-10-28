@@ -236,7 +236,7 @@ boundaries, Unicode identifier and notation boundaries, user-name preservation, 
 literals (including doubled quote escapes), comments, qualified paths split by
 whitespace/comments, relative `From` imports,
 unrelated AST text, header imports, and Coq 8.20 identity.
-They also run 187 harness checks with fake tools. These exercise both production
+They also run 213 harness checks with fake tools. These exercise both production
 test wrappers, nested helper compilation, clean rebuilds, concurrent tool logging,
 and serial and parallel base-generation retries through the `base` and `vfiles`
 entry points, plus fresh Coq builds with manual modules. Forced and outdated
@@ -254,6 +254,15 @@ that default translation creates no shared GHC object cache, so scheduling canno
 hide the object-file race. GHC only typechecks by default (`-fno-code`); the check
 also verifies that an explicit `--ghc -fobject-code` still enables native code
 generation.
+
+Both shared unit suites run 237 edits parser/API assertions and 32 real-translator
+CLI cases for their target, alongside 66 passing compiler fixtures and three
+expected compiler failures. The edit checks cover all 42 constructors at the
+grammar boundary, file precedence, scoped edits, rewrite ordering, and rejection
+diagnostics. Compiler assertions distinguish edit effects for class methods,
+recursion, declaration phases, and invariants. Explicit `class kinds` remains
+parser-only because it has no translation consumer. See the
+[test coverage matrix](examples/tests/README.md) for witnesses and limitations.
 
 The shared unit suites compile fixtures on both targets for nested Corelib
 references and moved theorems in generated definitions, raw proofs, `Program`

@@ -1,2 +1,7 @@
-redefine Definition foo := @bar.
-add AddAndReplace Definition bar {a} (x : a) := x.
+redefine Definition AddAndReplace.foo := @bar.
+add AddAndReplace Definition bar (x : bool) := true.
+
+# The source returns false here; only the replacement returns true.
+add AddAndReplace Theorem AddAndReplace.foo_redefined : foo false = true.
+Proof. reflexivity. Qed.
+order AddAndReplace.foo AddAndReplace.foo_redefined

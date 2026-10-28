@@ -3,5 +3,7 @@ redefine Axiom RedefineAddAxiom.Fix : forall (f : Type -> Type) (a : Type), Type
 redefine Axiom RedefineAddAxiom.unroll : forall {f : Type -> Type} {a : Type}, Fix f a -> f (Fix f a).
 redefine Axiom RedefineAddAxiom.roll : forall {f} {a}, (f (Fix f a)) -> (Fix f a).
 
-# Not the best test that this actually *happens*...
+# Instantiate the added axiom so its omission cannot go unnoticed.
 add RedefineAddAxiom Axiom RedefineAddAxiom.surprise : forall {a}, a.
+add RedefineAddAxiom Definition RedefineAddAxiom.surprise_bool : bool := @surprise bool.
+order RedefineAddAxiom.surprise RedefineAddAxiom.surprise_bool

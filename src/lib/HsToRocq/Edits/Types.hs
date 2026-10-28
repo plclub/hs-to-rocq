@@ -410,8 +410,8 @@ descDuplEdit = \case
   CollapseLetEdit                  qid          -> duplicateQFor  "collapsed lets"                                 qid
   InEdit                           _ _          -> error "In Edits are never duplicates"
   ExceptInEdit                     _ _          -> error "ExceptIn Edits are never duplicates"
-  PromoteEdit                      _            -> error "Promote edits are never duplicates"
-  PolyrecEdit                      _            -> error "Polyrec edits are never duplicates"
+  PromoteEdit                      qid          -> duplicateQFor  "promotions"                                     qid
+  PolyrecEdit                      qid          -> duplicateQFor  "polymorphic recursion requests"                 qid
   UniversePolymorphicEdit          qid          -> duplicateQFor  "universe polymorphic requests"                  qid
   UniverseCumulativeEdit           qid          -> duplicateQFor  "universe cumulative requests"                   qid
   EquationsEdit                    qid          -> duplicateQFor  "equations requests"                              qid

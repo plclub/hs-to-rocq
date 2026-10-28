@@ -1,0 +1,22 @@
+rename module ScopedMethodSource ScopedMethods
+skip ScopedMethods.Default__Mark
+skip ScopedMethods.Default__Other
+
+# Traverse both spellings so each scoped entry must beat sibling auto-renaming.
+in ScopedMethods.Flags__Mark_caller rename value ScopedMethodSource.sibling = ScopedMethods.sibling
+in ScopedMethods.Flags__Mark_caller rename value ScopedMethods.sibling = ScopedMethods.chooseScoped
+
+add ScopedMethods Theorem ScopedMethods.scoped_override :
+  caller MarkFirst = true.
+Proof. reflexivity. Qed.
+order ScopedMethods.Flags__Mark ScopedMethods.scoped_override
+
+add ScopedMethods Theorem ScopedMethods.unscoped_sibling :
+  (sibling MarkFirst = false) /\ (unscoped MarkSecond = false).
+Proof. split; reflexivity. Qed.
+order ScopedMethods.Flags__Mark ScopedMethods.unscoped_sibling
+
+add ScopedMethods Theorem ScopedMethods.other_instance_preserved :
+  (caller OtherFirst = true) /\ (caller OtherSecond = false).
+Proof. split; reflexivity. Qed.
+order ScopedMethods.Flags__Other ScopedMethods.other_instance_preserved

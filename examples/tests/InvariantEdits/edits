@@ -1,0 +1,13 @@
+# The outer invariant fields must stay on one line for the edits parser.
+add invariant { module = InvariantEdits, qid = InvariantEdits.Flag, tyVars = [], constructor = MkFlag, useSigmaType = [InvariantEdits.enabled, InvariantEdits.keep], invariant = Definition InvariantEdits.EnabledInv : InvariantEdits.RawFlag -> Type := fun x => InvariantEdits.valid x = true. }
+
+promote InvariantEdits.valid
+obligations InvariantEdits.enabled exact eq_refl
+
+add InvariantEdits Theorem InvariantEdits.enabled_is_valid :
+  InvariantEdits.valid (projT1 InvariantEdits.enabled) = true.
+Proof. exact (projT2 enabled). Qed.
+
+add InvariantEdits Theorem InvariantEdits.keep_preserves_payload (x : InvariantEdits.Flag) :
+  projT1 (InvariantEdits.keep x) = projT1 x.
+Proof. reflexivity. Qed.

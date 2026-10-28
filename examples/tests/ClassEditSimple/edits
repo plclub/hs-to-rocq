@@ -1,0 +1,12 @@
+simple class ClassEditSimple.Direct
+skip ClassEditSimple.Default__Mark
+
+add ClassEditSimple Theorem ClassEditSimple.direct_encoding :
+  (choose First = Second) /\ (through First = Second).
+Proof.
+  Check (@Build_Direct : forall a : Type, (a -> a) -> (a -> a) -> Direct a).
+  Fail Check Direct__Dict.
+  Fail Check choose__.
+  split; reflexivity.
+Qed.
+order ClassEditSimple.Direct__Mark ClassEditSimple.direct_encoding

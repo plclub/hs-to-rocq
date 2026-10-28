@@ -1,0 +1,34 @@
+# Pin reduction to ys instead of the inferred xs.
+termination StructuralEdits.named {struct ys}
+# Select ys by value-argument position, excluding the implicit a and b parameters.
+termination StructuralEdits.positional {struct 2}
+in StructuralEdits.polyShape polyrec go
+collapse let StructuralEdits.collapsed
+
+add StructuralEdits Theorem StructuralEdits.named_nil {a b} (ys : list b) :
+  named (nil : list a) ys = nil.
+Proof.
+  Fail reflexivity.
+  destruct ys; reflexivity.
+Qed.
+
+add StructuralEdits Theorem StructuralEdits.positional_nil {a b} (ys : list b) :
+  positional (nil : list a) ys = nil.
+Proof.
+  Fail reflexivity.
+  destruct ys; reflexivity.
+Qed.
+
+add StructuralEdits Theorem StructuralEdits.positional_example :
+  positional (cons true (cons false nil)) (cons 1 (cons 2 (cons 3 nil))) =
+  cons 1 (cons 2 nil).
+Proof. reflexivity. Qed.
+
+add StructuralEdits Theorem StructuralEdits.polyShape_example :
+  polyShape (nil : list bool) (cons true (cons false nil)) = true.
+Proof. reflexivity. Qed.
+
+add StructuralEdits Theorem StructuralEdits.collapsed_example :
+  collapsed (cons true (cons false (cons true nil))) =
+  cons true (cons false (cons true nil)).
+Proof. reflexivity. Qed.

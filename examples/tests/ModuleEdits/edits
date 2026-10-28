@@ -1,0 +1,30 @@
+alias module Here ModuleEdits
+alias module Support ModuleEdits.Support
+alias module Abstract ModuleEdits.Abstract
+
+import module Support
+rename value Here.originalMarker = Here.aliasedMarker
+rename module Abstract Here
+axiomatize original module name Abstract
+
+add Here Theorem Here.module_assertions :
+  (Here.externalValue = true) /\ ((Here.operatorChoice = false) /\
+  ((Here.transparentIdentity true = true) /\ (Here.boxed = Here.Pack true))).
+Proof. repeat split; reflexivity. Qed.
+
+add Here Definition Here.aliasAddition : bool := false.
+
+# This assertion uses the real module name, so a broken alias cannot hide it.
+add ModuleEdits Theorem ModuleEdits.alias_assertion :
+  (ModuleEdits.aliasedMarker = true) /\ (ModuleEdits.aliasAddition = false).
+Proof.
+  Fail pose proof originalMarker.
+  split; reflexivity.
+Qed.
+
+add Here Theorem Here.original_module_axiom_assertion :
+  Here.abstractUse false = Here.opaqueOriginal false.
+Proof.
+  Fail unfold opaqueOriginal.
+  reflexivity.
+Qed.

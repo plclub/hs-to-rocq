@@ -1,0 +1,11 @@
+redefine Inductive NewtypeEdits.Wrapped : Type := | Wrap (unwrapped : bool) : Wrapped.
+
+order NewtypeEdits.Toggle__bool NewtypeEdits.Toggle__Wrapped_turn
+
+add NewtypeEdits Theorem NewtypeEdits.redefined_newtype_coerce :
+  (turn (Wrap true) = Wrap false) /\ (turn (Wrap false) = Wrap true).
+Proof.
+  Fail Check originalField.
+  split; reflexivity.
+Qed.
+order NewtypeEdits.Toggle__Wrapped NewtypeEdits.redefined_newtype_coerce

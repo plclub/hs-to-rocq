@@ -1,0 +1,40 @@
+skip class ClassEdits.Hidden
+skip method ClassEdits.Trimmed removed
+skip ClassEdits.bodyOnly
+skip ClassEdits.Default__Mark
+skip ClassEdits.Default__OtherMark
+
+add ClassEdits Theorem ClassEdits.hidden_absent : True.
+Proof.
+  Fail Check Hidden__Mark.
+  Fail Check Hidden__Mark_hidden.
+  Fail Check Hidden__OtherMark.
+  Fail Check Hidden__OtherMark_hidden.
+  Fail Check Hidden.
+  Fail Check Hidden__Dict.
+  Fail Check hidden.
+  Fail Check hidden__.
+  exact I.
+Qed.
+order ClassEdits.Hidden__Mark ClassEdits.hidden_absent
+order ClassEdits.Hidden__OtherMark ClassEdits.hidden_absent
+
+add ClassEdits Theorem ClassEdits.removed_absent :
+  (keep RightMark = LeftMark) /\ (keep OtherLeft = OtherRight).
+Proof.
+  Fail Check Trimmed__Mark_removed.
+  Fail Check Trimmed__OtherMark_removed.
+  Fail Check removed.
+  Fail Check removed__.
+  split; reflexivity.
+Qed.
+order ClassEdits.Trimmed__Mark ClassEdits.removed_absent
+order ClassEdits.Trimmed__OtherMark ClassEdits.removed_absent
+
+add ClassEdits Theorem ClassEdits.default_body_only_skipped :
+  bodyOnly LeftMark = RightMark.
+Proof.
+  Check (@bodyOnly__ : forall a : Type, BodyOnly__Dict a -> a -> a).
+  reflexivity.
+Qed.
+order ClassEdits.BodyOnly__Mark ClassEdits.default_body_only_skipped
