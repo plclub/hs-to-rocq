@@ -236,10 +236,13 @@ boundaries, Unicode identifier and notation boundaries, user-name preservation, 
 literals (including doubled quote escapes), comments, qualified paths split by
 whitespace/comments, relative `From` imports,
 unrelated AST text, header imports, and Coq 8.20 identity.
-They also run 109 harness checks with fake tools. These exercise both production
+They also run 187 harness checks with fake tools. These exercise both production
 test wrappers, nested helper compilation, clean rebuilds, concurrent tool logging,
 and serial and parallel base-generation retries through the `base` and `vfiles`
-entry points, plus fresh Coq builds with manual modules. The fake translator
+entry points, plus fresh Coq builds with manual modules. Forced and outdated
+regeneration must reject stale output, remove failed output even when its
+timestamp is unchanged, and retry without regenerating successful sources.
+The fake translator
 writes interfaces and dependency files, so a missing dependency directory fails
 the check. These checks do not replace real
 compiler tests.
@@ -282,6 +285,8 @@ The build discards the failed target and retries generation before compiling,
 while keeping sources that were generated successfully.
 The shared base-generation rules invalidate `_CoqProject` before checking sources
 and publish it only after all sources succeed, including direct `vfiles` requests.
+Each translating recipe removes its old target first and deletes partial output
+on failure, so a zero-exit translation with no output cannot reuse a stale file.
 
   Some examples use git submodules, so run
 

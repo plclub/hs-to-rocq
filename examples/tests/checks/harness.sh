@@ -77,7 +77,13 @@ case "${1:-}" in
                 fi
                 ;;
             error) exit 42 ;;
-            partial) printf 'partial output\n' > "$output/$module.v"; exit 42 ;;
+            partial)
+                printf 'partial output\n' > "$output/$module.v"
+                if [[ -n "${FAULT_OUTPUT_TIMESTAMP:-}" ]]; then
+                    touch -r "$FAULT_OUTPUT_TIMESTAMP" "$output/$module.v"
+                fi
+                exit 42
+                ;;
             missing) : ;;
             *) exit 99 ;;
         esac
@@ -259,6 +265,7 @@ new_case() {
     compiler_mode=success
     renamed_mode=success
     fault_module=Probe
+    fault_output_timestamp=
     compiler_fault_module=Probe
     generation=initial
 }
@@ -290,6 +297,7 @@ run_make() {
         HARNESS_LOG="$test_dir/tools.log" \
         TRANSLATOR_MODE="$translator_mode" COMPILER_MODE="$compiler_mode" \
         RENAMED_MODE="$renamed_mode" FAULT_MODULE="$fault_module" \
+        FAULT_OUTPUT_TIMESTAMP="$fault_output_timestamp" \
         COMPILER_FAULT_MODULE="$compiler_fault_module" GENERATION="$generation" \
         make "${args[@]}" "$@" > "$test_dir/make.log" 2>&1; then
         actual=0
@@ -619,6 +627,130 @@ for suite_name in shared rocq-tests base; do
             fi
         fi
         passed
+    done
+done
+
+# Forced regeneration must reject old output even when the translator leaves it
+# unchanged. Partial output keeps the old timestamp, which DELETE_ON_ERROR alone
+# cannot reliably distinguish from an unchanged target.
+for suite_name in rocq9 base-src8; do
+    for jobs in 1 2; do
+        for mode in missing error partial; do
+            new_case "$suite_name" "vfiles-stale-forced-j$jobs-$mode"
+            command=("-j$jobs")
+            output_dir=../../base
+            if [[ "$suite" == rocq9 ]]; then
+                command+=(-C base-src)
+                output_dir=base
+            fi
+            command+=(GHC_INTERNAL_MODULES= vfiles)
+            generation=old
+            run_make 0 "${command[@]}"
+            assert_output "$output_dir/GHC/Base.v" present
+            assert_contains "$output_dir/_CoqProject" GHC/Base.v
+            if [[ "$mode" == partial ]]; then
+                fault_output_timestamp="$test_dir/failure.timestamp"
+                touch -r "$test_dir/$output_dir/GHC/Base.v" "$fault_output_timestamp"
+            fi
+
+            generation=new
+            fault_module=GHC/Base
+            translator_mode=$mode
+            run_make 2 -B "${command[@]}"
+            assert_calls translate GHC/Base 2
+            assert_output "$output_dir/GHC/Base.v" absent
+            assert_output "$output_dir/_CoqProject" absent
+            assert_output "$output_dir/_CoqProject.tmp" absent
+            if [[ "$mode" != missing ]]; then assert_contains make.log 'Error 42'; fi
+
+            translator_mode=success
+            run_make 0 "${command[@]}"
+            assert_calls translate GHC/Base 3
+            assert_output "$output_dir/GHC/Base.v" present
+            assert_output "$output_dir/GHC/Base.h2ci" present
+            assert_contains "$output_dir/_CoqProject" GHC/Base.v
+            passed
+        done
+    done
+done
+
+# Visit every translation recipe with an outdated, preexisting target. Retrying
+# without force must rebuild the failed source and keep the other sources intact.
+for suite_name in rocq9 base-src8; do
+    modules='GHC/Base Data/Bool GHC/List Data/Probe Data/SemigroupInternal'
+    if [[ "$suite_name" == base-src8 ]]; then modules+=' Probe'; fi
+    for jobs in 1 2; do
+        for module in $modules; do
+            for mode in missing error partial; do
+                new_case "$suite_name" "vfiles-stale-outdated-${module//\//-}-j$jobs-$mode"
+                command=("-j$jobs")
+                output_dir=../../base
+                if [[ "$suite" == rocq9 ]]; then
+                    command+=(-C base-src)
+                    output_dir=base
+                fi
+                case "$module" in
+                    GHC/List) command+=(GHC_INTERNAL_GHC_MODULES=GHC/List) ;;
+                    Data/Probe) command+=(BASE_MODULES=Data/Probe) ;;
+                    Data/SemigroupInternal) command+=(RENAMED=Data/SemigroupInternal) ;;
+                    Probe)
+                        command+=(DROPIN=Probe)
+                        mkdir -p "$test_dir/module-edits/Probe" "$test_dir/drop-in"
+                        : > "$test_dir/module-edits/Probe/edits"
+                        : > "$test_dir/module-edits/Probe/preamble.v"
+                        printf 'module Probe where\n' > "$test_dir/drop-in/Probe.hs"
+                        ;;
+                esac
+                command+=(vfiles)
+                generation=old
+                run_make 0 "${command[@]}"
+                assert_output "$output_dir/$module.v" present
+                assert_contains "$output_dir/_CoqProject" "$module.v"
+
+                # Use a fixed old timestamp so this tests normal prerequisite
+                # checks without relying on a sleep or deleting the stale file.
+                touch -t 200001010000 "$test_dir/$output_dir/$module.v"
+                if [[ "$mode" == partial ]]; then
+                    fault_output_timestamp="$test_dir/failure.timestamp"
+                    touch -r "$test_dir/$output_dir/$module.v" "$fault_output_timestamp"
+                fi
+                generation=new
+                fault_module=$module
+                translator_mode=$mode
+                run_make 2 "${command[@]}"
+                assert_calls translate "$module" 2
+                assert_output "$output_dir/$module.v" absent
+                assert_output "$output_dir/_CoqProject" absent
+                assert_output "$output_dir/_CoqProject.tmp" absent
+                if [[ "$mode" != missing ]]; then assert_contains make.log 'Error 42'; fi
+
+                generation=old
+                for successful in GHC/Base Data/Bool; do
+                    if [[ "$successful" != "$module" ]]; then
+                        assert_output "$output_dir/$successful.v" present
+                        assert_output "$output_dir/$successful.h2ci" present
+                        assert_calls translate "$successful" 1
+                    fi
+                done
+
+                generation=new
+                translator_mode=success
+                run_make 0 "${command[@]}"
+                assert_calls translate "$module" 3
+                assert_output "$output_dir/$module.v" present
+                assert_output "$output_dir/$module.h2ci" present
+                assert_contains "$output_dir/_CoqProject" "$module.v"
+                generation=old
+                for successful in GHC/Base Data/Bool; do
+                    if [[ "$successful" != "$module" ]]; then
+                        assert_output "$output_dir/$successful.v" present
+                        assert_output "$output_dir/$successful.h2ci" present
+                        assert_calls translate "$successful" 1
+                    fi
+                done
+                passed
+            done
+        done
     done
 done
 

@@ -1,6 +1,8 @@
 # Shared generation bookkeeping. The caller sets BASE_SRC and OUT and includes
 # modules.mk before this file; translation and manual-file recipes stay local.
 
+# Translating recipes also remove old output first and explicitly discard failed
+# output: make cannot detect an overwrite that preserves the target's timestamp.
 .DELETE_ON_ERROR:
 
 # An existing project file is also a completion marker for top-level builds.

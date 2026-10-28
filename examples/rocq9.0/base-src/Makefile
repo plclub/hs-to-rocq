@@ -78,38 +78,42 @@ HS_TO_ROCQ_OPTS_BASE := \
 
 # Rule for Data/* and Control/* modules from ghc-internal
 $(VFILES_GHC_INTERNAL) $(VFILES_EARLY_GHC_INTERNAL): $(OUT)/%.v : $$(wildcard $(BASE_SRC)/module-edits/$$*/preamble.v) $$(wildcard $(BASE_SRC)/module-edits/$$*/midamble.v) $$(wildcard $(BASE_SRC)/module-edits/$$*/edits) $(BASE_SRC)/edits
+	rm -f $@
 	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard $(BASE_SRC)/module-edits/$*/edits)) \
 	             $(addprefix -p , $(wildcard $(BASE_SRC)/module-edits/$*/preamble.v)) \
 	             $(addprefix --midamble , $(wildcard $(BASE_SRC)/module-edits/$*/midamble.v)) \
 		     $(HS_TO_ROCQ_OPTS_INTERNAL) \
-		     $(BASE_SRC)/ghc-internal/src/GHC/Internal/$*.hs
+		     $(BASE_SRC)/ghc-internal/src/GHC/Internal/$*.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $@
 
 # Rule for GHC/* modules from ghc-internal
 $(VFILES_GHC_INTERNAL_GHC): $(OUT)/GHC/%.v : $$(wildcard $(BASE_SRC)/module-edits/GHC/$$*/preamble.v) $$(wildcard $(BASE_SRC)/module-edits/GHC/$$*/midamble.v) $$(wildcard $(BASE_SRC)/module-edits/GHC/$$*/edits) $(BASE_SRC)/edits
+	rm -f $@
 	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard $(BASE_SRC)/module-edits/GHC/$*/edits)) \
 	             $(addprefix -p , $(wildcard $(BASE_SRC)/module-edits/GHC/$*/preamble.v)) \
 	             $(addprefix --midamble , $(wildcard $(BASE_SRC)/module-edits/GHC/$*/midamble.v)) \
 		     $(HS_TO_ROCQ_OPTS_INTERNAL) \
-		     $(BASE_SRC)/ghc-internal/src/GHC/Internal/$*.hs
+		     $(BASE_SRC)/ghc-internal/src/GHC/Internal/$*.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $@
 
 # Rule for modules still in base/src
 $(VFILES_BASE_GEN) $(VFILES_EARLY_BASE): $(OUT)/%.v : $$(wildcard $(BASE_SRC)/module-edits/$$*/preamble.v) $$(wildcard $(BASE_SRC)/module-edits/$$*/midamble.v) $$(wildcard $(BASE_SRC)/module-edits/$$*/edits) $(BASE_SRC)/edits
+	rm -f $@
 	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard $(BASE_SRC)/module-edits/$*/edits)) \
 	             $(addprefix -p , $(wildcard $(BASE_SRC)/module-edits/$*/preamble.v)) \
 	             $(addprefix --midamble , $(wildcard $(BASE_SRC)/module-edits/$*/midamble.v)) \
 		     $(HS_TO_ROCQ_OPTS_BASE) \
-		     $(BASE_SRC)/base/src/$*.hs
+		     $(BASE_SRC)/base/src/$*.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $@
 
 # Renamed module: Data/Semigroup/Internal -> Data/SemigroupInternal
 $(OUT)/Data/SemigroupInternal.v : $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/preamble.v) $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/midamble.v) $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/edits) $(BASE_SRC)/edits
+	rm -f $@
 	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/edits)) \
 	             $(addprefix -p , $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/preamble.v)) \
 	             $(addprefix --midamble , $(wildcard $(BASE_SRC)/module-edits/Data/Semigroup/Internal/midamble.v)) \
 		     $(HS_TO_ROCQ_OPTS_INTERNAL) \
-		     $(BASE_SRC)/ghc-internal/src/GHC/Internal/Data/Semigroup/Internal.hs
+		     $(BASE_SRC)/ghc-internal/src/GHC/Internal/Data/Semigroup/Internal.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $(OUT)/Data/SemigroupInternal.v
 
 # GHC/Base: merged from multiple source files
@@ -118,6 +122,7 @@ GHC_BASE_MID = $(wildcard $(BASE_SRC)/module-edits/GHC/Base/midamble.v $(BASE_SR
 GHC_BASE_EDITS = $(wildcard $(BASE_SRC)/module-edits/GHC/Base/edits $(BASE_SRC)/module-edits/GHC/Maybe/edits)
 
 $(OUT)/GHC/Base.v: $(GHC_BASE_PRE) $(GHC_BASE_MID) $(GHC_BASE_EDITS) $(BASE_SRC)/edits
+	rm -f $@
 	cat /dev/null $(GHC_BASE_PRE) > Base_preamble.v
 	cat /dev/null $(GHC_BASE_MID) > Base_midamble.v
 	$(HS_TO_ROCQ) -p Base_preamble.v \
@@ -126,7 +131,7 @@ $(OUT)/GHC/Base.v: $(GHC_BASE_PRE) $(GHC_BASE_MID) $(GHC_BASE_EDITS) $(BASE_SRC)
 	             $(HS_TO_ROCQ_OPTS_GHC_BASE) \
 	             $(BASE_SRC)/ghc-internal/src/GHC/Internal/Stack/Types.hs \
 	             $(BASE_SRC)/gen-files/GHC/Internal/Exception/Context.hs \
-	             $(BASE_SRC)/ghc-internal/src/GHC/Internal/Base.hs $(BASE_SRC)/ghc-internal/src/GHC/Internal/Maybe.hs
+	             $(BASE_SRC)/ghc-internal/src/GHC/Internal/Base.hs $(BASE_SRC)/ghc-internal/src/GHC/Internal/Maybe.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $(OUT)/GHC/Base.v
 	rm -f Base_preamble.v Base_midamble.v
 
