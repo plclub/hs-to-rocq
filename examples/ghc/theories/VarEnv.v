@@ -52,7 +52,7 @@ Proof.
   elim: vs => [i].
   unfold elemVarEnv, lookupVarEnv.
   unfold  UniqFM.elemUFM,  UniqFM.lookupUFM.
-  rewrite <- member_lookup. done.
+  rewrite <- (@member_lookup _ _ i (IntMapProofs.All_IntMaps_WF _ i)). done.
 Qed.
 
 Lemma lookupVarEnv_elemVarEnv_false :
@@ -63,7 +63,7 @@ Proof.
   elim: vs => [i].
   unfold elemVarEnv, lookupVarEnv.
   unfold  UniqFM.elemUFM,  UniqFM.lookupUFM.
-  rewrite non_member_lookup.
+  rewrite (@non_member_lookup _ _ i (IntMapProofs.All_IntMaps_WF _ i)).
   done.
 Qed.
 
@@ -128,7 +128,7 @@ Proof.
   unfold elemVarEnv, lookupVarEnv, extendVarEnv.
   unfold  UniqFM.elemUFM,  UniqFM.lookupUFM, UniqFM.addToUFM.
   move=> h.
-  rewrite lookup_insert_neq //.
+  rewrite (@lookup_insert_neq _ _ _ _ i (IntMapProofs.All_IntMaps_WF _ i)) //.
   move => nh.
   rewrite <- eq_unique in nh.
   rewrite Eq_sym in nh.
@@ -145,7 +145,7 @@ Proof.
   unfold elemVarEnv, lookupVarEnv, extendVarEnv.
   unfold  UniqFM.elemUFM,  UniqFM.lookupUFM, UniqFM.addToUFM.
   move=> h.
-  rewrite member_insert.
+  rewrite (@member_insert _ _ _ _ i (IntMapProofs.All_IntMaps_WF _ i)).
   apply /orP.
   left.
   erewrite fold_is_true in h.
@@ -164,7 +164,7 @@ Proof.
   unfold elemVarEnv, extendVarEnv.
   unfold UniqFM.elemUFM, UniqFM.addToUFM.
   move=> h.
-  rewrite member_insert.
+  rewrite (@member_insert _ _ _ _ i (IntMapProofs.All_IntMaps_WF _ i)).
   have HEQ: (Unique.getWordKey (Unique.getUnique v2) ==
              Unique.getWordKey (Unique.getUnique v1)) = false.
   { apply /Eq_eq. move => h0. apply h. apply eq_unique. auto. }
@@ -186,7 +186,10 @@ Proof.
   rewrite -> fold_is_true in h.
   rewrite -> eq_unique in h.
   rewrite h.
-  rewrite non_member_lookup.
+  rewrite (@non_member_lookup _ _
+    (Data.IntMap.Internal.delete (Unique.getWordKey (Unique.getUnique v2)) i)
+    (IntMapProofs.delete_WF (Unique.getWordKey (Unique.getUnique v2)) i
+      (IntMapProofs.All_IntMaps_WF _ i))).
   apply delete_eq.
 Qed.
 
@@ -487,7 +490,4 @@ Proof.
   simpl.
   f_equal.
 Qed.
-
-
-
 

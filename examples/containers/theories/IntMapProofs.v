@@ -115,19 +115,12 @@ Fixpoint Sem2 {a} (s: IntMap a) (i : N) : option a :=
 
 Definition WF {a} (s : IntMap a) : Prop := exists f, Sem s f.
 
-(* Blanket WF axiom: all IntMaps are well-formed patricia tries.
-   This is NOT provable by induction on the IntMap type because the Bin
-   constructor is exposed, allowing construction of structurally invalid
-   maps (e.g., Bin 0 0 Nil Nil with wrong prefix/mask).  However, this
-   axiom is sound in practice: all IntMaps manipulated by translated
-   Haskell code are built exclusively from smart constructors (empty,
-   singleton, insert, delete, union, intersection, difference, filter,
-   etc.) which maintain the patricia trie invariants.  The Bin constructor
-   is never called directly in generated code.
-   Concentrating this trust assumption in one axiom is preferable to
-   threading explicit WF hypotheses through every lemma and every
-   downstream call site (39+ public lemmas, 64+ downstream uses across
-   6 files). *)
+(* Transitional assumption for consumers that still accept raw IntMaps.
+   It is false for the exposed datatype: for example, Bin 0 0 Nil Nil has
+   empty children and cannot satisfy Desc. A smart-constructor usage
+   convention does not establish this universally quantified statement.
+   WF-premised contracts and operation-preservation lemmas let callers
+   replace uses of this assumption with actual invariant evidence. *)
 Axiom All_IntMaps_WF : forall A (m : IntMap A), WF m.
 
 Ltac inversion_Desc HD1 :=
@@ -2481,6 +2474,34 @@ Proof.
        ++ reflexivity.
 Qed.
 
+Lemma delete_Sem:
+  forall {a} e (s: IntMap a) f f',
+  Sem s f ->
+  (forall i, f' i = if (i =? e) then None else f i) ->
+  Sem (delete e s) f'.
+Proof.
+  intros a e s f f' Hsem Hf.
+  destruct Hsem as [a f Hnil | a s r f HD].
+  * apply SemNil. intro i. rewrite Hf Hnil.
+    destruct (i =? e); reflexivity.
+  * eapply Desc0_Sem.
+    eapply delete_Desc.
+    - exact HD.
+    - apply isSubrange_refl.
+    - exact Hf.
+Qed.
+
+Lemma delete_WF:
+  forall {a} e (s: IntMap a),
+  WF s -> WF (delete e s).
+Proof.
+  intros a e s [f Hsem].
+  exists (fun i => if (i =? e) then None else f i).
+  eapply delete_Sem.
+  - exact Hsem.
+  - intro i. reflexivity.
+Qed.
+
 Definition IMFilterWithKey {a} p (s: IntMap a) :=
   Data.IntMap.Internal.filterWithKey p s.
 
@@ -2869,6 +2890,13 @@ Proof.
   - eapply DescSem. eapply map_Desc. apply HD. 
 Qed.
 
+Lemma map_WF: forall a b (s: IntMap a) (f: a -> b),
+    WF s -> WF (IMMap f s).
+Proof.
+  intros a b s f [g Hsem].
+  eexists. exact (map_Sem a b s g f Hsem).
+Qed.
+
 (** Verification of [mapWithKey] **)
 
 Definition IMMapWithKey {a b} (f: Key -> a -> b) (s: IntMap a) :=
@@ -2898,6 +2926,13 @@ Proof.
   intros. induction H.
   - apply SemNil. intros i. specialize (H i). rewrite H. reflexivity.
   - eapply DescSem. eapply mapWithKey_Desc. apply HD.
+Qed.
+
+Lemma mapWithKey_WF: forall a b (s: IntMap a) (f: Key -> a -> b),
+    WF s -> WF (IMMapWithKey f s).
+Proof.
+  intros a b s f [g Hsem].
+  eexists. exact (mapWithKey_Sem a b s g f Hsem).
 Qed.
 
 Fixpoint sem_for_lists {a: Type} (l : list (Key * a)) (i : Key) :=
@@ -3099,4 +3134,3 @@ Proof.
         -- discriminate.
         -- fold (@go a). exact IHHD1_1.
 Qed.
-

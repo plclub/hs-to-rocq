@@ -229,13 +229,13 @@ Proof.
     UniqFM.lookupUFM, Unique.getWordKey, Unique.getKey.
   intros.
   destruct vs.
-  destruct getUniqSet'.
+  destruct getUniqSet' as [m].
   destruct (Unique.getUnique v) as [n] eqn:Hv.
   unfold In, elemVarSet, UniqSet.elementOfUniqSet,
   UniqFM.elemUFM, Unique.getKey, Unique.getWordKey,
   Unique.getKey.
   rewrite Hv.
-  rewrite <- member_lookup.
+  rewrite <- (member_lookup _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
   reflexivity.
 Qed.
 
@@ -247,9 +247,9 @@ Proof.
   unfold UniqSet.lookupUniqSet, UniqSet.elementOfUniqSet in *.
   destruct vs.
   unfold UniqFM.lookupUFM, UniqFM.elemUFM in *.
-  destruct getUniqSet'. 
+  destruct getUniqSet' as [m].
   set (key := Unique.getWordKey (Unique.getUnique v1)) in *.
-  rewrite member_lookup.
+  rewrite (member_lookup _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
   exists v2. auto.
 Qed.
 
@@ -261,9 +261,9 @@ Proof.
   unfold UniqSet.lookupUniqSet, UniqSet.elementOfUniqSet in *.
   destruct vs.
   unfold UniqFM.lookupUFM, UniqFM.elemUFM in *.
-  destruct getUniqSet'.
+  destruct getUniqSet' as [m].
   set (key := Unique.getWordKey (Unique.getUnique v1)) in *.
-  rewrite non_member_lookup.
+  rewrite (non_member_lookup _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
   intuition.
 Qed.
 
@@ -277,7 +277,7 @@ Proof.
   unfold UniqFM.lookupUFM, UniqFM.elemUFM in *.
   destruct getUniqSet'.
   set (key := Unique.getWordKey (Unique.getUnique v1)) in *.
-  rewrite <- member_lookup.
+  apply member_lookup_some.
   auto.
 Qed.
 
@@ -367,8 +367,8 @@ Proof.
   unfold UniqSet.lookupUniqSet, UniqSet.addOneToUniqSet.
   destruct vs.
   unfold UniqFM.lookupUFM, UniqFM.addToUFM.
-  destruct getUniqSet'.
-  eapply lookup_insert_neq.
+  destruct getUniqSet' as [m].
+  eapply (lookup_insert_neq _ _ _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
   auto.
 Qed.
 
@@ -1104,7 +1104,8 @@ Proof.
   rewrite Eq.
   set key :=  Unique.getWordKey (Unique.getUnique y).
   move: (@delete_eq key Var m).
-  rewrite <- non_member_lookup.
+  rewrite <- (non_member_lookup _ _ (Data.IntMap.Internal.delete key m)
+    (IntMapProofs.delete_WF key m (IntMapProofs.All_IntMaps_WF _ m))).
   move => h. rewrite h.
   done.
 Qed.

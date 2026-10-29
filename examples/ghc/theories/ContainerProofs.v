@@ -1,8 +1,8 @@
 (* Properties of IntMap operations.
-   All properties are proved as Lemmas using two foundational Axioms
-   imported from IntMapProofs:
-   - deferredFix2_eq: one-step unfolding of the deferred fixpoint combinator
-   - All_IntMaps_WF: all IntMaps are well-formed patricia tries
+   WF-dependent core contracts take explicit well-formedness evidence.
+   Remaining unconditional consumers instantiate All_IntMaps_WF explicitly
+   until their interfaces carry or establish that evidence. General-recursion
+   proofs also use deferredFix2_eq from IntMapProofs.
 
    Stated in terms of Data.IntMap.Internal operations directly,
    since VarSet/UniqFM unfolds to Internal operations. *)
@@ -288,25 +288,25 @@ Qed.
 
 (* ============================================================ *)
 (* Proved lemmas: via IntMapProofs.Sem (WF-dependent)            *)
-(* Uses IntMapProofs.All_IntMaps_WF axiom to obtain Sem witnesses.           *)
+(* These basic contracts take explicit WF evidence.                       *)
 (* ============================================================ *)
 
 Lemma non_member_lookup :
    forall (A : Type) (key : Internal.Key) (i : IntMap.IntMap A),
+   IntMapProofs.WF i ->
    (Data.IntMap.Internal.member key i = false) <-> (Data.IntMap.Internal.lookup key i = None).
 Proof.
-  intros A key i.
-  destruct (IntMapProofs.All_IntMaps_WF _ i) as [f Hf].
+  intros A key i [f Hf].
   rewrite (IntMapProofs.lookup_Sem Hf) (IntMapProofs.member_Sem Hf).
   destruct (f key); split; intro H; try discriminate; reflexivity.
 Qed.
 
 Lemma member_lookup :
    forall (A : Type) (key : Internal.Key) (i : IntMap.IntMap A),
+   IntMapProofs.WF i ->
    (is_true (Data.IntMap.Internal.member key i)) <-> (exists val, Data.IntMap.Internal.lookup key i = Some val).
 Proof.
-  intros A key i.
-  destruct (IntMapProofs.All_IntMaps_WF _ i) as [f Hf].
+  intros A key i [f Hf].
   rewrite (IntMapProofs.lookup_Sem Hf) (IntMapProofs.member_Sem Hf).
   destruct (f key) as [v|].
   - split; [intro; exists v; reflexivity | auto].
@@ -330,10 +330,10 @@ Proof.
 Qed.
 
 Lemma null_member : forall A (m : IntMap.IntMap A),
+    IntMapProofs.WF m ->
     Data.IntMap.Internal.null m = true <-> (forall k, Data.IntMap.Internal.member k m = false).
 Proof.
-  intros A m.
-  destruct (IntMapProofs.All_IntMaps_WF _ m) as [f Hf].
+  intros A m [f Hf].
   rewrite (IntMapProofs.null_Sem Hf).
   split.
   - intros Hnil k. rewrite (IntMapProofs.member_Sem Hf). rewrite Hnil. reflexivity.
@@ -344,11 +344,11 @@ Qed.
 
 Lemma lookup_insert_neq :
   forall b key1 key2 (val:b) m,
+    IntMapProofs.WF m ->
     key1 <> key2 ->
     Data.IntMap.Internal.lookup key1 (Data.IntMap.Internal.insert key2 val m) = Data.IntMap.Internal.lookup key1 m.
 Proof.
-  intros b key1 key2 val m Hneq.
-  destruct (IntMapProofs.All_IntMaps_WF _ m) as [f Hf].
+  intros b key1 key2 val m [f Hf] Hneq.
   set (f' := fun i => if (i =? key2)%N then Some val else f i).
   assert (Hins : IntMapProofs.Sem (insert key2 val m) f').
   { exact (IntMapProofs.insert_Sem _ key2 val m f f' Hf (fun i => Logic.eq_refl)). }
@@ -357,11 +357,11 @@ Proof.
 Qed.
 
 Lemma member_insert : forall A k k' v (i : IntMap.IntMap A),
+  IntMapProofs.WF i ->
   Data.IntMap.Internal.member k (Data.IntMap.Internal.insert k' v i) =
   (k == k') || Data.IntMap.Internal.member k i.
 Proof.
-  intros A k k' v i.
-  destruct (IntMapProofs.All_IntMaps_WF _ i) as [f Hf].
+  intros A k k' v i [f Hf].
   set (f' := fun j => if (j =? k')%N then Some v else f j).
   assert (Hins : IntMapProofs.Sem (insert k' v i) f').
   { exact (IntMapProofs.insert_Sem _ k' v i f f' Hf (fun j => Logic.eq_refl)). }
@@ -2341,13 +2341,13 @@ Local Lemma disjoint_tip_null_inter : forall A B key (val : A) (m : IntMap.IntMa
   Data.IntMap.Internal.null (Data.IntMap.Internal.intersection (Tip key val) m).
 Proof.
   intros. apply bool_eq_of_iff. split.
-  - intro H1. apply (proj2 (null_member _ _)). intros k.
+   - intro H1. apply (proj2 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _))). intros k.
     rewrite member_intersection_local. simpl Data.IntMap.Internal.member at 1.
     destruct (k == key) eqn:Hkeq; simpl.
     + move: Hkeq => /Eq_eq_Word Hkeq. subst k.
       destruct (Data.IntMap.Internal.member key m); [simpl in H1; discriminate | reflexivity].
     + reflexivity.
-  - intro Hn. pose proof (proj1 (null_member _ _) Hn key) as Hk.
+   - intro Hn. pose proof (proj1 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)) Hn key) as Hk.
     rewrite member_intersection_local in Hk. simpl Data.IntMap.Internal.member at 1 in Hk.
     rewrite Eq_refl_Word in Hk. simpl in Hk.
     destruct (Data.IntMap.Internal.member key m); [discriminate | reflexivity].
@@ -2359,14 +2359,14 @@ Local Lemma disjoint_tip_null_inter_r : forall A B key (val : B) (m : IntMap.Int
   Data.IntMap.Internal.null (Data.IntMap.Internal.intersection m (Tip key val)).
 Proof.
   intros. apply bool_eq_of_iff. split.
-  - intro H1. apply (proj2 (null_member _ _)). intros k.
+   - intro H1. apply (proj2 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _))). intros k.
     rewrite member_intersection_local. simpl Data.IntMap.Internal.member at 2.
     destruct (k == key) eqn:Hkeq.
     + move: Hkeq => /Eq_eq_Word Hkeq. subst k.
       rewrite Bool.andb_true_r.
       destruct (Data.IntMap.Internal.member key m); [simpl in H1; discriminate | reflexivity].
     + rewrite Bool.andb_false_r. reflexivity.
-  - intro Hn. pose proof (proj1 (null_member _ _) Hn key) as Hk.
+   - intro Hn. pose proof (proj1 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)) Hn key) as Hk.
     rewrite member_intersection_local in Hk. simpl Data.IntMap.Internal.member at 2 in Hk.
     rewrite Eq_refl_Word Bool.andb_true_r in Hk.
     destruct (Data.IntMap.Internal.member key m); [discriminate | reflexivity].
@@ -2470,7 +2470,7 @@ Lemma disjoint_spec : forall A B (m1 : IntMap.IntMap A) (m2 : IntMap.IntMap B),
 Proof.
   intros A B m1 m2.
   rewrite disjoint_null_intersection.
-  rewrite (null_member _ _).
+   rewrite (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)).
   split.
   - intros Hn k Hk.
     specialize (Hn k). rewrite member_intersection_local in Hn.
@@ -2626,15 +2626,17 @@ Proof.
     clear H. apply andb_true_iff. split.
     + apply negb_true_iff.
       destruct (Data.IntMap.Internal.member k i1) eqn:Hk; [| reflexivity].
-      exfalso. specialize (Hspec k Hk). rewrite member_insert Eq_refl_Word in Hspec. discriminate.
+       exfalso. specialize (Hspec k Hk).
+       rewrite (member_insert _ _ _ _ i2 (IntMapProofs.All_IntMaps_WF _ i2)) Eq_refl_Word in Hspec. discriminate.
     + apply (proj2 (disjoint_spec _ _ i1 i2)). intros k' Hk'.
-      specialize (Hspec k' Hk'). rewrite member_insert in Hspec.
+       specialize (Hspec k' Hk').
+       rewrite (member_insert _ _ _ _ i2 (IntMapProofs.All_IntMaps_WF _ i2)) in Hspec.
       destruct (k' == k); simpl in Hspec; [discriminate | exact Hspec].
   - intro H. apply andb_true_iff in H. destruct H as [Hnk Hdisj].
     apply negb_true_iff in Hnk.
     pose proof (proj1 (disjoint_spec _ _ i1 i2) Hdisj) as Hspec. clear Hdisj.
     apply (proj2 (disjoint_spec _ _ i1 (Data.IntMap.Internal.insert k v i2))). intros k' Hk'.
-    rewrite member_insert.
+     rewrite (member_insert _ _ _ _ i2 (IntMapProofs.All_IntMaps_WF _ i2)).
     destruct (N.eq_dec k' k) as [-> | Hneq].
     + rewrite Hnk in Hk'. discriminate.
     + change (k' == k) with ((k' =? k)%N).
@@ -2681,7 +2683,7 @@ Lemma disjoint_difference: forall b (i1 i2 i3 : IntMap.IntMap b),
 Proof.
   intros b i1 i2 i3 Hdisj Hnull.
   pose proof (proj1 (disjoint_spec _ _ i2 i3) Hdisj) as Hd. clear Hdisj.
-  pose proof (proj1 (null_member _ _) Hnull) as Hn. clear Hnull.
+   pose proof (proj1 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)) Hnull) as Hn. clear Hnull.
   apply (proj2 (disjoint_spec _ _ i1 i3)). intros k Hk.
   specialize (Hn k). rewrite member_difference in Hn.
   rewrite Hk in Hn. simpl in Hn.
@@ -2701,17 +2703,20 @@ Lemma null_intersection_non_member: forall b k (v : b)(i1 i2 : IntMap.IntMap b),
 Proof.
   intros b k v i1 i2. split.
   - intro H.
-    pose proof (proj1 (null_member _ _) H) as Hn. clear H. split.
-    + specialize (Hn k). rewrite member_intersection member_insert Eq_refl_Word in Hn.
+     pose proof (proj1 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)) H) as Hn. clear H. split.
+     + specialize (Hn k).
+       rewrite member_intersection (member_insert _ _ _ _ i2 (IntMapProofs.All_IntMaps_WF _ i2)) Eq_refl_Word in Hn.
       simpl in Hn. rewrite Bool.andb_true_r in Hn. exact Hn.
-    + apply (proj2 (null_member _ _)). intros k'.
-      specialize (Hn k'). rewrite !member_intersection member_insert in Hn.
+     + apply (proj2 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _))). intros k'.
+       specialize (Hn k').
+       rewrite !member_intersection (member_insert _ _ _ _ i2 (IntMapProofs.All_IntMaps_WF _ i2)) in Hn.
       destruct (k' == k); simpl in Hn.
       * rewrite Bool.andb_true_r in Hn. rewrite member_intersection Hn. reflexivity.
       * rewrite member_intersection. exact Hn.
   - intros [Hnk Hnull].
-    pose proof (proj1 (null_member _ _) Hnull) as Hn. clear Hnull.
-    apply (proj2 (null_member _ _)). intros k'. rewrite member_intersection member_insert.
+     pose proof (proj1 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)) Hnull) as Hn. clear Hnull.
+     apply (proj2 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _))). intros k'.
+     rewrite member_intersection (member_insert _ _ _ _ i2 (IntMapProofs.All_IntMaps_WF _ i2)).
     destruct (N.eq_dec k' k) as [-> | Hneq].
     + rewrite Eq_refl_Word. simpl. rewrite Hnk. reflexivity.
     + change (k' == k) with ((k' =? k)%N).
@@ -2725,9 +2730,9 @@ Lemma null_intersection_difference: forall  b (i1 i2 i3 : IntMap.IntMap b),
   Data.IntMap.Internal.null (Data.IntMap.Internal.intersection i1 i3).
 Proof.
   intros b i1 i2 i3 Hint Hdiff.
-  pose proof (proj1 (null_member _ _) Hint) as Hni. clear Hint.
-  pose proof (proj1 (null_member _ _) Hdiff) as Hnd. clear Hdiff.
-  apply (proj2 (null_member _ _)).
+   pose proof (proj1 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)) Hint) as Hni. clear Hint.
+   pose proof (proj1 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)) Hdiff) as Hnd. clear Hdiff.
+   apply (proj2 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _))).
   intros k. rewrite member_intersection.
   specialize (Hnd k). rewrite member_difference in Hnd.
   specialize (Hni k). rewrite member_intersection in Hni.
@@ -2769,22 +2774,79 @@ Qed.
 (* tree_elem_kv k v m implies lookup k m = Some v (for WF maps) *)
 Lemma tree_elem_kv_lookup :
   forall A k (v : A) (m : IntMap.IntMap A),
+  IntMapProofs.WF m ->
   tree_elem_kv k v m -> Data.IntMap.Internal.lookup k m = Some v.
 Proof.
   intros A k v m.
-  induction m as [p msk l IHl r IHr | k' v' | ]; intro H.
-  - simpl in H. destruct H as [Hl | Hr].
-    + apply IHl in Hl.
-      rewrite (lookup_Bin_oro p msk l r k (IntMapProofs.All_IntMaps_WF _ _)).
-      rewrite Hl. reflexivity.
-    + apply IHr in Hr.
-      rewrite (lookup_Bin_oro p msk l r k (IntMapProofs.All_IntMaps_WF _ _)).
-      destruct (WF_Bin_lookup_disjoint p msk l r k (IntMapProofs.All_IntMaps_WF _ _)) as [Hlnone | Hrnone].
-      * rewrite Hlnone. simpl. exact Hr.
-      * rewrite Hrnone in Hr. discriminate.
+  induction m as [p msk l IHl r IHr | k' v' | ]; intros HWF H.
+  - destruct (WF_Bin_children p msk l r HWF) as [HWFl HWFr].
+    simpl in H. destruct H as [Hl | Hr].
+    + specialize (IHl HWFl Hl).
+      rewrite (lookup_Bin_oro p msk l r k HWF).
+      rewrite IHl. reflexivity.
+    + specialize (IHr HWFr Hr).
+      rewrite (lookup_Bin_oro p msk l r k HWF).
+      destruct (WF_Bin_lookup_disjoint p msk l r k HWF) as [Hlnone | Hrnone].
+      * rewrite Hlnone. simpl. exact IHr.
+      * rewrite Hrnone in IHr. discriminate.
   - simpl in H. destruct H as [Hk Hv]; subst.
     simpl. rewrite Eq_refl_Word. reflexivity.
   - simpl in H. contradiction.
+Qed.
+
+(* Mapping valid entries to their keys lets semantic uniqueness establish
+   tree shape, while the supplied value-equality law handles stored values. *)
+Lemma IntMap_map_keys_equal {A} `{GHC.Base.Eq_ A}
+    (keyof : A -> N)
+    (complete : forall x y, keyof x = keyof y ->
+      GHC.Base.op_zeze__ x y = true) :
+  forall (m1 m2 : IntMap.IntMap A),
+    Data.IntMap.Internal.map keyof m1 = Data.IntMap.Internal.map keyof m2 ->
+    GHC.Base.op_zeze__ m1 m2 = true.
+Proof.
+  induction m1 as [p mask l IHl r IHr | k v |];
+    intros m2 Heq; destruct m2 as [p' mask' l' r' | k' v' |];
+    cbn in Heq; try discriminate.
+  - injection Heq as Hp Hmask Hl Hr. subst p' mask'.
+    change (andb (N.eqb mask mask)
+      (andb (N.eqb p p)
+        (andb (GHC.Base.op_zeze__ l l')
+              (GHC.Base.op_zeze__ r r'))) = true).
+    rewrite !N.eqb_refl (IHl _ Hl) (IHr _ Hr). reflexivity.
+  - injection Heq as Hk Hv. subst k'.
+    change (andb (N.eqb k k) (GHC.Base.op_zeze__ v v') = true).
+    rewrite N.eqb_refl (complete _ _ Hv). reflexivity.
+  - reflexivity.
+Qed.
+
+Lemma IntMap_equal_by_key_membership {A} `{GHC.Base.Eq_ A}
+    (keyof : A -> N)
+    (complete : forall x y, keyof x = keyof y ->
+      GHC.Base.op_zeze__ x y = true)
+    (m1 m2 : IntMap.IntMap A)
+    (WF1 : IntMapProofs.WF m1) (WF2 : IntMapProofs.WF m2)
+    (keys1 : forall k v, Data.IntMap.Internal.lookup k m1 = Some v -> keyof v = k)
+    (keys2 : forall k v, Data.IntMap.Internal.lookup k m2 = Some v -> keyof v = k)
+    (members : forall k, Data.IntMap.Internal.member k m1 =
+                        Data.IntMap.Internal.member k m2) :
+    GHC.Base.op_zeze__ m1 m2 = true.
+Proof.
+  apply (IntMap_map_keys_equal keyof complete).
+  destruct WF1 as [f1 S1], WF2 as [f2 S2].
+  eapply IntMapProofs.Sem_unique.
+  - exact (IntMapProofs.map_Sem _ _ _ _ keyof S1).
+  - exact (IntMapProofs.map_Sem _ _ _ _ keyof S2).
+  - intro k.
+    pose proof (members k) as Hmem.
+    rewrite (IntMapProofs.member_Sem S1)
+            (IntMapProofs.member_Sem S2) in Hmem.
+    pose proof (@IntMapProofs.lookup_Sem _ _ _ k S1) as L1.
+    pose proof (@IntMapProofs.lookup_Sem _ _ _ k S2) as L2.
+    destruct (f1 k) as [v1|] eqn:F1;
+      destruct (f2 k) as [v2|] eqn:F2; try discriminate; simpl.
+    + rewrite F1. simpl.
+      rewrite (keys1 k v1 L1) (keys2 k v2 L2). reflexivity.
+    + rewrite F1. reflexivity.
 Qed.
 
 (* ============================================================ *)
@@ -2796,15 +2858,15 @@ Lemma null_intersection_eq : forall b (x1 x2 y1 y2 : IntMap.IntMap b),
 Proof.
   intros b x1 x2 y1 y2 H1 H2.
   apply bool_eq_of_iff. split.
-  - intro H. pose proof (proj1 (null_member _ _) H) as Hn. clear H.
-    apply (proj2 (null_member _ _)). intros k.
+   - intro H. pose proof (proj1 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)) H) as Hn. clear H.
+     apply (proj2 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _))). intros k.
     specialize (Hn k). rewrite member_intersection in Hn.
     rewrite member_intersection.
     pose proof (bool_eq_of_iff _ _ (H1 k)) as E1.
     pose proof (bool_eq_of_iff _ _ (H2 k)) as E2.
     rewrite E1 E2 in Hn. exact Hn.
-  - intro H. pose proof (proj1 (null_member _ _) H) as Hn. clear H.
-    apply (proj2 (null_member _ _)). intros k.
+   - intro H. pose proof (proj1 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _)) H) as Hn. clear H.
+     apply (proj2 (null_member _ _ (IntMapProofs.All_IntMaps_WF _ _))). intros k.
     specialize (Hn k). rewrite member_intersection in Hn.
     rewrite member_intersection.
     pose proof (bool_eq_of_iff _ _ (H1 k)) as E1.

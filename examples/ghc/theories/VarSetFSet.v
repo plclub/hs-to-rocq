@@ -171,14 +171,15 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     move => [[m1]] [[m2]] Hsub.
     unfold subVarSet, isEmptyVarSet, UniqSet.isEmptyUniqSet, UniqFM.isNullUFM.
     unfold minusVarSet, UniqSet.minusUniqSet, UniqFM.minusUFM.
-    apply null_member.
+    apply (proj2 (@null_member _ (Data.IntMap.Internal.difference m1 m2)
+      (IntMapProofs.All_IntMaps_WF _ (Data.IntMap.Internal.difference m1 m2)))).
     intros k.
     rewrite member_difference.
     destruct (Data.IntMap.Internal.member k m1) eqn:Hm1; [|reflexivity].
     simpl.
     (* member k m1 = true, need member k m2 = true *)
     have [v Hv] : exists v, Data.IntMap.Internal.lookup k m1 = Some v.
-    { apply member_lookup. exact Hm1. }
+    { apply member_lookup_some. exact Hm1. }
     pose proof (StrongValidVarSet_Axiom (UniqSet.Mk_UniqSet (UniqFM.UFM m1))) as Hstrong.
     simpl in Hstrong. specialize (Hstrong k v Hv).
     have Hin : elemVarSet v (UniqSet.Mk_UniqSet (UniqFM.UFM m1)) = true.
@@ -200,7 +201,8 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     move => Hin.
     have Hk : Data.IntMap.Internal.member (Unique.getWordKey (Unique.getUnique a))
               (Data.IntMap.Internal.difference m1 m2) = false.
-    { apply null_member. exact Hnull. }
+    { exact (proj1 (@null_member _ (Data.IntMap.Internal.difference m1 m2)
+        (IntMapProofs.All_IntMaps_WF _ (Data.IntMap.Internal.difference m1 m2))) Hnull _). }
     rewrite member_difference in Hk.
     rewrite Hin in Hk. simpl in Hk.
     (* Hk : negb (member ... m2) = false *)
@@ -216,12 +218,12 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     unfold Empty, In, is_empty.
     move => [[m]] Hempty.
     unfold isEmptyVarSet, UniqSet.isEmptyUniqSet, UniqFM.isNullUFM.
-    apply null_member.
+    apply (proj2 (@null_member _ m (IntMapProofs.All_IntMaps_WF _ m))).
     intros k.
     destruct (Data.IntMap.Internal.member k m) eqn:Hmem; [|reflexivity].
     exfalso.
     have [v Hv] : exists v, Data.IntMap.Internal.lookup k m = Some v.
-    { apply member_lookup. exact Hmem. }
+    { apply member_lookup_some. exact Hmem. }
     pose proof (StrongValidVarSet_Axiom (UniqSet.Mk_UniqSet (UniqFM.UFM m))) as Hstrong.
     simpl in Hstrong. specialize (Hstrong k v Hv).
     apply (Hempty v).
@@ -237,7 +239,7 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     move => Hnull a.
     unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM.
     have Hk : Data.IntMap.Internal.member (Unique.getWordKey (Unique.getUnique a)) m = false.
-    { apply null_member. exact Hnull. }
+    { exact (proj1 (@null_member _ m (IntMapProofs.All_IntMaps_WF _ m)) Hnull _). }
     rewrite Hk. discriminate.
   Qed.
 
@@ -248,7 +250,7 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     move => [[m]] x y Eq.
     unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM.
     unfold extendVarSet, UniqSet.addOneToUniqSet, UniqFM.addToUFM.
-    rewrite member_insert.
+    rewrite (@member_insert _ _ _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
     rewrite -> eq_unique in Eq.
     rewrite Eq. rewrite Eq_refl. reflexivity.
   Qed.
@@ -259,7 +261,9 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     move => [[m]] x y.
     unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM.
     unfold extendVarSet, UniqSet.addOneToUniqSet, UniqFM.addToUFM.
-    move => H. rewrite member_insert. rewrite H orbT. reflexivity.
+    move => H.
+    rewrite (@member_insert _ _ _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
+    rewrite H orbT. reflexivity.
   Qed.
 
   Lemma add_3 :
@@ -269,7 +273,7 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     move => [[m]] x y NEq.
     unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM.
     unfold extendVarSet, UniqSet.addOneToUniqSet, UniqFM.addToUFM.
-    rewrite member_insert.
+    rewrite (@member_insert _ _ _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
     have Hneq: (Unique.getWordKey (Unique.getUnique y) ==
                 Unique.getWordKey (Unique.getUnique x)) = false.
     { apply /Eq_eq. move => h. apply NEq. apply eq_unique. symmetry. exact h. }
@@ -464,11 +468,12 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     unfold In, filter, filterVarSet, UniqSet.filterUniqSet, UniqFM.filterUFM in *.
     unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM in *.
     set (key := Unique.getWordKey (Unique.getUnique x)) in *.
-    apply member_lookup in Hin. destruct Hin as [val Hval].
+    apply member_lookup_some in Hin. destruct Hin as [val Hval].
     (* filter is filterWithKey, so lookup_filterWithKey applies *)
     unfold Data.IntMap.Internal.filter in Hval.
     apply lookup_filterWithKey in Hval.
-    apply member_lookup. exists val. exact Hval.
+    apply (proj2 (@member_lookup _ key m (IntMapProofs.All_IntMaps_WF _ m))).
+    exists val. exact Hval.
   Qed.
 
   Lemma filter_2 :
@@ -480,7 +485,7 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     unfold In, filter, filterVarSet, UniqSet.filterUniqSet, UniqFM.filterUFM in *.
     unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM in *.
     set (key := Unique.getWordKey (Unique.getUnique x)) in *.
-    apply member_lookup in Hin. destruct Hin as [val Hval].
+    apply member_lookup_some in Hin. destruct Hin as [val Hval].
     apply lookup_filter_Some in Hval. destruct Hval as [Hpval Hlookup].
     (* val is the Var stored at key in the original map.
        ValidVarSet_Axiom: lookupVarSet s x = Some val -> x == val.
@@ -503,7 +508,7 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM in *.
     set (key := Unique.getWordKey (Unique.getUnique x)) in *.
     (* Get val from member *)
-    apply member_lookup in Hin. destruct Hin as [val Hval].
+    apply member_lookup_some in Hin. destruct Hin as [val Hval].
     (* ValidVarSet gives x == val *)
     assert (Heq : Var_as_DT.eq x val).
     { unfold Var_as_DT.eq, Var_as_DT.eqb.
@@ -691,14 +696,16 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     apply intmap_foldr_go_andb_all_true.
     intros k v Helem.
     (* v is structurally at key k in m. Use tree_elem_kv_lookup to get lookup. *)
-    have Hlookup := tree_elem_kv_lookup _ _ _ _ Helem.
+    have HWF := IntMapProofs.All_IntMaps_WF _ m.
+    have Hlookup := @tree_elem_kv_lookup _ _ _ m HWF Helem.
     (* By StrongValidVarSet, getWordKey (getUnique v) = k *)
     pose proof (StrongValidVarSet_Axiom (UniqSet.Mk_UniqSet (UniqFM.UFM m))) as Hstrong.
     simpl in Hstrong. specialize (Hstrong k v Hlookup).
     (* So elemVarSet v s = member k m = true *)
     have Hin : elemVarSet v (UniqSet.Mk_UniqSet (UniqFM.UFM m)) = true.
     { unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM.
-      rewrite Hstrong. apply member_lookup. exists v. exact Hlookup. }
+      rewrite Hstrong. apply (proj2 (@member_lookup _ _ m HWF)).
+      exists v. exact Hlookup. }
     exact (Hall v Hin).
   Qed.
 
@@ -716,7 +723,7 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     have [Hlookup _] := intmap_foldr_go_andb_true _ _ _ Hforall.
     (* x is In s, so lookup at its key returns some value *)
     unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM in Hin.
-    apply member_lookup in Hin. destruct Hin as [val Hval].
+    apply member_lookup_some in Hin. destruct Hin as [val Hval].
     (* By the foldr spec, f val = true *)
     have Hfval := Hlookup _ _ Hval.
     (* By ValidVarSet, x == val, so by compat_bool, f x = f val *)
@@ -766,14 +773,16 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     (* Extract witness from the fold *)
     destruct (intmap_foldr_go_orb_witness _ _ Hexists) as [k [v [Helem Hfv]]].
     (* v is structurally in the tree; use tree_elem_kv_lookup to get lookup *)
-    have Hlookup := tree_elem_kv_lookup _ _ _ _ Helem.
+    have HWF := IntMapProofs.All_IntMaps_WF _ m.
+    have Hlookup := @tree_elem_kv_lookup _ _ _ m HWF Helem.
     (* By StrongValidVarSet, getWordKey (getUnique v) = k *)
     pose proof (StrongValidVarSet_Axiom (UniqSet.Mk_UniqSet (UniqFM.UFM m))) as Hstrong.
     simpl in Hstrong. specialize (Hstrong k v Hlookup).
     (* So elemVarSet v s = member k m = true *)
     exists v. split.
     - unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM.
-      rewrite Hstrong. apply member_lookup. exists v. exact Hlookup.
+      rewrite Hstrong. apply (proj2 (@member_lookup _ _ m HWF)).
+      exists v. exact Hlookup.
     - exact Hfv.
   Qed.
 
@@ -834,7 +843,10 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
       |exact (diff_false_true (proj2 HEqual (@Logic.eq_refl _ true)))]. }
     have Hresult := @VarSet_extensional_equal
                       (UniqSet.Mk_UniqSet (UniqFM.UFM m1))
-                      (UniqSet.Mk_UniqSet (UniqFM.UFM m2)) Hmem.
+                      (UniqSet.Mk_UniqSet (UniqFM.UFM m2))
+                      (IntMapProofs.All_IntMaps_WF _ m1)
+                      (IntMapProofs.All_IntMaps_WF _ m2)
+                      (@ValidVarSet_Axiom _) (@ValidVarSet_Axiom _) Hmem.
     simpl VarSet_IntMap in Hresult. exact Hresult.
   Qed.
 

@@ -265,7 +265,7 @@ unfold UniqInv in *.
 unfold UniqFM.addToUFM.
 unfold UniqFM.lookupUFM in *.
 intros.
-destruct set.
+destruct set as [m].
 rename arg_1__ into z.
 destruct (eqUnique (getUnique z) (getUnique x)) eqn:EQ.
 - apply eqUnique_eq in EQ. rewrite <- EQ in *.
@@ -276,7 +276,8 @@ destruct (eqUnique (getUnique z) (getUnique x)) eqn:EQ.
   assert (Hneq : getWordKey (getUnique x) <> getWordKey (getUnique z)).
   { unfold getWordKey, getKey, not. intro h. apply EQ.
     destruct (getUnique x). destruct (getUnique z). subst. auto. }
-  rewrite (lookup_insert_neq _ _ _ _ _ Hneq) in H0.
+  rewrite (lookup_insert_neq _ _ _ _ m
+    (IntMapProofs.All_IntMaps_WF _ m) Hneq) in H0.
   apply wildcard'.
   auto.
 Defined.
