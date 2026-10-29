@@ -262,4 +262,4 @@ Regenerated from GHC 9.10 transformers source via symlink `transformers -> ../gh
 
 - Every time before you commit, you should also check if other modules have been broken due to this change. For example, check `examples/test` even if you have only been working on `examples/containers`.
 - After significant functional changes (e.g., replacing `redefine` with native implementations), update README files, CLAUDE.md, and any plan documents to reflect the new state before committing.
-- Commit to git at each milestone with a `Co-Authored-By:` trailer crediting the coding agent that produced the work. Use the active agent and model name (e.g. `Co-Authored-By: Open Code (GLM-5.2) <noreply@opencode.ai>`), substituting whichever agent/model you are currently running.
+- Commit, stage, push, or otherwise change Git state only when the user explicitly requests it. Invoking `/ci-fix` authorizes its documented fix commits; `/ci` only reports results.
