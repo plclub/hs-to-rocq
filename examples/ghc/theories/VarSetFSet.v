@@ -622,35 +622,59 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     - contradiction.
   Qed.
 
-  (* Connection: Data.IntMap.Internal.foldr (andb . f) true m = intmap_foldr_go ... *)
-  (* For andb, the negative-mask dispatch order doesn't matter *)
-  (* BLOCKER: Data.IntMap.Internal.foldr wraps its inner fixpoint `go` with a
-     top-level negative-mask check: for Bin _ m l r, if m < 0 it traverses
-     go (go z l) r instead of go (go z r) l. The inner `go` is identical to
-     intmap_foldr_go. For andb, traversal order is irrelevant because
-     (f v1 && (f v2 && acc)) = (f v2 && (f v1 && acc)) when the initial
-     accumulator is `true`. However, proving this requires unfolding the
-     large Data.IntMap.Internal.foldr definition, which causes Coq memory
-     exhaustion. Possible fix: prove a general lemma that foldr's inner go =
-     intmap_foldr_go by structural induction on the IntMap (skipping the
-     top-level negative-mask wrapper), then show the wrapper is harmless for
-     commutative-in-accumulator functions. Alternatively, make the inner go
-     function accessible as a separate Definition in IntMap/Internal.v. *)
+  (* Connect foldr's inner go to the structural fold. *)
+  Local Lemma intmap_foldr_inner_eq_go :
+    forall (a b : Type) (f : a -> b -> b) z (m : Data.IntMap.Internal.IntMap a),
+    (fix go z' t' := match t' with
+     | Data.IntMap.Internal.Nil => z'
+     | Data.IntMap.Internal.Tip _ v => f v z'
+     | Data.IntMap.Internal.Bin _ _ l r => go (go z' r) l
+     end) z m = intmap_foldr_go f z m.
+  Proof.
+    intros a b f z m; revert z.
+    induction m as [p mask l IHl r IHr | k v | ]; intro z;
+      cbn [intmap_foldr_go]; [rewrite IHl IHr | | ]; reflexivity.
+  Qed.
+
+  (* Factoring makes the top-level dispatch harmless for andb. *)
   Lemma foldr_andb_eq_go :
     forall (f : elt -> bool) (m : Data.IntMap.Internal.IntMap elt),
     Data.IntMap.Internal.foldr (fun v acc => f v && acc) true m =
     intmap_foldr_go (fun v acc => f v && acc) true m.
-  Admitted.
+  Proof.
+    intros f m.
+    destruct m as [p mask l r | k v | ]; unfold Data.IntMap.Internal.foldr.
+    - rewrite !intmap_foldr_inner_eq_go.
+      cbn [intmap_foldr_go].
+      destruct (mask GHC.Base.< GHC.Num.fromInteger 0); [|reflexivity].
+      rewrite (intmap_foldr_go_andb_factor f
+                 (intmap_foldr_go (fun v acc => f v && acc) true l) r).
+      rewrite (intmap_foldr_go_andb_factor f
+                 (intmap_foldr_go (fun v acc => f v && acc) true r) l).
+      apply Bool.andb_comm.
+    - reflexivity.
+    - reflexivity.
+  Qed.
 
-  (* BLOCKER: Same as foldr_andb_eq_go — the inner `go` of foldr matches
-     intmap_foldr_go structurally, and for orb the traversal order is
-     irrelevant (orb is commutative/associative with identity `false`).
-     Blocked by the same memory exhaustion when unfolding foldr. *)
+  (* The same argument for orb. *)
   Lemma foldr_orb_eq_go :
     forall (f : elt -> bool) (m : Data.IntMap.Internal.IntMap elt),
     Data.IntMap.Internal.foldr (fun v acc => f v || acc) false m =
     intmap_foldr_go (fun v acc => f v || acc) false m.
-  Admitted.
+  Proof.
+    intros f m.
+    destruct m as [p mask l r | k v | ]; unfold Data.IntMap.Internal.foldr.
+    - rewrite !intmap_foldr_inner_eq_go.
+      cbn [intmap_foldr_go].
+      destruct (mask GHC.Base.< GHC.Num.fromInteger 0); [|reflexivity].
+      rewrite (intmap_foldr_go_orb_factor f
+                 (intmap_foldr_go (fun v acc => f v || acc) false l) r).
+      rewrite (intmap_foldr_go_orb_factor f
+                 (intmap_foldr_go (fun v acc => f v || acc) false r) l).
+      apply Bool.orb_comm.
+    - reflexivity.
+    - reflexivity.
+  Qed.
 
   (* ---- End of foldr helpers ---- *)
 
@@ -716,7 +740,7 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
     rewrite foldr_orb_eq_go.
     (* x is In s, so lookup returns some value *)
     unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM in Hin.
-    apply member_lookup in Hin. destruct Hin as [val Hval].
+    apply member_lookup_some in Hin. destruct Hin as [val Hval].
     (* By ValidVarSet, x == val, so by compat_bool, f val = f x = true *)
     have Heq : Var_as_DT.eq x val.
     { unfold Var_as_DT.eq, Var_as_DT.eqb.
@@ -724,18 +748,10 @@ Module VarSetFSet <: WSfun(Var_as_DT) <: WS.
         by exact Hval.
       apply ValidVarSet_Axiom in Hlook. exact Hlook. }
     have Hfval : f val = true by rewrite <- (Hcompat x val Heq).
-    (* BLOCKER: Need the reverse of tree_elem_kv_lookup: given
-       lookup k m = Some v, prove tree_elem_kv k v m. This is a
-       straightforward structural induction on m, but the VarSetFSet
-       Module shadows Coq's eq with E.eq, so `destruct ... eqn:` and
-       `rewrite ... in *` tactics fail inside this section. FIX: prove
-       `lookup_tree_elem_kv` in ContainerProofs.v (outside this Module)
-       and import it. Alternatively, use `remember` instead of `eqn:`.
-       With that reverse lemma, the remaining admit becomes trivial. *)
     have Helem : tree_elem_kv (Unique.getWordKey (Unique.getUnique x)) val m
-      by admit.
+      by exact (lookup_tree_elem_kv _ _ _ _ Hval).
     exact (intmap_foldr_go_orb_some_true _ _ _ _ Helem Hfval).
-  Admitted.
+  Qed.
 
   Lemma exists_2 :
     forall (s : t) (f : elt -> bool),

@@ -124,8 +124,16 @@ Theorem collectNBinders_k_is_collectNBinders `{Default r} {b} (orig_n : nat) (or
   \/
   (panicked (collectNBinders_k orig_n orig_expr k) /\ panicked (collectNBinders orig_n orig_expr)).
 Proof.
-  (* Proof needs updating for GHC 9.10 Expr constructors *)
-Admitted.  
+  rewrite /collectNBinders_k /collectNBinders.
+  elim: orig_n orig_expr (@nil b) => [|n IH] expr bs.
+  - by case: expr; left.
+  - case: expr => /=; try by move=> *; right; split; apply StrPanic.
+    move=> v body.
+    rewrite /Nat.error_sub /= Nat.sub_0_r.
+    case: (IH body (v :: bs)) => [Heq | Hpanic].
+    + by left.
+    + by right.
+Qed.
 
 (******************************************************************************)
 (** CoreUtils **)

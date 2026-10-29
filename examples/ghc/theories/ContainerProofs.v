@@ -48,6 +48,24 @@ Qed.
 (* ============================================================ *)
 
 (* Sem implies Sem2 agreement *)
+Local Lemma WF_Bin_children : forall {a} p msk (l r : IntMap.IntMap a),
+  IntMapProofs.WF (Bin p msk l r) ->
+  IntMapProofs.WF l /\ IntMapProofs.WF r.
+Proof.
+  intros a p msk l r [f Hf].
+  inversion Hf.
+  apply Eqdep.EqdepTheory.inj_pair2 in H1.
+  apply Eqdep.EqdepTheory.inj_pair2 in H2.
+  subst.
+  inversion HD.
+  repeat match goal with
+    | Heq : existT _ _ _ = existT _ _ _ |- _ =>
+        apply Eqdep.EqdepTheory.inj_pair2 in Heq
+  end.
+  subst.
+  split; eexists; eapply IntMapProofs.DescSem; eassumption.
+Qed.
+
 (* For WF maps, lookup equals the compositional Sem2.
    Proved directly by structural induction on the map, avoiding
    dependency on Sem induction with Asymmetric Patterns. *)
@@ -57,15 +75,14 @@ Proof.
   intros a s.
   induction s as [p msk l IHl r IHr | kx vx | ]; intros k HWF.
   - (* Bin case: use zero_oro to convert the if/then/else to oro *)
-    assert (HWFl : IntMapProofs.WF l) by exact (IntMapProofs.All_IntMaps_WF _ l).
-    assert (HWFr : IntMapProofs.WF r) by exact (IntMapProofs.All_IntMaps_WF _ r).
+    destruct (WF_Bin_children p msk l r HWF) as [HWFl HWFr].
     simpl Data.IntMap.Internal.lookup. simpl IntMapProofs.Sem2.
     (* Rewrite by IH *)
     rewrite (IHl k HWFl). rewrite (IHr k HWFr).
     (* Goal: if zero k msk then Sem2 l k else Sem2 r k = oro (Sem2 l k) (Sem2 r k) *)
     (* Extract Desc of Bin via WF to get range structure *)
     destruct HWF as [f Hf].
-    (* Get the Desc for each subtree by using IntMapProofs.All_IntMaps_WF *)
+    (* Get the Desc for each subtree from the parent's Sem evidence. *)
     (* For the range info, use the fact that WF (Bin p msk l r) gives us Desc *)
     (* Specifically: from Desc (Bin p msk l r) rr f, we get:
        Desc l r1 ff1, Desc r r2 ff2,
@@ -141,8 +158,7 @@ Local Lemma lookup_Bin_oro : forall {a} p msk (l r : IntMap.IntMap a) k,
 Proof.
   intros a p msk l r k HWF.
   rewrite (lookup_Sem2 _ k HWF). simpl.
-  assert (HWFl : IntMapProofs.WF l) by exact (IntMapProofs.All_IntMaps_WF _ l).
-  assert (HWFr : IntMapProofs.WF r) by exact (IntMapProofs.All_IntMaps_WF _ r).
+  destruct (WF_Bin_children p msk l r HWF) as [HWFl HWFr].
   rewrite <- (lookup_Sem2 l k HWFl).
   rewrite <- (lookup_Sem2 r k HWFr).
   reflexivity.
@@ -295,6 +311,22 @@ Proof.
   destruct (f key) as [v|].
   - split; [intro; exists v; reflexivity | auto].
   - split; [intro H; discriminate | intros [v Hv]; discriminate].
+Qed.
+
+(* The forward direction needs no well-formedness: member follows lookup's
+   routing after its additional prefix check succeeds. *)
+Lemma member_lookup_some : forall A k (m : IntMap.IntMap A),
+  Data.IntMap.Internal.member k m = true ->
+  exists v, Data.IntMap.Internal.lookup k m = Some v.
+Proof.
+  intros A k m.
+  induction m as [p msk l IHl r IHr | k' v' | ]; simpl.
+  - destruct (Data.IntMap.Internal.nomatch k p msk); [discriminate |].
+    destruct (Data.IntSet.Internal.zero k msk).
+    + exact IHl.
+    + exact IHr.
+  - intro H. rewrite H. exists v'. reflexivity.
+  - discriminate.
 Qed.
 
 Lemma null_member : forall A (m : IntMap.IntMap A),
@@ -2714,6 +2746,23 @@ Fixpoint tree_elem_kv {a} (k : N) (v : a) (m : IntMap.IntMap a) : Prop :=
   | Tip k' v' => k = k' /\ v = v'
   | Bin _ _ l r => tree_elem_kv k v l \/ tree_elem_kv k v r
   end.
+
+(* Successful lookup always identifies a structural tree element, even
+   when the tree is not well-formed. *)
+Lemma lookup_tree_elem_kv : forall A k (v : A) m,
+  Data.IntMap.Internal.lookup k m = Some v -> tree_elem_kv k v m.
+Proof.
+  intros A k v m.
+  induction m as [p msk l IHl r IHr | k' v' | ]; simpl.
+  - destruct (Data.IntSet.Internal.zero k msk).
+    + intro H. left. exact (IHl H).
+    + intro H. right. exact (IHr H).
+  - destruct (k == k') eqn:Hk; [| discriminate].
+    intro H. inversion H; subst.
+    move: Hk => /Eq_eq_Word Hk.
+    split; [exact Hk | reflexivity].
+  - discriminate.
+Qed.
 
 (* tree_elem_kv k v m implies lookup k m = Some v (for WF maps) *)
 Lemma tree_elem_kv_lookup :
