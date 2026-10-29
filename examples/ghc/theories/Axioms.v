@@ -234,7 +234,26 @@ Definition StrongValidVarSet (vs : VarSet) : Prop :=
       Unique.getWordKey (Unique.getUnique v) = k
   end.
 
-Axiom StrongValidVarSet_Axiom : forall vs, StrongValidVarSet vs.
+(* The stronger invariant is derived from ValidVarSet: every raw key can
+   be queried with a Var carrying that unique. Reuse the stored Var's other
+   fields so that this argument needs no additional inhabitance assumptions. *)
+Lemma ValidVarSet_StrongValidVarSet :
+  forall vs, ValidVarSet vs -> StrongValidVarSet vs.
+Proof.
+  intros [[m]] Hvalid k [n [u] t mult sc d i] Hlookup.
+  pose proof (Hvalid (Mk_Id n (Unique.MkUnique k) t mult sc d i)
+                    (Mk_Id n (Unique.MkUnique u) t mult sc d i)
+                    Hlookup) as Heq.
+  change (BinNat.N.eqb k u = true) in Heq.
+  change (u = k).
+  symmetry. apply BinNat.N.eqb_eq. exact Heq.
+Qed.
+
+Lemma StrongValidVarSet_Axiom : forall vs, StrongValidVarSet vs.
+Proof.
+  intros vs. apply ValidVarSet_StrongValidVarSet.
+  apply ValidVarSet_Axiom.
+Qed.
 
 
 (** ** Extensional equality for VarSets *)
@@ -256,6 +275,5 @@ Axiom VarSet_extensional_equal : forall vs1 vs2 : VarSet,
 
 
 (********************************* *)
-
 
 

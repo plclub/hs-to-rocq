@@ -490,6 +490,7 @@ Proof.
   intros a key m.
   induction m as [p msk l IHl r IHr | ky vy | ]; intros k HWF.
   - (* Bin case *)
+    destruct (WF_Bin_children p msk l r HWF) as [HWFl HWFr].
     simpl Data.IntMap.Internal.delete.
     destruct (nomatch key p msk) eqn:Hnm.
     + (* nomatch: delete returns Bin p msk l r unchanged *)
@@ -540,7 +541,7 @@ Proof.
            ** (* k = key *)
               apply N.eqb_eq in Hkkey. subst k.
               assert (H_delL : IntMapProofs.Sem2 (Bin p' msk' l' r') key = None).
-              { pose proof (IHl key (IntMapProofs.All_IntMaps_WF _ l)) as H.
+              { pose proof (IHl key HWFl) as H.
                 rewrite N.eqb_refl in H. exact H. }
               assert (H_r : IntMapProofs.Sem2 r key = None).
               { exact (WF_Bin_left_key_not_right p msk l r key HWF Hz). }
@@ -549,7 +550,7 @@ Proof.
               rewrite H_delL. rewrite H_r. simpl. reflexivity.
            ** (* k ≠ key *)
               assert (H_delL : IntMapProofs.Sem2 (Bin p' msk' l' r') k = IntMapProofs.Sem2 l k).
-              { pose proof (IHl k (IntMapProofs.All_IntMaps_WF _ l)) as H.
+              { pose proof (IHl k HWFl) as H.
                 rewrite Hkkey in H. exact H. }
               rewrite (Sem2_Bin p msk (Bin p' msk' l' r') r k).
               rewrite H_delL.
@@ -558,14 +559,14 @@ Proof.
            destruct (k =? key)%N eqn:Hkkey.
            ** apply N.eqb_eq in Hkkey. subst k.
               assert (H_delL : IntMapProofs.Sem2 (Tip ky' vy') key = None).
-              { pose proof (IHl key (IntMapProofs.All_IntMaps_WF _ l)) as H.
+              { pose proof (IHl key HWFl) as H.
                 rewrite N.eqb_refl in H. exact H. }
               assert (H_r : IntMapProofs.Sem2 r key = None).
               { exact (WF_Bin_left_key_not_right p msk l r key HWF Hz). }
               rewrite (Sem2_Bin p msk (Tip ky' vy') r key).
               rewrite H_delL. rewrite H_r. simpl. reflexivity.
            ** assert (H_delL : IntMapProofs.Sem2 (Tip ky' vy') k = IntMapProofs.Sem2 l k).
-              { pose proof (IHl k (IntMapProofs.All_IntMaps_WF _ l)) as H.
+              { pose proof (IHl k HWFl) as H.
                 rewrite Hkkey in H. exact H. }
               rewrite (Sem2_Bin p msk (Tip ky' vy') r k).
               rewrite H_delL.
@@ -580,7 +581,7 @@ Proof.
            ++ (* k ≠ key: Sem2 r k = Sem2 (Bin p msk l r) k = oro (Sem2 l k) (Sem2 r k) *)
               (* From IHl: None = Sem2 l k (since Sem2 Nil k = None = Sem2 l k for k≠key) *)
               assert (Hl_k_none : IntMapProofs.Sem2 l k = None).
-              { pose proof (IHl k (IntMapProofs.All_IntMaps_WF _ l)) as H.
+              { pose proof (IHl k HWFl) as H.
                 rewrite Hkkey in H.
                 (* H : None = Sem2 l k *)
                 exact (eq_sym H). }
@@ -593,14 +594,14 @@ Proof.
            destruct (k =? key)%N eqn:Hkkey.
            ** apply N.eqb_eq in Hkkey. subst k.
               assert (H_delR : IntMapProofs.Sem2 (Bin p' msk' l' r') key = None).
-              { pose proof (IHr key (IntMapProofs.All_IntMaps_WF _ r)) as H.
+              { pose proof (IHr key HWFr) as H.
                 rewrite N.eqb_refl in H. exact H. }
               assert (H_l : IntMapProofs.Sem2 l key = None).
               { exact (WF_Bin_right_key_not_left p msk l r key HWF Hz). }
               rewrite (Sem2_Bin p msk l (Bin p' msk' l' r') key).
               rewrite H_delR. rewrite H_l. simpl. reflexivity.
            ** assert (H_delR : IntMapProofs.Sem2 (Bin p' msk' l' r') k = IntMapProofs.Sem2 r k).
-              { pose proof (IHr k (IntMapProofs.All_IntMaps_WF _ r)) as H.
+              { pose proof (IHr k HWFr) as H.
                 rewrite Hkkey in H. exact H. }
               rewrite (Sem2_Bin p msk l (Bin p' msk' l' r') k).
               rewrite H_delR.
@@ -609,14 +610,14 @@ Proof.
            destruct (k =? key)%N eqn:Hkkey.
            ** apply N.eqb_eq in Hkkey. subst k.
               assert (H_delR : IntMapProofs.Sem2 (Tip ky' vy') key = None).
-              { pose proof (IHr key (IntMapProofs.All_IntMaps_WF _ r)) as H.
+              { pose proof (IHr key HWFr) as H.
                 rewrite N.eqb_refl in H. exact H. }
               assert (H_l : IntMapProofs.Sem2 l key = None).
               { exact (WF_Bin_right_key_not_left p msk l r key HWF Hz). }
               rewrite (Sem2_Bin p msk l (Tip ky' vy') key).
               rewrite H_delR. rewrite H_l. simpl. reflexivity.
            ** assert (H_delR : IntMapProofs.Sem2 (Tip ky' vy') k = IntMapProofs.Sem2 r k).
-              { pose proof (IHr k (IntMapProofs.All_IntMaps_WF _ r)) as H.
+              { pose proof (IHr k HWFr) as H.
                 rewrite Hkkey in H. exact H. }
               rewrite (Sem2_Bin p msk l (Tip ky' vy') k).
               rewrite H_delR.
@@ -628,7 +629,7 @@ Proof.
               apply (WF_Bin_right_key_not_left p msk l r key HWF Hz).
            ++ (* k ≠ key: Sem2 r k = None, so Sem2 l k = Sem2 (Bin p msk l r) k *)
               assert (Hr_k_none : IntMapProofs.Sem2 r k = None).
-              { pose proof (IHr k (IntMapProofs.All_IntMaps_WF _ r)) as H.
+              { pose proof (IHr k HWFr) as H.
                 rewrite Hkkey in H.
                 exact (eq_sym H). }
               rewrite (Sem2_Bin p msk l r k).
@@ -1076,12 +1077,13 @@ Local Lemma WF_Bin_lookup_disjoint : forall {a} p msk (l r : IntMap.IntMap a) k,
   Data.IntMap.Internal.lookup k l = None \/ Data.IntMap.Internal.lookup k r = None.
 Proof.
   intros a p msk l r k HWF.
+  destruct (WF_Bin_children p msk l r HWF) as [HWFl HWFr].
   destruct (Data.IntSet.Internal.zero k msk) eqn:Hz.
   - right.
-    rewrite (lookup_Sem2 r k (IntMapProofs.All_IntMaps_WF _ r)).
+    rewrite (lookup_Sem2 r k HWFr).
     exact (WF_Bin_left_key_not_right p msk l r k HWF Hz).
   - left.
-    rewrite (lookup_Sem2 l k (IntMapProofs.All_IntMaps_WF _ l)).
+    rewrite (lookup_Sem2 l k HWFl).
     exact (WF_Bin_right_key_not_left p msk l r k HWF Hz).
 Qed.
 

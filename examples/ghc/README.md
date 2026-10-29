@@ -223,6 +223,24 @@ Lemmas. The key characterization lemmas (`lookup_union_eq`,
 proved via well-founded induction on `size_nat m1 + size_nat m2` with
 `deferredFix2_eq` for one-step unfolding.
 
+### Reduced assumptions for well-formed maps
+
+The helpers with explicit well-formedness premises derive child well-formedness
+from the parent evidence. `Print Assumptions` reports only
+`Eqdep.Eq_rect_eq.eq_rect_eq` for `WF_Bin_children`, `lookup_Sem2`,
+`lookup_Bin_oro`, `Sem_Sem2`, `WF_Bin_left_key_not_right`,
+`WF_Bin_right_key_not_left`, `Sem2_delete`, and `WF_Bin_lookup_disjoint`.
+These helpers do not depend on `All_IntMaps_WF`.
+
+In `Axioms.v`, `ValidVarSet_StrongValidVarSet` proves that `ValidVarSet` implies
+`StrongValidVarSet`. The existing name `StrongValidVarSet_Axiom` now denotes a
+proved lemma derived from `ValidVarSet_Axiom`, rather than an independent axiom.
+The proof reuses the stored variable's fields and needs no default instances.
+
+Unconditional container laws still use `All_IntMaps_WF`. The final substitution
+and Exitify theorems retain that dependency through those laws. The GHC theory
+build and the helper assumptions were checked with Coq 8.20.1.
+
 GHC 9.10 migration details
 ---------------------------
 
