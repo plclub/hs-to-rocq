@@ -212,6 +212,7 @@ cd examples/graph/theories && coq_makefile -f _CoqProject -o Makefile && make -j
 cd examples/transformers && make
 
 # Fast checks (after stack build; no Coq/Rocq compiler required)
+stack --allow-different-user exec -- runghc -package=yaml examples/tests/checks/CiCatalog.hs --self-test
 stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs
 bash examples/tests/checks/harness.sh
 bash examples/tests/checks/concurrent.sh
@@ -230,7 +231,15 @@ make -j2 -C examples/rocq9.0 base
 make -C examples/rocq9.0/tests
 ```
 
-The fast checks run 805 direct Haskell assertions about CLI version selection
+The local `/ci` and `/ci-fix` commands share the seven-job catalog in
+`.claude/commands/ci.md`. The catalog check uses the existing Haskell YAML
+dependency to compare workflow jobs and prerequisites with the catalog, check
+`/ci-fix` delegation, reject failure masking, and parse shell snippets with
+`bash -n` (including heredoc bodies). Its regressions cover a pinned old catalog,
+missing/duplicate jobs, and blocked prerequisites using stubbed tools. It runs
+in `build-haskell`; it does not execute the documented builds or regeneration.
+
+The other fast checks run 805 direct Haskell assertions about CLI version selection
 and rewrite definitions, including proof and obligation tactics, root and module
 boundaries, Unicode identifier and notation boundaries, user-name preservation, quoted string
 literals (including doubled quote escapes), comments, qualified paths split by

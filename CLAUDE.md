@@ -32,6 +32,15 @@ Use relative path instead of absolute path when `cd` to a directory.
 - `/ci` — run CI checks locally, report pass/fail
 - `/ci-fix` — run CI checks, diagnose and fix failures, commit fixes
 
+Both commands use `.claude/commands/ci.md` as their shared catalog of all seven
+workflow jobs, including direct, harness, concurrent, and both Rocq checks. The
+compiler jobs use separate Coq 8.20 and Rocq 9.0 environments. Expected test
+failures already return zero; every nonzero Make status needs investigation.
+When changing either command or the workflow, run
+`stack exec -- runghc -package=yaml examples/tests/checks/CiCatalog.hs --self-test`.
+This `build-haskell` guard checks catalog coverage, delegation, failure masking,
+shell syntax, and regressions without running the documented builds.
+
 ## Architecture
 
 ### Translation Pipeline
@@ -142,7 +151,7 @@ Seven jobs: `hlint`; `build-haskell` (haskell:9.10.3-bookworm Docker, builds the
 
 Use the explicit Bookworm image tag: the unqualified `haskell:9.10.3` tag uses Debian 11 Bullseye, whose LTS ended in August 2026. Its security-package URLs returned 404 during compiler setup. Bookworm keeps GHC 9.10.3 while using a supported Debian package source.
 
-After setup, `build-haskell` runs `stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs`, `bash examples/tests/checks/harness.sh`, and `bash examples/tests/checks/concurrent.sh`. The `test-rocq9` job runs `make -C examples/rocq9.0 clean`, then `make -j2 -C examples/rocq9.0 base`, before its unit-test step. These checks use the existing seven jobs.
+After setup, `build-haskell` runs the CI catalog guard above, `stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs`, `bash examples/tests/checks/harness.sh`, and `bash examples/tests/checks/concurrent.sh`. The `test-rocq9` job runs `make -C examples/rocq9.0 clean`, then `make -j2 -C examples/rocq9.0 base`, before its unit-test step. These checks use the existing seven jobs.
 
 **Shared setup**: `build-haskell`, `tests`, `test-rocq9`, `test-rocq9-translation`, and `test-translation` all run `actions/checkout@v7` then `.github/actions/setup-hs-to-rocq` (composite), which does fix Docker permissions → init requested submodules (`submodules` / `shallow-submodules` inputs) → install extra apt packages (`extra-apt-packages`) → restore Stack cache via `actions/cache@v6` → `stack build`. A local action is not available until after checkout, so the checkout step must precede the composite action. Per-job variation is expressed via those inputs, not duplicated steps. `hlint` (native runner) and `test-coq-files` (docker-coq-action) keep their own checkout.
 

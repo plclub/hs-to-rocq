@@ -46,6 +46,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-hs-to-rocq
+      - name: Check local CI catalog and regressions
+        run: stack --allow-different-user exec -- runghc -package=yaml examples/tests/checks/CiCatalog.hs --self-test
       - name: Check target-version rewriting
         run: stack --allow-different-user exec -- runghc -package=hs-to-rocq examples/tests/checks/RocqVersion.hs
       - name: Check test-harness failure propagation

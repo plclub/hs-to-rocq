@@ -64,3 +64,6 @@ ghc-head
 !/.claude/commands/
 .mcp.json
 
+
+# Local-only session review output
+/review/
