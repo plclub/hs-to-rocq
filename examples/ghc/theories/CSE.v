@@ -21,8 +21,6 @@ Require Import CoreSubst.
 
 Require Import Proofs.Core.
 Require Import Proofs.CoreInduct.
-Require Import Proofs.CoreSubst.
-Require Import Proofs.ScopeInvariant.
 Require Import Proofs.Forall.
 Require Import Proofs.OrdList.
 Require Import Proofs.Var.
@@ -156,15 +154,6 @@ Qed.
 #[export] Hint Rewrite @stripTicksT_nil : hs_simpl.
 #[export] Hint Rewrite (@stripTicksT_nil CoreBndr) : hs_simpl.
 
-(** * Well-scopedness for CSE *)
-
-(* vars = set of variables in scope AFTER `cs_subst` is applied *)
-Record WellScopedCSEnv (env : CSEnv) (vars : VarSet) : Prop :=
- IsWellScopedCSEnv
-   { ws_subst   : WellScoped_Subst (cs_subst env) vars
-   ; ws_map     : const True (cs_map env)
-   ; ws_rec_map : const True (cs_rec_map env) }.
-
 Lemma tryForCSE_simpl env expr :
   tryForCSE env expr = match lookupCSEnv env (cseExpr env expr) with
                        | Some e => e
@@ -174,6 +163,26 @@ Proof.
   unfold tryForCSE, try_for_cse.
   destruct (lookupCSEnv env (cseExpr env expr)); reflexivity.
 Qed.
+
+(* Audit the proved equations separately from the inherited WS admission. *)
+Print Assumptions cseExpr_App.
+Print Assumptions cseExpr_Let.
+Print Assumptions cseBind_NonRec.
+Print Assumptions stripTicksE_id.
+Print Assumptions stripTicksT_nil.
+Print Assumptions tryForCSE_simpl.
+
+(** * Well-scopedness for CSE *)
+
+Require Import Proofs.CoreSubst.
+Require Import Proofs.ScopeInvariant.
+
+(* vars = set of variables in scope AFTER `cs_subst` is applied *)
+Record WellScopedCSEnv (env : CSEnv) (vars : VarSet) : Prop :=
+ IsWellScopedCSEnv
+   { ws_subst   : WellScoped_Subst (cs_subst env) vars
+   ; ws_map     : const True (cs_map env)
+   ; ws_rec_map : const True (cs_rec_map env) }.
 
 (* Inherited well-scopedness admission, outside the control-flow equations. *)
 Definition WS_cseExpr vars env e :

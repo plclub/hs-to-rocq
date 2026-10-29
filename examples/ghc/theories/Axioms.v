@@ -213,14 +213,11 @@ Qed.
   
 (** ** Valid VarSets *)
 
-(* This property is an invariant of the VarSet/UniqFM type. We may want to either 
-   axiomatize it or add it to a sigma type in one of the definitions. *)
+(* This property must be established for each raw VarSet. A value can be
+   stored at an unrelated key through the exposed UniqFM constructors. *)
 
 Definition ValidVarSet (vs : VarSet) : Prop :=
   forall v1 v2, lookupVarSet vs v1 = Some v2 -> (v1 == v2).
-
-Axiom ValidVarSet_Axiom : forall vs, ValidVarSet vs.
-
 
 (** ** Strong Valid VarSets *)
 
@@ -251,13 +248,6 @@ Proof.
   change (u = k).
   symmetry. apply BinNat.N.eqb_eq. exact Heq.
 Qed.
-
-Lemma StrongValidVarSet_Axiom : forall vs, StrongValidVarSet vs.
-Proof.
-  intros vs. apply ValidVarSet_StrongValidVarSet.
-  apply ValidVarSet_Axiom.
-Qed.
-
 
 (** ** Extensional equality for VarSets *)
 

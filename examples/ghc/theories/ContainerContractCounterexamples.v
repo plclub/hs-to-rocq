@@ -53,3 +53,48 @@ Proof.
   { right. split; reflexivity. }
   specialize (H Hin). vm_compute in H. discriminate.
 Qed.
+
+(* The rejected universal invariant is refutable without any axiom. *)
+Lemma all_IntMaps_WF_false :
+  ~ (forall A (m : Data.IntMap.Internal.IntMap A), IntMapProofs.WF m).
+Proof.
+  intro Hwf. apply non_member_lookup_malformed.
+  apply ContainerProofs.non_member_lookup. exact (Hwf _ _).
+Qed.
+
+(* An unguarded equation for every functional admits the negation diagonal.
+   IntMapRecursion proves equations only after establishing termination. *)
+Lemma unguarded_deferredFix2_eq_false :
+  ~ (forall a b r (d : HsToRocq.Err.Default r)
+       (f : (a -> b -> r) -> a -> b -> r),
+       @HsToRocq.DeferredFix.deferredFix2 a b r d f =
+       f (@HsToRocq.DeferredFix.deferredFix2 a b r d f)).
+Proof.
+  intro Heq.
+  pose (f := fun (g : unit -> unit -> bool) x y => negb (g x y)).
+  pose proof (Heq unit unit bool HsToRocq.Err.default_bool f) as H.
+  apply (f_equal (fun g => g tt tt)) in H.
+  change (HsToRocq.DeferredFix.deferredFix2 f tt tt =
+    negb (HsToRocq.DeferredFix.deferredFix2 f tt tt)) in H.
+  destruct (HsToRocq.DeferredFix.deferredFix2 f tt tt); discriminate.
+Qed.
+
+Require Proofs.Axioms.
+
+(* A structurally valid singleton can still violate the value/key invariant.
+   Reusing one Var's fields avoids assumptions about particular payloads. *)
+Lemma all_VarSets_valid_false :
+  ~ (forall s, Axioms.ValidVarSet s).
+Proof.
+  intro Hvalid.
+  destruct (HsToRocq.Err.default : Core.Var) as [n u ty mult sc d i].
+  pose (v0 := Core.Mk_Id n (Unique.MkUnique 0) ty mult sc d i).
+  pose (v1 := Core.Mk_Id n (Unique.MkUnique 1) ty mult sc d i).
+  pose (bad := UniqSet.Mk_UniqSet (UniqFM.UFM (Tip 0 v1))).
+  pose proof (Hvalid bad v0 v1 eq_refl) as H.
+  change (false = true) in H. discriminate.
+Qed.
+
+Print Assumptions all_IntMaps_WF_false.
+Print Assumptions unguarded_deferredFix2_eq_false.
+Print Assumptions all_VarSets_valid_false.

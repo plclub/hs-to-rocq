@@ -16,15 +16,13 @@ Require Import IntSetProofs.
 Require Import Data.IntSet.Internal.
 Require Import Data.IntMap.Internal.
 Require Import MapProofs.Bounds.
+Require Import IntMapRecursion.
 Require Import Lia.
 
 Import GHC.Base.
 
 Set Bullet Behavior "Strict Subproofs".
 
-
-Axiom deferredFix2_eq : forall a b r `{Default r} (f : (a -> b -> r) -> (a -> b -> r)),
-  deferredFix2 f = f (deferredFix2 f).
 
 From Coq Require Import ssreflect.
 From Coq Require Import Unicode.Utf8.
@@ -115,13 +113,8 @@ Fixpoint Sem2 {a} (s: IntMap a) (i : N) : option a :=
 
 Definition WF {a} (s : IntMap a) : Prop := exists f, Sem s f.
 
-(* Transitional assumption for consumers that still accept raw IntMaps.
-   It is false for the exposed datatype: for example, Bin 0 0 Nil Nil has
-   empty children and cannot satisfy Desc. A smart-constructor usage
-   convention does not establish this universally quantified statement.
-   WF-premised contracts and operation-preservation lemmas let callers
-   replace uses of this assumption with actual invariant evidence. *)
-Axiom All_IntMaps_WF : forall A (m : IntMap A), WF m.
+(* Raw constructors also admit malformed trees. Consumers must establish WF
+   from their input contract or from operation-preservation lemmas. *)
 
 Ltac inversion_Desc HD1 :=
   inversion HD1;
@@ -2524,8 +2517,7 @@ Definition restrictKeys_body {a} := restrictKeys_f (@restrictKeys a).
 Lemma restrictKeys_eq {a} (m : IntMap a) s :
   restrictKeys m s = restrictKeys_body m s.
 Proof.
-  enough (@restrictKeys a = restrictKeys_body) by congruence.
-  apply deferredFix2_eq.
+  exact (IntMapRecursion.restrictKeys_eq m s).
 Qed.
 
 Definition restrictBitMapToRange r bm :=

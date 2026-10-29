@@ -39,7 +39,8 @@ DyadicIntervals.v
 ../hs-spec/IntSetProperties.v
 IntSetPropertyProofs.v
 Set.v
+IntMapRecursion.v
 IntMapProofs.v
-
+IntMapUnionProofs.v
 
 

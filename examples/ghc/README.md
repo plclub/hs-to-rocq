@@ -130,7 +130,9 @@ Functions using `deferredFix`/`deferredFix2` (axiomatized fixpoint combinator):
 | `restrictKeys` / `withoutKeys` | Data.IntMap.Internal | 2-arg on IntMap x IntSet |
 | `exitifyRec.go` | Exitify | Deferred on expression size |
 
-These preserve recursion structure while hiding the termination argument from Coq.
+These definitions preserve the translated recursion through an opaque combinator.
+Proofs obtain unfolding equations from guarded `deferredFix_eq_on` after proving
+well-foundedness and `recurses_on`; see [WF contract recovery](#wf-contract-recovery).
 
 Proved theorems
 ---------------
@@ -141,13 +143,16 @@ Proved theorems
    preserves well-scopedness and join point validity under the model
    assumptions described below
  * **`WellScoped_substExpr`** (CoreSubst.v, Qed): Substitution preserves
-   well-scopedness
+   well-scopedness under `WellScoped_Subst`. The 2026-10-29 recovery strengthens
+   that internal premise with map invariants; the conclusion is unchanged.
 
 ### Exitify and CSE proof recovery
 
-The recovery checked on **2026-10-28**, relative to `1e4483ca` on
-`proof-recovery`, closes the three Exitify admissions and four CSE equations.
-It does not remove the development's remaining model assumptions.
+The first recovery, checked on **2026-10-28** relative to `1e4483ca` on
+`proof-recovery`, closed the three Exitify admissions and four CSE equations.
+It still relied on three inconsistent assumptions. The **2026-10-29**
+[WF contract recovery](#wf-contract-recovery) removes those assumptions while
+retaining the final Exitify statement and the intentional model abstractions.
 
 #### Exitify
 
@@ -203,20 +208,19 @@ omit redundant wildcard branches for irrefutable patterns. The shared
 `SoleCtorGuard` PASS fixture covers sole and nested constructors, refutable
 constructors, guarded case arms, and empty-list guards.
 
-#### Remaining assumptions and validation
+#### 2026-10-28 assumptions and validation
 
 `Axioms.isLocalUnique_initExitJoinUnique` restores the pre-PR209 locality axiom
 from `5aa659c0` at the new `GHC.Builtin.Uniques.initExitJoinUnique` path.
 It is a **new axiom declaration relative to `1e4483ca`**, not a proved fact:
 `Unique.isLocalUnique` remains abstract.
 
-`Print Assumptions exitifyProgram_WellScoped_JPV` still includes
+At that checkpoint, `Print Assumptions exitifyProgram_WellScoped_JPV` included
 `All_IntMaps_WF`, `ValidVarSet_Axiom`, the existing `uniqAway` and FV/type
-abstractions, and the inherited IntMap `deferredFix2_eq` axiom. The guarded
-Exitify equation does not remove those imported assumptions. The four CSE
-equations likewise retain existing opaque model APIs, including Core-map
-operations. Keep the explicit premises documented in
-[WF contract recovery](#wf-contract-recovery).
+abstractions, and the inherited IntMap `deferredFix2_eq` axiom. Guarded
+unfolding in Exitify alone did not remove the imported inconsistent assumptions.
+The 2026-10-29 recovery below supersedes this assumption report. The four CSE
+equations still retain opaque model APIs, including Core-map operations.
 
 Validation for this recovery:
 
@@ -233,145 +237,136 @@ Validation for this recovery:
   model dependencies. Both shared suites preceded this last edit-only
   reshaping; the full GHC builds followed it.
 
-### Earlier mechanized results inventory
-
-The counts in this inventory predate the recovery above and have not been
-recounted. For current IntMap and VarSet premises, see
-[WF contract recovery](#wf-contract-recovery).
-
- * **CoreFVs.v** (0 Admitted, 42 Qed): `freeVarsOf_freeVars_revised`,
-   `elemVarSet_exprFreeVars_Var_false`, all exprFreeVars lemmas
- * **CoreSubst.v** (0 Admitted, 34 Qed): Full substitution theory including
-   `SubstExtends`, `WellScoped_Subst`, all simplification lemmas
- * **JoinPointInvariants.v** (0 Admitted, 33 Qed): Join point validity
-   preservation through all Core transformations
- * **ScopeInvariant.v** (0 Admitted, 27 Qed): Scope invariant preservation
- * **Var.v** (0 Admitted, 21 Qed): `isJoinId` lemmas, `EqLaws_Var`
- * **VarSet.v** (0 Admitted, 140 Qed): Comprehensive VarSet reasoning library
- * **ContainerProofs.v** (94 Qed, 0 Local Axioms): IntMap operation properties;
-   all 20 previously-axiomatized properties now proved as Lemmas; imports
-   deferredFix2_eq + All_IntMaps_WF axioms from IntMapProofs
- * **TrieMap.v** (1 Qed): `TrieMapLaws__MaybeMap` instance proved
- * **VarSetFSet.v** (31 Qed): FSet interface for VarSets including
-   `equal_2`, `filter_1`/`filter_2`/`filter_3`
-
-Theory proof inventory
-----------------------
-
-The Axioms, CSE, and Exitify rows were checked on 2026-10-28. Other rows retain
-earlier counts, including counts from before the WF contract recovery; this
-table is not a current census. `Qed` counts are source markers, not evidence
-that the results are independent of admitted lemmas or axioms.
-
-| File | Qed | Admitted | Notes |
-|------|-----|----------|-------|
-| Axioms.v | 11 | 0 | Includes the restored unique-locality axiom; see recovery assumptions above |
-| Base.v | 4 | 0 | |
-| ContainerProofs.v | 94 | 0 | 0 Local Axioms; imports deferredFix2_eq + All_IntMaps_WF from IntMapProofs |
-| Core.v | 11 | 0 | `deAnnotate` lemmas |
-| CoreFVs.v | 42 | 0 | All exprFreeVars lemmas proved |
-| CoreInduct.v | 14 | 0 | |
-| CoreSemantics.v | 2 | 0 | |
-| CoreStats.v | 1 | 0 | |
-| CoreSubst.v | 34 | 0 | Full substitution theory |
-| CSE.v | 7 | 1 | Four equations recovered; inherited `WS_cseExpr` admission remains |
-| Exitify.v | 70 | 0 | Three target proofs recovered; final theorem statement unchanged; model assumptions remain |
-| Forall.v | 4 | 0 | |
-| FV.v | 25 | 0 | |
-| GhcTactics.v | 0 | 0 | Tactic library |
-| GhcUtils.v | 7 | 0 | |
-| JoinPointInvariants.v | 3 | 0 | |
-| JoinPointInvariantsInductive.v | 3 | 0 | |
-| OrdList.v | 1 | 0 | |
-| ScopeInvariant.v | 27 | 0 | |
-| StateLogic.v | 18 | 0 | Bare function type State monad |
-| TrieMap.v | 1 | 4 | MaybeMap proved; ListMap/GenMap blocked (axiomatized types) |
-| Unique.v | 6 | 0 | |
-| UniqSetInv.v | 13 | 0 | |
-| Util.v | 1 | 0 | |
-| Var.v | 21 | 0 | |
-| VarEnv.v | 25 | 0 | |
-| VarSet.v | 140 | 0 | |
-| VarSetFSet.v | 31 | 14 | equal_2, filter_1/2/3 proved; rest blocked by `elements`/`choose`/`partition` = default |
-| VarSetStrong.v | 30 | 0 | |
-
-### Remaining Admitted breakdown
-
-Only the CSE entry was refreshed for this recovery. Exitify no longer has
-admissions; the other entries below retain the earlier inventory.
-
-| File | Admitted | Reason |
-|------|----------|--------|
-| CSE.v | 1 | Inherited `WS_cseExpr` well-scopedness admission, outside the four recovered equations |
-| TrieMap.v | 4 | `TrieMapLaws__IntMap` and `TrieMapLaws__Map` need alter/fold specs; `TrieMapLaws__ListMap` and `TrieMapLaws__GenMap` blocked by axiomatized types |
-| VarSetFSet.v | 14 | `elements`/`choose`/`partition` defined as `HsToRocq.Err.default`; `for_all`/`exists_` need IntMap `foldr` spec; `equal_1`/`is_empty_1`/`subset_1` need key-surjectivity |
-
-### ContainerProofs Axioms (0 Local Axioms)
-
-This earlier account predates the WF contract recovery below. It records the
-initial removal of local operation axioms, not the current contracts or a
-fresh count.
-
-All Local Axioms have been eliminated from `ContainerProofs.v`. The two
-foundational axioms are now imported from `IntMapProofs`:
-
-| Axiom | Purpose |
-|-------|---------|
-| `IntMapProofs.deferredFix2_eq` | One-step unfolding for `deferredFix2` (general recursion combinator) |
-| `IntMapProofs.All_IntMaps_WF` | All IntMaps satisfy the well-formedness predicate from IntMapProofs |
-
-All 24 previously-axiomatized IntMap operation properties (delete, union,
-difference, intersection, disjoint, filter, combined) are now proved as
-Lemmas. The key characterization lemmas (`lookup_union_eq`,
-`lookup_difference_eq`, `lookup_intersection_eq`, `disjoint_spec`) were
-proved via well-founded induction on `size_nat m1 + size_nat m2` with
-`deferredFix2_eq` for one-step unfolding.
-
 ### WF contract recovery
 
-The raw IntMap contracts `non_member_lookup`, `member_lookup`, `null_member`,
-`lookup_insert_neq`, `member_insert`, and `tree_elem_kv_lookup` now require
-explicit `IntMapProofs.WF` evidence. Their conclusions are unchanged. The
-insertion lemma takes WF before key inequality; the tree-membership lemma
-takes WF before structural membership. `ContainerContractCounterexamples.v`,
-included in the theory build, proves computational counterexamples to all six
-unconditional versions.
+**2026-10-29, relative to `bd8b4f9d` on `proof-recovery`.** This migration
+removes `IntMapProofs.All_IntMaps_WF`, `Axioms.ValidVarSet_Axiom`, and
+`IntMapProofs.deferredFix2_eq`, not just their uses in selected proofs. It also
+removes the blanket derived lemma `StrongValidVarSet_Axiom`. No new axioms or
+admissions were introduced in this migration. The locality axiom restored in
+the earlier recovery was already present at this baseline.
 
-`VarSet_extensional_equal` is now a proved lemma with explicit WF and
-`ValidVarSet` premises for both input sets. Its proof maps stored Vars to their
-unique keys, applies semantic uniqueness to the mapped trees, and recovers
-boolean equality of the original trees. The generic supporting lemmas are
-`IntMap_map_keys_equal` and `IntMap_equal_by_key_membership` in
-`ContainerProofs.v`.
+These were invalid contracts, not harmless abstractions: raw IntMaps can be
+malformed, a stored Var can disagree with its lookup key, and an unconditional
+fixpoint equation for every functional yields a contradiction using boolean
+negation. `ContainerContractCounterexamples.v` adds formal refutations of all
+three contracts alongside the six existing malformed-tree counterexamples.
 
-`Print Assumptions` reports no axioms for the first five IntMap contracts, the
-two generic equality lemmas, or the six counterexamples. The structural
-membership contract and the existing WF-conditioned routing helpers retain
-only `Eqdep.Eq_rect_eq.eq_rect_eq`. The VarSet extensionality proof depends on
-the existing abstract GHC type parameters, without `All_IntMaps_WF`,
-`ValidVarSet_Axiom`, or an independent extensional-equality axiom.
+#### Explicit invariants and corrected helper contracts
 
-In `Axioms.v`, `ValidVarSet_StrongValidVarSet` proves that `ValidVarSet` implies
-`StrongValidVarSet`. The existing name `StrongValidVarSet_Axiom` now denotes a
-proved lemma derived from `ValidVarSet_Axiom`, rather than an independent axiom.
-The proof reuses the stored variable's fields and needs no default instances.
+The translated algorithms and exposed raw datatypes are unchanged. Generic
+proofs now require the relevant representation evidence explicitly:
 
-Native IntMap preservation results `delete_Sem`, `delete_WF`, `map_WF`, and
-`mapWithKey_WF` are proved in `IntMapProofs.v`, with no axiom assumptions.
-Deletion callers use `delete_WF` to derive result well-formedness from input
-well-formedness. Forward-only membership callers use the unconditional
-`member_lookup_some` lemma.
+```coq
+IntMapProofs.WF (Axioms.VarSet_IntMap s) /\ Axioms.ValidVarSet s
+```
 
-Callers without invariant evidence still instantiate `All_IntMaps_WF`
-explicitly. This is a staged migration: the blanket statement is false for
-raw trees and remains an assumption of the final substitution and Exitify
-results. Their statements, input types, and scoping predicates are unchanged.
-Further recovery needs preservation proofs for the remaining operations and
-an invariant boundary for externally supplied maps; key validity alone does
-not imply structural WF.
+`WF` describes the IntMap structure; `ValidVarSet` relates lookup keys to the
+stored Vars. Neither follows from raw membership equality. The existing
+`ValidVarSet_StrongValidVarSet` implication remains proved, but callers must
+supply validity rather than obtain it from a blanket assumption.
 
-The containers and GHC theory builds and the repaired proof assumptions were
-checked with Coq 8.20.1.
+The six raw IntMap contracts `non_member_lookup`, `member_lookup`, `null_member`,
+`lookup_insert_neq`, `member_insert`, and `tree_elem_kv_lookup` retain explicit
+WF premises. `VarSet_extensional_equal` requires WF and validity for both
+sets. Forward-only membership facts such as `member_lookup_some` remain
+unconditional where they hold on raw trees.
+
+`VarSetFSet.v` no longer claims that every raw VarSet implements
+`FSetInterface.WS`. It retains membership/equality definitions and supplies
+premise-aware facts and tactics. It drops the default-based `elements`, `choose`,
+and `partition` stubs and their admitted obligations; it does not implement those
+operations. Structural congruence lemmas require invariant evidence;
+unconditional structural `Proper` instances do not replace it.
+
+`FV.Denotes` now requires WF and validity for the denoted set, scope, and input
+accumulator, and proves those invariants for the output accumulator. Its old
+membership-only specification admitted malformed accumulators and was false.
+`CoreFVs.exprFreeVars_WF` and `exprFreeVars_valid` establish invariants of the
+actual computed set. The optional `freeVarsOf_freeVars_revised` theorem now
+requires explicit WF premises for the opaque type/coercion DSet functions.
+Those premises do **not** enter final Exitify: the generated algorithm tests
+`exprFreeVars (deAnnotate ann_e)`, not the annotation sets.
+
+`WellScoped_Subst` now includes WF and validity of both the input scope and
+the substitution's in-scope set, plus WF of its Id substitution environment.
+Thus `WellScoped_substExpr` keeps its well-scopedness conclusion but has
+stronger hypotheses through this internal predicate. `WellScoped` itself
+has not changed.
+
+#### Final Exitify boundary and remaining assumptions
+
+`exitifyProgram_WellScoped_JPV` retains its exact statement:
+
+```coq
+forall pgm,
+  WellScopedProgram pgm ->
+  isJoinPointsValidProgram pgm ->
+  WellScopedProgram (exitifyProgram pgm) /\
+  isJoinPointsValidProgram (exitifyProgram pgm).
+```
+
+The program input type, `WellScopedProgram`, and join-point-validity definitions
+are unchanged. The proof discharges helper premises from `emptyVarSet` and
+`getInScopeVars (ep_in_scope pgm) = mkVarSet (bindersOfBinds pgm)`, using proved
+construction and preservation lemmas rather than new program hypotheses.
+
+Actual `Print Assumptions` checks for final Exitify and `WellScoped_substExpr`
+contain none of the three rejected axioms or the blanket validity alias.
+Final Exitify still depends on:
+
+* `uniqAway` contracts, the unique-locality axiom, and type/FV model APIs;
+* abstract GHC parameters, including opaque type builders and DSet functions;
+* guarded `DeferredFix.deferredFix_eq_on` and opaque `deferredFix`, functional
+  extensionality, and `Eqdep.Eq_rect_eq.eq_rect_eq`.
+
+Substitution also retains its `uniqAway` contracts and abstract model APIs.
+Neither result establishes a fully concrete GHC model. `coqchk` checks proof
+terms against their declared axioms; it does **not** prove those axioms
+consistent.
+
+#### Validation on 2026-10-29
+
+* All 20 changed Coq files passed a fresh compilation gate with Coq 8.20.1,
+  refreshing unchanged dependencies as needed. The full containers and enabled
+  GHC theory builds passed. `coqchk -silent` passed for `IntMapUnionProofs`,
+  `Proofs.UniqSetInv`, `Proofs.CSE`, and `Proofs.RecoveryChecks`, including their
+  imported proof dependencies.
+* Both shared compiler suites passed: 53 PASS cases and
+  3 expected compiler failures each on Coq 8.20 and Rocq 9.0. This does not
+  constitute a Rocq port of the GHC theories.
+* `ContainerContractCounterexamples.v` and `RecoveryChecks.v` are included in
+  the theory build. The latter checks the exact final Exitify type, rejects
+  the removed names with `Fail Check`, and prints the assumptions of final
+  Exitify and substitution. To rerun it, use
+  `make -C theories -W RecoveryChecks.v RecoveryChecks.vo` with Coq 8.20 active.
+
+Theory proof scope and status
+-----------------------------
+
+This table describes the recovery's proof dependencies as of **2026-10-29**,
+not a census of `Qed` markers or an axiom-free verification claim. Historical
+publication evidence remains in [the paper claims audit](../../paper-claims-audit.md).
+
+| File | Scope and status |
+|------|------------------|
+| `../containers/theories/IntMapRecursion.v` | New operation-specific unfolding equations for merge, disjointness, and key restriction/removal, derived from guarded recursion with proved termination obligations |
+| `../containers/theories/IntMapUnionProofs.v` | New semantics and WF preservation for union, difference, and intersection; WF-conditioned disjointness specification |
+| `ContainerProofs.v` | IntMap operation contracts with explicit WF premises where needed; no imported blanket WF or unguarded fixpoint equation |
+| `Axioms.v` | Explicit validity definitions and conditional extensionality; `uniqAway` and locality assumptions remain |
+| `VarSetInvariant.v` | New construction/preservation lemmas and operation specifications for VarSets |
+| `VarSetFSet.v`, `VarSet.v` | Premise-aware set algebra and automation; no raw WS instance or admitted stub obligations |
+| `VarEnv.v`, `UniqSetInv.v`, `VarSetStrong.v` | Environment, unique-set, and strong-subset clients migrated to explicit invariant evidence |
+| `FV.v`, `CoreFVs.v` | Corrected accumulator specification and computed free-variable invariants; optional annotation theorem has explicit DSet WF premises |
+| `ScopeInvariant.v`, `JoinPointInvariants.v` | Generic helpers carry invariant evidence; scoping and join-point-validity definitions are unchanged |
+| `CoreSubst.v` | Substitution preservation under strengthened `WellScoped_Subst` |
+| `Exitify.v` | Final program theorem proved with unchanged statement; remaining assumptions listed above |
+| `CSE.v` | Four recovered equations retained; existing `WS_cseExpr` admission remains |
+| `ContainerContractCounterexamples.v`, `RecoveryChecks.v` | Refutations of rejected contracts and regression checks for the final theorem boundary |
+
+Unrelated admissions in `TrieMap.v` and the containers development remain.
+This recovery does not claim to complete those proofs or the disabled GHC
+theories; the enabled theory set is listed in `theories/_CoqProject`.
 
 GHC 9.10 migration details
 ---------------------------

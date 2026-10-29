@@ -18,6 +18,38 @@ Require Import Proofs.Var.
 Require Import Proofs.VarSet.
 Require Import Proofs.VarSetStrong.
 Require Import Proofs.GhcTactics.
+Require Import Proofs.VarSetFSet.
+
+(* Membership and subset are extensional even on raw sets. Structural
+   operations below use explicit preservation evidence, not Proper instances. *)
+Local Lemma disjoint_del_rev s xs t : WF s -> Axioms.ValidVarSet s -> WF t ->
+  disjointVarSet (delVarSetList s (rev xs)) t = disjointVarSet (delVarSetList s xs) t.
+Proof.
+  intros W V T. apply disjointVarSet_m; try solve [solve_varset_inv].
+  - apply delVarSetList_rev; exact W.
+  - reflexivity.
+Qed.
+
+#[local] Instance Subset_Equal_m : Morphisms.Proper
+  (Morphisms.respectful Equal (Morphisms.respectful Equal iff)) Subset.
+Proof. intros s t E u v F; unfold Subset; setoid_rewrite E; setoid_rewrite F; reflexivity. Qed.
+
+#[local] Instance elemVarSet_Equal_m x : Morphisms.Proper
+  (Morphisms.respectful Equal Logic.eq) (elemVarSet x).
+Proof. intros s t E. apply Bool.eq_true_iff_eq. exact (E x). Qed.
+
+Ltac fresh_disjoint H :=
+  lazymatch type of H with
+  | disjointVarSet ?t ?u = true =>
+    eapply (disjointVarSet_subVarSet_l _ t u);
+      [solve_varset_inv | solve_varset_inv | solve_varset_inv |
+       solve_varset_inv | solve_varset_inv | exact H |]
+  end.
+
+#[local] Hint Resolve emptyVarSet_WF unitVarSet_WF mkVarSet_WF
+  extendVarSet_WF extendVarSetList_WF delVarSet_WF delVarSetList_WF
+  emptyVarSet_valid unitVarSet_valid mkVarSet_valid
+  extendVarSet_valid extendVarSetList_valid delVarSet_valid delVarSetList_valid : core.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -87,6 +119,31 @@ We also have to do this for lists:
 Definition updJPSs jps vs :=
   fold_left updJPS vs jps.
 
+Lemma updJPS_WF jps v : WF jps ->
+  IntMapProofs.WF (Axioms.VarSet_IntMap (updJPS jps v)).
+Proof. unfold updJPS; destruct (isJoinId v); intros; solve_varset_inv. Qed.
+
+Lemma updJPS_valid jps v : WF jps -> Axioms.ValidVarSet jps ->
+  Axioms.ValidVarSet (updJPS jps v).
+Proof. unfold updJPS; destruct (isJoinId v); intros; solve_varset_inv. Qed.
+
+Lemma updJPSs_WF jps vs : WF jps ->
+  IntMapProofs.WF (Axioms.VarSet_IntMap (updJPSs jps vs)).
+Proof.
+  revert jps; induction vs; intros jps W; simpl; [exact W|].
+  apply IHvs. apply updJPS_WF. exact W.
+Qed.
+
+Lemma updJPSs_valid jps vs : WF jps -> Axioms.ValidVarSet jps ->
+  Axioms.ValidVarSet (updJPSs jps vs).
+Proof.
+  revert jps; induction vs; intros jps W V; simpl; [exact V|].
+  apply IHvs; [apply updJPS_WF|apply updJPS_valid]; assumption.
+Qed.
+
+#[local] Hint Resolve updJPS_WF updJPS_valid updJPSs_WF updJPSs_valid : varset_inv.
+#[local] Hint Resolve updJPS_WF updJPS_valid updJPSs_WF updJPSs_valid : core.
+
 (**
 These two functions behave very similar to [extendVarSet] and [delVarset], and we
 have a number of simiar lemmas:
@@ -153,81 +210,85 @@ Qed.
 
 Lemma elemVarSet_updJPS_l:
   forall v jps v',
+  WF jps ->
   (v' GHC.Base.== v) = false ->
   elemVarSet v (updJPS jps v') = elemVarSet v jps.
 Proof.
   intros.
   unfold updJPS.
   destruct_match.
-  + rewrite elemVarSet_extendVarSet.
-    rewrite H.
+   + rewrite elemVarSet_extendVarSet by assumption.
+     rewrite H0.
     reflexivity.
-  + rewrite elemVarSet_delVarSet.
-    rewrite H.
+   + rewrite elemVarSet_delVarSet by assumption.
+     rewrite H0.
     reflexivity.
 Qed.
 
 Lemma elemVarSet_updJPS_cong:
   forall v jps1 jps2 v',
+  WF jps1 -> WF jps2 ->
   ((v' GHC.Base.== v) = false -> elemVarSet v jps1 = elemVarSet v jps2) ->
   elemVarSet v (updJPS jps1 v') = elemVarSet v (updJPS jps2 v').
 Proof.
   intros.
   unfold updJPS.
   destruct_match.
-  + rewrite !elemVarSet_extendVarSet.
+   + rewrite !elemVarSet_extendVarSet by assumption.
     destruct (v' GHC.Base.== v); intuition.
-  + rewrite !elemVarSet_delVarSet.
+   + rewrite !elemVarSet_delVarSet by assumption.
     destruct (v' GHC.Base.== v); intuition.
 Qed.
 
 
 Lemma elemVarSet_updJPSs_l:
   forall v jps vs,
+  WF jps ->
   elemVarSet v jps  = true  ->
   elemVarSet v (mkVarSet vs) = false ->
   elemVarSet v (updJPSs jps vs) = true .
 Proof.
-  intros.
-  revert jps v H H0. induction vs; intros.
-  * apply H.
-  * simpl.
-    rewrite elemVarSet_mkVarSet_cons in H0.
-    destruct H0.
-    apply IHvs.
-    + rewrite elemVarSet_updJPS_l by assumption.
-      assumption.
-    + assumption.
+   intros v jps vs W M N.
+   revert jps W M N. induction vs; intros.
+   * apply M.
+   * simpl.
+     rewrite elemVarSet_mkVarSet_cons in N.
+     destruct N as [Ne N].
+     apply IHvs.
+     + apply updJPS_WF; assumption.
+     + rewrite elemVarSet_updJPS_l by assumption. assumption.
+     + assumption.
 Qed.
 
 Lemma subVarSet_updJPS_extendVarSet:
   forall jps isvs v,
+  WF jps -> WF isvs -> Axioms.ValidVarSet jps ->
   subVarSet jps isvs = true ->
   subVarSet (updJPS jps v) (extendVarSet isvs v) = true.
 Proof.
-  intros.
-  unfold updJPS.
-  destruct_match.
-  * apply subVarSet_extendVarSet_both.
-    assumption.
-  * eapply subVarSet_trans.
-    apply subVarSet_delVarSet.
-    apply subVarSet_extendVarSet.
-    eassumption.
+   intros jps isvs v Wj Wi Vj S.
+   unfold updJPS.
+   destruct_match.
+   * apply subVarSet_extendVarSet_both; assumption.
+   * eapply subVarSet_trans with (t := jps).
+     all: try solve [solve_varset_inv].
+     + apply subVarSet_delVarSet; assumption.
+     + apply subVarSet_extendVarSet; assumption.
 Qed.
 
 Lemma subVarSet_updJPSs_extendVarSetList:
   forall jps isvs vs,
+  WF jps -> WF isvs -> Axioms.ValidVarSet jps ->
   subVarSet jps isvs = true ->
   subVarSet (updJPSs jps vs) (extendVarSetList isvs vs) = true.
 Proof.
-  intros. revert jps isvs H. induction vs; intros.
-  * rewrite updJPSs_nil, extendVarSetList_nil.
-    assumption.
-  * rewrite updJPSs_cons, extendVarSetList_cons.
-    apply IHvs.
-    apply subVarSet_updJPS_extendVarSet.
-    assumption.
+   intros jps isvs vs Wj Wi Vj S.
+   revert jps isvs Wj Wi Vj S. induction vs; intros.
+   * rewrite updJPSs_nil, extendVarSetList_nil.
+     assumption.
+   * rewrite updJPSs_cons, extendVarSetList_cons.
+     apply IHvs; try solve [solve_varset_inv].
+     apply subVarSet_updJPS_extendVarSet; assumption.
 Qed.
 
 (** ** The definition of the invariants *)
@@ -638,6 +699,7 @@ Require Import Proofs.VarSetFSet.
 Lemma isJoinPointsValid_fresh_updJPSs_aux:
   forall (vs2 vs3 : list Var) (e : CoreExpr) (jps : VarSet),
   disjointVarSet (delVarSetList (exprFreeVars e) vs3) (mkVarSet vs2) = true ->
+  WF jps ->
   (forall n,
   isJoinPointsValid e n (updJPSs jps (vs2 ++ vs3)) =
   isJoinPointsValid e n (updJPSs jps vs3)
@@ -646,9 +708,9 @@ Lemma isJoinPointsValid_fresh_updJPSs_aux:
   (forall v, isJoinRHS_aux v e (updJPSs jps (vs2 ++ vs3)) =
   isJoinRHS_aux v e (updJPSs jps vs3)).
 Proof.
-  intros.
-  rewrite <- delVarSetList_rev in H.
-  revert vs3 jps H.
+  intros vs2 vs3 e jps H W.
+  rewrite <- disjoint_del_rev in H by solve_varset_inv.
+  revert vs3 jps H W.
   apply (core_induct e); intros;
     (split; intro; simpl; [| try solve[ destruct_match; reflexivity]] ).
   - simpl.
@@ -657,39 +719,41 @@ Proof.
     f_equal.
     rewrite updJPSs_append.
     rewrite exprFreeVars_Var in H by assumption.
-    rewrite delVarSetList_rev in H.
-    clear -H.
+    rewrite disjoint_del_rev in H by solve_varset_inv.
+    clear -H W.
     induction vs3 using rev_ind.
     + rewrite !updJPSs_nil.
       rewrite delVarSetList_nil in H.
-      revert jps; induction vs2; intros.
+      revert jps W; induction vs2; intros.
        * rewrite updJPSs_nil.
          reflexivity.
        * rewrite updJPSs_cons.
          rewrite fold_is_true in H.
-         rewrite disjointVarSet_mkVarSet_cons in H.
+          rewrite disjointVarSet_mkVarSet_cons in H by solve_varset_inv.
          destruct H.
-         rewrite IHvs2 by assumption.
-         apply elemVarSet_updJPS_l.
+          rewrite IHvs2 by (assumption || solve_varset_inv).
+          apply elemVarSet_updJPS_l; [exact W|].
          rewrite <- elemVarSet_unitVarSet_is_eq. apply H.
     + rewrite delVarSetList_app, delVarSetList_cons, delVarSetList_nil in H.
       rewrite !updJPSs_append, !updJPSs_cons, !updJPSs_nil.
-      apply elemVarSet_updJPS_cong. intros Hne.
-      apply IHvs3.
+      apply elemVarSet_updJPS_cong.
+      * repeat apply updJPSs_WF. exact W.
+      * apply updJPSs_WF. exact W.
+      * intros Hne. apply IHvs3.
       rewrite fold_is_true in *.
-      rewrite disjointVarSet_mkVarSet in *.
+      rewrite disjointVarSet_mkVarSet in * by solve_varset_inv.
       eapply Forall_impl; only 2: eapply H. intros v2 ?.
       cbv beta in H0.
-      rewrite delVarSet_elemVarSet_false in H0; only 1: assumption.
+      rewrite delVarSet_elemVarSet_false in H0; try solve [solve_varset_inv]; only 1: assumption.
       clear -Hne.
-      apply elemVarSet_delVarSetList_false_l.
+      apply elemVarSet_delVarSetList_false_l; try solve [solve_varset_inv].
       rewrite elemVarSet_unitVarSet_is_eq. apply Hne.
   - reflexivity.
   - f_equal.
-    apply H.
-    eapply disjointVarSet_subVarSet_l; only 1: apply H1.
-    apply subVarSet_delVarSetList_both.
-    rewrite exprFreeVars_App.
+    apply H; try assumption.
+    fresh_disjoint H1.
+    apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+    set_b_iff. rewrite exprFreeVars_App.
     set_b_iff; fsetdec.
   - reflexivity.
   - destruct_match; only 1: reflexivity.
@@ -700,44 +764,44 @@ Proof.
     rewrite <- !updJPSs_append.
     rewrite <- app_assoc.
     destruct_match.
-    + apply H.
-      eapply disjointVarSet_subVarSet_l; only 1: apply H0.
+    + apply H; try assumption.
+      fresh_disjoint H0.
       rewrite rev_app_distr. simpl.
       rewrite delVarSetList_cons.
-      apply subVarSet_delVarSetList_both.
-      rewrite exprFreeVars_Lam.
+      apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+      set_b_iff. rewrite exprFreeVars_Lam.
       set_b_iff; fsetdec.
-    + apply H.
-      eapply disjointVarSet_subVarSet_l; only 1: apply H0.
+    + apply H; try assumption.
+      fresh_disjoint H0.
       rewrite rev_app_distr. simpl.
       rewrite delVarSetList_cons.
-      apply subVarSet_delVarSetList_both.
-      rewrite exprFreeVars_Lam.
+      apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+      set_b_iff. rewrite exprFreeVars_Lam.
       set_b_iff; fsetdec.
   - destruct binds as [v rhs | pairs].
     + f_equal.
       ** unfold isJoinPointsValidPair_aux.
          destruct_match; only 2: reflexivity.
          destruct_match.
-         -- apply H.
-            eapply disjointVarSet_subVarSet_l; only 1: apply H1.
-            apply subVarSet_delVarSetList_both.
-            rewrite exprFreeVars_Let_NonRec.
+         -- apply H; try assumption.
+            fresh_disjoint H1.
+            apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+            set_b_iff. rewrite exprFreeVars_Let_NonRec.
             set_b_iff; fsetdec.
-         -- apply H.
-            eapply disjointVarSet_subVarSet_l; only 1: apply H1.
-            apply subVarSet_delVarSetList_both.
-            rewrite exprFreeVars_Let_NonRec.
+         -- apply H; try assumption.
+            fresh_disjoint H1.
+            apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+            set_b_iff. rewrite exprFreeVars_Let_NonRec.
             set_b_iff; fsetdec.
       ** rewrite <- !updJPSs_singleton.
          rewrite <- !updJPSs_append.
          rewrite <- app_assoc.
-         apply H0.
-         eapply disjointVarSet_subVarSet_l; only 1: apply H1.
+         apply H0; try assumption.
+         fresh_disjoint H1.
          rewrite rev_app_distr; simpl.
          rewrite delVarSetList_cons.
-         apply subVarSet_delVarSetList_both.
-         rewrite exprFreeVars_Let_NonRec.
+         apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+         set_b_iff. rewrite exprFreeVars_Let_NonRec.
          set_b_iff; fsetdec.
     + simpl.
       rewrite <- !updJPSs_append.
@@ -750,34 +814,37 @@ Proof.
          unfold isJoinPointsValidPair_aux.
          destruct_match; only 2: reflexivity.
          destruct_match.
-         -- apply H.
-            eapply disjointVarSet_subVarSet_l; only 1: apply H1.
+         -- apply H; try assumption.
+            fresh_disjoint H1.
             rewrite rev_app_distr; simpl.
             rewrite delVarSetList_app.
-            apply subVarSet_delVarSetList_both.
-            rewrite exprFreeVars_Let_Rec.
+            apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+            set_b_iff. rewrite exprFreeVars_Let_Rec.
             pose proof (subVarSet_exprFreeVars_exprsFreeVars _ _ _ HIn).
-            rewrite delVarSetList_rev.
-            apply subVarSet_delVarSetList_both.
+            rewrite delVarSetList_rev by solve_varset_inv.
+            rewrite <- SubsetE by solve_varset_inv.
+            apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
             set_b_iff; fsetdec.
-         -- apply H.
-            eapply disjointVarSet_subVarSet_l; only 1: apply H1.
+         -- apply H; try assumption.
+            fresh_disjoint H1.
             rewrite rev_app_distr; simpl.
             rewrite delVarSetList_app.
-            apply subVarSet_delVarSetList_both.
-            rewrite exprFreeVars_Let_Rec.
-            rewrite delVarSetList_rev.
+            apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+            set_b_iff. rewrite exprFreeVars_Let_Rec.
+            rewrite delVarSetList_rev by solve_varset_inv.
             pose proof (subVarSet_exprFreeVars_exprsFreeVars _ _ _ HIn).
-            apply subVarSet_delVarSetList_both.
+            rewrite <- SubsetE by solve_varset_inv.
+            apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
             set_b_iff; fsetdec.
-      ** apply H0.
-         eapply disjointVarSet_subVarSet_l; only 1: apply H1.
+      ** apply H0; try assumption.
+         fresh_disjoint H1.
          rewrite rev_app_distr; simpl.
          rewrite delVarSetList_app.
-         apply subVarSet_delVarSetList_both.
-         rewrite exprFreeVars_Let_Rec.
-         rewrite delVarSetList_rev.
-         apply subVarSet_delVarSetList_both.
+         apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+         set_b_iff. rewrite exprFreeVars_Let_Rec.
+         rewrite delVarSetList_rev by solve_varset_inv.
+         rewrite <- SubsetE by solve_varset_inv.
+         apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
          set_b_iff; fsetdec.
   - destruct (isJoinId bndr) eqn:?; only 1: reflexivity; simpl.
     f_equal.
@@ -791,22 +858,39 @@ Proof.
     rewrite <- !updJPSs_append.
     rewrite <- app_assoc.
     specialize (H0 _ _ _ HIn).
-    apply H0.
-    eapply disjointVarSet_subVarSet_l; only 1: apply H1.
+    apply H0; try assumption.
+    fresh_disjoint H1.
     rewrite rev_app_distr; simpl.
     rewrite !delVarSetList_app, delVarSetList_cons, delVarSetList_nil.
-    apply subVarSet_delVarSetList_both.
-    rewrite exprFreeVars_Case.
+    apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+    set_b_iff. rewrite exprFreeVars_Case.
     rewrite fold_is_true in *.
     match goal with HIn : List.In _ ?xs |- context [mapUnionVarSet ?f ?xs] =>
-      let H := fresh in
-      epose proof (mapUnionVarSet_In_subVarSet f HIn) as H ; simpl in H end.
-    rewrite delVarSetList_rev, <- delVarSetList_single, <- delVarSetList_app.
-    set_b_iff; fsetdec.
-  - apply H.
-    eapply disjointVarSet_subVarSet_l; only 1: apply H0.
-    apply subVarSet_delVarSetList_both.
-    rewrite exprFreeVars_Cast.
+      let Wf := fresh "Wf" in let Vf := fresh "Vf" in
+      assert (Wf : forall y, List.In y xs -> WF (f y)) by (intros [dc' pats' rhs'] _; solve_varset_inv);
+      assert (Vf : forall y, List.In y xs -> Axioms.ValidVarSet (f y)) by (intros [dc' pats' rhs'] _; solve_varset_inv);
+      let H := fresh in pose proof (@mapUnionVarSet_In_subVarSet _ _ xs f Wf Vf HIn) as H;
+      let WM := fresh in pose proof (mapUnionVarSet_WF f xs Wf) as WM;
+      let VM := fresh in pose proof (mapUnionVarSet_valid f xs Wf Vf) as VM;
+      simpl in H end.
+    assert (E : delVarSet (delVarSetList (exprFreeVars rhs) (rev pats)) bndr [=]
+      delVarSetList (exprFreeVars rhs) (pats ++ [bndr])).
+    { transitivity (delVarSet (delVarSetList (exprFreeVars rhs) pats) bndr).
+      - apply delVarSet_m; try solve [solve_varset_inv].
+        + apply delVarSetList_rev; solve_varset_inv.
+        + apply Proofs.GHC.Base.Eq_refl.
+      - rewrite delVarSetList_app, delVarSetList_single. reflexivity. }
+    match goal with |- Subset _ ?s =>
+      change (delVarSet (delVarSetList (exprFreeVars rhs) (rev pats)) bndr [<=] s)
+    end.
+    rewrite E.
+    set_b_iff.
+    intros x M. apply union_3; try solve [solve_varset_inv].
+    match goal with HM : Subset _ _ |- _ => apply HM; exact M end.
+  - apply H; try assumption.
+    fresh_disjoint H0.
+    apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+    set_b_iff. rewrite exprFreeVars_Cast.
     set_b_iff; fsetdec.
   - reflexivity.
   - reflexivity.
@@ -815,6 +899,7 @@ Qed.
 Lemma isJoinPointsValid_fresh_updJPSs:
   forall (vs2 vs3 : list Var) n (e : CoreExpr) (jps : VarSet),
   disjointVarSet (delVarSetList (exprFreeVars e) vs3) (mkVarSet vs2) = true ->
+  WF jps ->
   isJoinPointsValid e n (updJPSs jps (vs2 ++ vs3)) =
   isJoinPointsValid e n (updJPSs jps vs3).
 Proof.
@@ -826,81 +911,80 @@ Qed.
 Lemma isJoinPointsValid_fresh_between:
   forall (vs1 vs2 vs3 : list Var) (e : CoreExpr) (jps : VarSet),
   disjointVarSet (delVarSetList (exprFreeVars e) vs3) (mkVarSet vs2) = true ->
+  WF jps ->
   isJoinPointsValid e 0 (updJPSs jps ((vs1 ++ vs2) ++ vs3)) =
   isJoinPointsValid e 0 (updJPSs jps (vs1 ++ vs3)).
 Proof.
   intros.
   rewrite <- app_assoc.
   rewrite !updJPSs_append with (vs1 := vs1).
-  apply isJoinPointsValid_fresh_updJPSs.
-  assumption.
+  apply isJoinPointsValid_fresh_updJPSs; [assumption|].
+  apply updJPSs_WF. assumption.
 Qed.
 
 (** ** Lemmas about [StrongSubset] *)
 
 Lemma StrongSubset_updJPS:
   forall (v : Var) (vs1 vs2 : VarSet),
+  WF vs1 -> WF vs2 ->
   StrongSubset vs1 vs2 ->
   StrongSubset (updJPS vs1 v) (updJPS vs2 v).
 Proof.
   intros.
   unfold updJPS.
   destruct_match.
-  * apply StrongSubset_extend.
-    assumption.
-  * apply StrongSubset_delVarSet.
-    assumption.
+   * apply StrongSubset_extend; assumption.
+   * apply StrongSubset_delVarSet; assumption.
 Qed.
 
 
 Lemma StrongSubset_updJPSs:
   forall (vs3 : list Var) (vs1 vs2 : VarSet),
+  WF vs1 -> WF vs2 ->
   StrongSubset vs1 vs2 ->
   StrongSubset (updJPSs vs1 vs3) (updJPSs vs2 vs3).
 Proof.
   induction vs3; intros.
   * assumption.
   * simpl.
-    apply IHvs3.
-    apply StrongSubset_updJPS.
-    assumption.
+     apply IHvs3; try solve [apply updJPS_WF; assumption].
+     apply StrongSubset_updJPS; assumption.
 Qed.
 
 Lemma StrongSubset_updJPS_fresh :
   forall vs v,
+  WF vs ->
   elemVarSet v vs = false ->
   StrongSubset vs (updJPS vs v).
 Proof.
-  intros.
-  unfold updJPS. destruct_match.
-  * apply StrongSubset_extend_fresh.
-    apply lookupVarSet_None_elemVarSet.
-    assumption.
-  * apply StrongSubset_delete_fresh.
-    apply lookupVarSet_None_elemVarSet.
-    assumption.
+   intros vs v W N.
+   unfold updJPS. destruct_match.
+   * apply StrongSubset_extend_fresh; auto.
+     apply lookupVarSet_None_elemVarSet; assumption.
+   * apply StrongSubset_delete_fresh; auto.
+     apply lookupVarSet_None_elemVarSet; assumption.
 Qed.
 
 Lemma lookupVarSet_updJPS_neq:
   forall (v1 v2 : Var) (vs : VarSet),
+  WF vs ->
   v1 GHC.Base.== v2 = false ->
   lookupVarSet (updJPS vs v1) v2 = lookupVarSet vs v2.
 Proof.
-  intros.
-  unfold updJPS.
-  destruct_match.
-  * apply lookupVarSet_extendVarSet_neq.
-    rewrite H. congruence.
-  * apply lookupVarSet_delVarSet_neq.
-    rewrite H. congruence.
+   intros v1 v2 vs W N.
+   unfold updJPS.
+   destruct_match.
+   * apply lookupVarSet_extendVarSet_neq; [exact W|rewrite N; congruence].
+   * apply lookupVarSet_delVarSet_neq; [exact W|rewrite N; congruence].
 Qed.
 
 Lemma StrongSubset_updJPSs_fresh :
   forall vs vs2,
+  WF vs -> Axioms.ValidVarSet vs ->
   disjointVarSet vs (mkVarSet vs2) = true ->
   StrongSubset vs (updJPSs vs vs2).
 Proof.
-  intros.
+   intros vs vs2 W V H.
   (* A naive induction using [StrongSubset_updJPS_fresh] does not go through
      because we do not know that the [vs2] are disjoint.
   *)
@@ -910,16 +994,16 @@ Proof.
   { induction vs2 using rev_ind; intros.
     * apply Heq.
     * rewrite fold_is_true in *.
-      rewrite disjointVarSet_mkVarSet_append, disjointVarSet_mkVarSet_cons in H.
+      rewrite disjointVarSet_mkVarSet_append, disjointVarSet_mkVarSet_cons in H by solve_varset_inv.
       destruct H. destruct H0.
       rewrite updJPSs_append, updJPSs_cons, updJPSs_nil.
       assert (x GHC.Base.== v = false).
-      { rewrite <- lookupVarSet_None_elemVarSet in H0.
+      { rewrite <- lookupVarSet_None_elemVarSet in H0 by assumption.
         apply not_true_is_false. intro.
         erewrite lookupVarSet_eq  in H0 by eassumption.
         congruence.
       }
-      rewrite lookupVarSet_updJPS_neq by assumption.
+      rewrite lookupVarSet_updJPS_neq by (assumption || (apply updJPSs_WF; exact W)).
       apply IHvs2.
       assumption.
   }
@@ -1028,3 +1112,8 @@ Proof.
   destruct_match; try apply Respects_StrongSubset_const;
   apply Respects_StrongSubset_isJoinPointsValid_aux.
 Qed.
+
+Print Assumptions updJPSs_WF.
+Print Assumptions updJPSs_valid.
+Print Assumptions isJoinPointsValid_fresh_between.
+Print Assumptions Respects_StrongSubset_isJoinPointsValid.

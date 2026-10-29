@@ -1,2388 +1,1048 @@
-(* Disable notation conflict warnings *)
+(* Premise-aware VarSet facts.  The carrier and the membership/equality
+   predicates remain raw; every structural operation law carries its WF
+   hypotheses explicitly. *)
 Set Warnings "-notation-overridden".
-
 From Coq Require Import ssreflect ssrfun ssrbool.
-Require Import Psatz.
-Require Import Coq.Lists.List.
-Require Import Coq.NArith.BinNat.
-Import ListNotations.
-Require Import Coq.Classes.RelationClasses.
-Require Import Coq.Classes.Morphisms.
-Require Import SetoidList.
-Require Import Coq.Logic.ProofIrrelevance.
+Require Import Coq.Lists.List Coq.Classes.Morphisms Coq.Classes.RelationClasses.
+Require Import Coq.Lists.SetoidList.
+Require Import GHC.Base Core.
+Require Import Proofs.GHC.Base Proofs.GHC.List Proofs.Data.Foldable.
+Require Import Proofs.Axioms Proofs.Unique Proofs.Var.
+Require Export Proofs.VarSetFSet.
+Import GHC.Base.ManualNotations ListNotations.
 
-Require Import GHC.Base.
-
-Require Import Proofs.Prelude.
-
-Require Import CoreFVs.
-Require Import Id.
-Require Import Core.
-Require UniqFM.
-
-Require Import Proofs.Base.
-Require Import Proofs.Axioms.
-Require Import Proofs.ContainerProofs.
-Require Import Proofs.GhcTactics.
-Require Import Proofs.Unique.
-Require Import Proofs.Var.
-Require Import Proofs.VarSetFSet.
-
-
-Open Scope Z_scope.
-
-
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-Set Bullet Behavior "Strict Subproofs".
-
-
-Lemma IntMapEq_VarSetEq : forall x y,
-    x == y ->
-    UniqSet.Mk_UniqSet (UniqFM.UFM x) [=] UniqSet.Mk_UniqSet (UniqFM.UFM y).
-Proof.
-  intros x y Heq.
-  unfold Equal. intro a. unfold In.
-  unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM.
-  rewrite (Eq_membership Var _ EqLaws_Var _ _ Heq). tauto.
-Qed.
-
-(* Stephanie's hack. *)
-Lemma fold_is_true : forall b, b = true <-> b.
-Proof. intros. unfold is_true. reflexivity. Qed.
-
-Lemma false_is_not_true :
-  forall b, b = false <-> b <> true.
-Proof.
-  destruct b; intuition.
-Qed.
-
-(* Why is this not part of ssr? *)
-Lemma eqE : forall (a b:bool), a = b <-> (a <-> b).
-Proof.
-  move=> [] []; split=> //; move=> [H1 H2].
-  - by move: (H1 isT).
-  - by move: (H2 isT).
-Qed.
-
+Lemma fold_is_true b : b = true <-> b. Proof. reflexivity. Qed.
+Lemma false_is_not_true b : b = false <-> b <> true.
+Proof. destruct b; intuition discriminate. Qed.
+Lemma eqE (a b : bool) : a = b <-> (a <-> b).
+Proof. destruct a, b; unfold is_true; intuition discriminate. Qed.
 Lemma andE a b : a && b <-> a /\ b.
-Proof. 
-  elim: a; elim: b; try tauto.
-  split; move=> /andP; try done. 
-  split; move=> /andP; try done. 
-Qed.
+Proof. apply Bool.andb_true_iff. Qed.
+Lemma orE a b : a || b <-> a \/ b.
+Proof. apply Bool.orb_true_iff. Qed.
+Lemma notE a : ~~ a <-> ~ a.
+Proof. destruct a; unfold is_true; intuition discriminate. Qed.
 
-Lemma orE : forall a b, (a || b) <-> a \/ b.
-Proof. intros a b. unfold is_true. rewrite orb_true_iff. tauto. Qed.
-
-Lemma notE : forall a, ~~a <-> ~ a.
-Proof. move=>a. unfold is_true. rewrite negb_true_iff. 
-split. move=>h. rewrite h. auto.
-apply not_true_is_false.
-Qed.
-
-
-
-(** ** NOTE: VarSets and equality *)
-
-(* VarSets have several different notions of equality. 
-   In all three definitions, equal varsets must have the same domain. 
-   Now suppose:
-       lookupVarSet m1 x = Some v1 and
-       lookupVarSet m2 x = Some v2
-   The sets are equal when:
-    - v1 = v2                (i.e. coq equality) 
-    - almostEqual v1 v2      
-    - v1 == v2               (i.e. same uniques ONLY)
-
-   The last (coarsest) equality is the one used in the FSet signature, 
-   and denoted by the [=] notation. 
-
-   The almostEqual equality is denoted by {=}.
-
-   Because of this distinction, we have to do some lemmas twice: once 
-   for [=] equality, and once for {=} equality.
-  
-*)
-
-
-(** ** VarSet operations respect GHC.Base.==  *)
-
-Lemma elemVarSet_eq : forall v1 v2 vs,
-  (v1 == v2) -> 
+Lemma elemVarSet_eq v1 v2 vs : v1 == v2 ->
   elemVarSet v1 vs = elemVarSet v2 vs.
 Proof.
-  intros v1 v2 vs h.
-  unfold elemVarSet, UniqSet.elementOfUniqSet.
-  destruct vs.
-  unfold UniqFM.elemUFM.
-  destruct getUniqSet'.
-  move: h.
-  rewrite eq_unique.
-  move=> h.
-  f_equal.
-  auto.
+  intro E. rewrite eq_unique in E. destruct vs as [[m]].
+  unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM. now rewrite E.
 Qed.
-
-Lemma lookupVarSet_eq :
-  forall v1 v2 vs,
-    (v1 == v2) ->
-    lookupVarSet vs v1 = lookupVarSet vs v2.
-Proof. 
-  intros v1 v2 vs.
-  unfold lookupVarSet.
-  unfold UniqSet.lookupUniqSet.
-  destruct vs.
-  unfold UniqFM.lookupUFM.
-  destruct getUniqSet'.
-  intro h.
-  rewrite -> eq_unique in h.
-  rewrite h.
-  reflexivity.
-Qed.
-
-Lemma extendVarSet_eq : 
-  forall x y vs, x == y -> extendVarSet vs x [=] extendVarSet vs y.
+Lemma lookupVarSet_eq v1 v2 vs : v1 == v2 ->
+  lookupVarSet vs v1 = lookupVarSet vs v2.
+Proof. intro E. rewrite eq_unique in E. rewrite -> !lookupVarSet_IntMap, E. reflexivity. Qed.
+Lemma delVarSet_eq x y vs : x == y -> delVarSet vs x = delVarSet vs y.
 Proof.
-  move => x y vs Eq.
-  set_b_iff.
-  move: (add_m) => h.
-  unfold Proper,respectful in h.
-  apply h.
-  assumption.
-  reflexivity.
+  intro E. rewrite eq_unique in E. destruct vs as [[m]].
+  unfold delVarSet, UniqSet.delOneFromUniqSet, UniqFM.delFromUFM. now rewrite E.
 Qed.
+Lemma extendVarSet_eq x y vs : WF vs -> x == y ->
+  extendVarSet vs x [=] extendVarSet vs y.
+Proof. intros W E. apply extendVarSet_m; auto; reflexivity. Qed.
 
-
-Lemma delVarSet_eq : 
-  forall x y vs, x == y -> delVarSet vs x = delVarSet vs y.
+Lemma lookupVarSet_In vs v : WF vs ->
+  ((exists v', lookupVarSet vs v = Some v') <-> In v vs).
 Proof.
-  move => x y vs Eq.
-  unfold delVarSet.
-  move: vs => [i].
-  move: i => [m].
-  rewrite -> eq_unique in Eq.
-  unfold UniqSet.delOneFromUniqSet.
-  unfold UniqFM.delFromUFM.
-  rewrite Eq.
-  reflexivity.
+  intro W. unfold In. split.
+  - intros [w L]. eapply lookupVarSet_member; eauto.
+  - apply elemVarSet_lookup_some; exact W.
 Qed.
-
-
-
-
-
-
-(** ** List based operations in terms of folds *)
-
-Lemma extendVarSetList_foldl' : forall x xs, 
-    extendVarSetList x xs = Foldable.foldl' (fun x y => add y x) x xs.
+Lemma lookupVarSet_elemVarSet v1 v2 vs : WF vs ->
+  lookupVarSet vs v1 = Some v2 -> elemVarSet v1 vs.
+Proof. apply lookupVarSet_member. Qed.
+Lemma lookupVarSet_None_elemVarSet v vs : WF vs ->
+  (lookupVarSet vs v = None <-> elemVarSet v vs = false).
 Proof.
-  intros.
-  unfold extendVarSetList, UniqSet.addListToUniqSet;
-  replace UniqSet.addOneToUniqSet with 
-      (fun x y => add y x).
-  auto.
-  auto.
+  intro W. rewrite (elemVarSet_lookup vs v W).
+  destruct (lookupVarSet vs v); intuition discriminate.
 Qed.
-
-Lemma delVarSetList_foldl : forall vl vs,
-    delVarSetList vs vl = Foldable.foldl delVarSet vs vl.
-Proof. 
-  induction vl.
-  - intro vs. 
-    destruct vs. destruct getUniqSet'.
-    unfold_Foldable_foldl.
-    simpl.
-    auto.
-  - intro vs. 
-    unfold delVarSetList in *.
-    unfold UniqSet.delListFromUniqSet in *.
-    destruct vs.
-    unfold UniqFM.delListFromUFM in *.
-    revert IHvl.
-    unfold_Foldable_foldl.
-    simpl.
-    intro IHvl.
-    rewrite (IHvl (UniqSet.Mk_UniqSet (UniqFM.delFromUFM getUniqSet' a))).
-    auto.
-Qed.
-
-
-Lemma mkVarSet_extendVarSetList : forall xs,
-    mkVarSet xs = extendVarSetList emptyVarSet xs.
+Lemma lookupVarSet_Equal s t : WF s -> WF t ->
+  (forall v, lookupVarSet s v = lookupVarSet t v) -> s [=] t.
 Proof.
-  reflexivity.
+  intros W T E x. unfold In.
+  rewrite -> (elemVarSet_lookup s x W), (elemVarSet_lookup t x T), E. reflexivity.
 Qed.
-
-
-#[export] Hint Rewrite mkVarSet_extendVarSetList : hs_simpl.
-
-
-(** ** [lookupVarSet] and [elemVarSet] correspondence *)
-
-Lemma lookupVarSet_In:
-  forall vs v, (exists v', lookupVarSet vs v = Some v') <-> In v vs.
+(* This direction really is raw-true: member follows the lookup path. *)
+Lemma elemVarSet_lookupVarSet v vs :
+  elemVarSet v vs -> exists w, lookupVarSet vs v = Some w.
 Proof.
-  unfold lookupVarSet, UniqSet.lookupUniqSet,
-    UniqFM.lookupUFM, Unique.getWordKey, Unique.getKey.
-  intros.
-  destruct vs.
-  destruct getUniqSet' as [m].
-  destruct (Unique.getUnique v) as [n] eqn:Hv.
-  unfold In, elemVarSet, UniqSet.elementOfUniqSet,
-  UniqFM.elemUFM, Unique.getKey, Unique.getWordKey,
-  Unique.getKey.
-  rewrite Hv.
-  rewrite <- (member_lookup _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
-  reflexivity.
+  destruct vs as [[m]]. unfold elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM.
+  rewrite lookupVarSet_IntMap. simpl VarSet_IntMap.
+  apply Proofs.ContainerProofs.member_lookup_some.
 Qed.
 
-Lemma lookupVarSet_elemVarSet : 
-  forall v1 v2 vs, lookupVarSet vs v1 = Some v2 -> elemVarSet v1 vs.
+(* Not a Proper instance on unrestricted Equal. *)
+Lemma lookupVarSet_m s t x y : WF s -> WF t ->
+  ValidVarSet s -> ValidVarSet t -> s [=] t -> x == y ->
+  lookupVarSet s x == lookupVarSet t y.
 Proof.
-  intros.
-  unfold lookupVarSet, elemVarSet in *.
-  unfold UniqSet.lookupUniqSet, UniqSet.elementOfUniqSet in *.
-  destruct vs.
-  unfold UniqFM.lookupUFM, UniqFM.elemUFM in *.
-  destruct getUniqSet' as [m].
-  set (key := Unique.getWordKey (Unique.getUnique v1)) in *.
-  rewrite (member_lookup _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
-  exists v2. auto.
+  intros W T V U E H. rewrite <- (lookupVarSet_eq x y t H).
+  destruct (lookupVarSet s x) as [v|] eqn:L;
+    destruct (lookupVarSet t x) as [w|] eqn:K.
+  - change (v == w). eapply Eq_trans; [|exact (U x w K)].
+    rewrite Eq_sym. exact (V x v L).
+  - exfalso. apply (lookupVarSet_member s x v W) in L.
+    apply (proj1 (E x)) in L. unfold In in L.
+    rewrite -> (elemVarSet_lookup t x T), K in L. discriminate.
+  - exfalso. apply (lookupVarSet_member t x w T) in K.
+    apply (proj2 (E x)) in K. unfold In in K.
+    rewrite -> (elemVarSet_lookup s x W), L in K. discriminate.
+  - change (true = true). reflexivity.
 Qed.
 
-Lemma lookupVarSet_None_elemVarSet: 
-  forall v1 vs, lookupVarSet vs v1 = None <-> elemVarSet v1 vs = false.
-Proof.
-  intros.
-  unfold lookupVarSet, elemVarSet in *.
-  unfold UniqSet.lookupUniqSet, UniqSet.elementOfUniqSet in *.
-  destruct vs.
-  unfold UniqFM.lookupUFM, UniqFM.elemUFM in *.
-  destruct getUniqSet' as [m].
-  set (key := Unique.getWordKey (Unique.getUnique v1)) in *.
-  rewrite (non_member_lookup _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
-  intuition.
-Qed.
-
-Lemma elemVarSet_lookupVarSet :
-  forall v1 vs, elemVarSet v1 vs -> exists v2, lookupVarSet vs v1 = Some v2.
-Proof.
-  intros.
-  unfold lookupVarSet, elemVarSet in *.
-  unfold UniqSet.lookupUniqSet, UniqSet.elementOfUniqSet in *.
-  destruct vs.
-  unfold UniqFM.lookupUFM, UniqFM.elemUFM in *.
-  destruct getUniqSet'.
-  set (key := Unique.getWordKey (Unique.getUnique v1)) in *.
-  apply member_lookup_some.
-  auto.
-Qed.
-
-(** ** [lookupVarSet] is Proper  *)
-
-Instance lookupVarSet_m : 
-  Proper (Equal ==> (fun x y => x == y) ==> (fun x y => x == y)) lookupVarSet.
-Proof.
-  unfold Equal.
-  intros x y H v1 v2 EV.
-  erewrite lookupVarSet_eq; eauto.
-  pose (h1 := H v1).
-  pose (h2 := H v2).
-  repeat rewrite -> mem_iff in h1.
-  repeat rewrite -> mem_iff in h2.
-  destruct (lookupVarSet x v2) eqn:LX;
-  destruct (lookupVarSet y v2) eqn:LY;
-  hs_simpl.
-  - apply ValidVarSet_Axiom in LX.
-    apply ValidVarSet_Axiom in LY.
-    eapply Eq_trans.
-    rewrite Eq_sym.
-    eapply LX.
-    eapply LY.
-  - apply lookupVarSet_elemVarSet in LX.
-    rewrite -> lookupVarSet_None_elemVarSet in LY.
-    set_b_iff.
-    intuition.
-  - apply lookupVarSet_elemVarSet in LY.
-    rewrite -> lookupVarSet_None_elemVarSet in LX.
-    set_b_iff.
-    intuition.
-  - auto.
-Qed.
-
-
-(** ** [lookupVarSet . extendVarSet ] simplification *)
-
-Lemma lookupVarSet_extendVarSet_self:
-  forall v vs,
+Lemma lookupVarSet_extendVarSet_self v vs : WF vs ->
   lookupVarSet (extendVarSet vs v) v = Some v.
+Proof. apply lookupVarSet_extend_same. Qed.
+Lemma lookupVarSet_extendVarSet_eq v1 v2 vs : WF vs -> v1 == v2 ->
+  lookupVarSet (extendVarSet vs v1) v2 = Some v1.
 Proof.
-  intros.
-  unfold lookupVarSet, extendVarSet in *.
-  unfold UniqSet.lookupUniqSet, UniqSet.addOneToUniqSet in *.
-  destruct vs.
-  unfold UniqFM.lookupUFM, UniqFM.addToUFM in *.
-  destruct getUniqSet'.
-  set (key := Unique.getWordKey (Unique.getUnique v)) in *.
-  apply lookup_insert.
+  intros W E. rewrite <- (lookupVarSet_eq v1 v2 _ E).
+  apply lookupVarSet_extend_same; exact W.
+Qed.
+Lemma lookupVarSet_extendVarSet_neq v1 v2 vs : WF vs -> ~ (v1 == v2) ->
+  lookupVarSet (extendVarSet vs v1) v2 = lookupVarSet vs v2.
+Proof.
+  intros W E. apply lookupVarSet_extend_neq; [exact W|].
+  rewrite Eq_sym. apply Bool.not_true_is_false. exact E.
 Qed.
 
-#[export] Hint Rewrite lookupVarSet_extendVarSet_self : hs_simpl.
-
-Lemma lookupVarSet_extendVarSet_eq :
-      forall v1 v2 vs,
-      v1 == v2  ->
-      lookupVarSet (extendVarSet vs v1) v2 = Some v1.
-Proof.
-  intros v1 v2 vs H.
-  rewrite Eq_sym in H.
-  rewrite (lookupVarSet_eq _ H).
-  unfold lookupVarSet, extendVarSet.
-  unfold UniqSet.lookupUniqSet, UniqSet.addOneToUniqSet.
-  destruct vs.
-  unfold UniqFM.lookupUFM, UniqFM.addToUFM.
-  destruct getUniqSet'.
-  set (k1 := Unique.getWordKey (Unique.getUnique v1)).
-  rewrite lookup_insert.
-  reflexivity.
-Qed.
-
-Lemma lookupVarSet_extendVarSet_neq :
-      forall v1 v2 vs,
-      not (v1 == v2) ->
-      lookupVarSet (extendVarSet vs v1) v2 = lookupVarSet vs v2.
-Proof.
-  intros v1 v2 vs H.
-  assert (Unique.getWordKey (Unique.getUnique v1) <> 
-          Unique.getWordKey (Unique.getUnique v2)).
-  { intro h.
-    eapply H.
-    rewrite eq_unique.
-    auto.
-  }
-  unfold lookupVarSet, extendVarSet.
-  unfold UniqSet.lookupUniqSet, UniqSet.addOneToUniqSet.
-  destruct vs.
-  unfold UniqFM.lookupUFM, UniqFM.addToUFM.
-  destruct getUniqSet' as [m].
-  eapply (lookup_insert_neq _ _ _ _ m (IntMapProofs.All_IntMaps_WF _ m)).
-  auto.
-Qed.
-
-
-(* --------------------------------- *)
-
-(* Tactics that don't really work. *)
-                                   
-Local Ltac unfold_VarSet_to_IntMap :=
-  repeat match goal with
-         | [vs : VarSet |- _ ] =>
-           let u := fresh "u" in
-           destruct vs as [u]; destruct u; simpl
-         | [ |- UniqSet.Mk_UniqSet _ = UniqSet.Mk_UniqSet _ ] =>
-           f_equal
-         | [ |- UniqFM.UFM _ = UniqFM.UFM _ ] =>
-           f_equal
-         end.
-
-(*
-(* Q: is there a way to do the automatic destructs safely? Sometimes 
-   loses too much information. *)
-
-Ltac unfold_VarSet :=
-  unfold subVarSet,elemVarSet, isEmptyVarSet, 
-         minusVarSet, extendVarSet, extendVarSetList in *;
-  unfold UniqSet.elementOfUniqSet, 
-         UniqSet.isEmptyUniqSet, 
-         UniqSet.addOneToUniqSet,
-         UniqSet.minusUniqSet,
-         UniqSet.addListToUniqSet in *;
-  try repeat match goal with
-  | vs: VarSet, H : context[match ?vs with _ => _ end]  |- _ => destruct vs
-  end;
-  try repeat match goal with
-  | vs: VarSet |- context[match ?vs with _ => _ end ] => destruct vs
-  end;
-
-  unfold UniqFM.addToUFM, 
-         UniqFM.minusUFM, UniqFM.isNullUFM, 
-         UniqFM.elemUFM in *;
-  try repeat match goal with
-  | u: UniqFM.UniqFM ?a, H : context[match ?u with _ => _ end]  |- _ => destruct u
-  end;
-  try repeat match goal with
-  | u: UniqFM.UniqFM ?a |- context[match ?u with _ => _ end] => destruct u
-  end. 
-
-Ltac safe_unfold_VarSet :=
-  unfold subVarSet,elemVarSet, isEmptyVarSet, 
-         minusVarSet, extendVarSet, extendVarSetList in *;
-  unfold UniqSet.elementOfUniqSet, 
-         UniqSet.isEmptyUniqSet, 
-         UniqSet.addOneToUniqSet,
-         UniqSet.minusUniqSet,
-         UniqSet.addListToUniqSet in *;
-  unfold UniqFM.addToUFM, 
-         UniqFM.minusUFM, UniqFM.isNullUFM, 
-         UniqFM.elemUFM in *. *)
-
-(**************************************)
-
-(** ** [extendVarSetList] simplifications *)
-
-Lemma extendVarSetList_nil:
-  forall s,
-  extendVarSetList s [] = s.
-Proof.
-  intro s.
-  reflexivity.
-Qed.
-
-Lemma extendVarSetList_cons:
-  forall s v vs,
-  extendVarSetList s (v :: vs) = extendVarSetList (extendVarSet s v) vs.
-Proof.
-  intros.
-  rewrite extendVarSetList_foldl'.
-  autorewrite with hs_simpl.
-  reflexivity.
-Qed.
-
-Lemma extendVarSetList_singleton:
-  forall vs v, extendVarSetList vs [v] = extendVarSet vs v.
-Proof. intros. reflexivity. Qed.
-
-
-Lemma extendVarSetList_append:
-  forall s vs1 vs2,
+Lemma mkVarSet_extendVarSetList xs : mkVarSet xs = extendVarSetList emptyVarSet xs.
+Proof. reflexivity. Qed.
+Lemma extendVarSetList_singleton vs v : extendVarSetList vs [v] = extendVarSet vs v.
+Proof. reflexivity. Qed.
+Lemma extendVarSetList_append s vs1 vs2 :
   extendVarSetList s (vs1 ++ vs2) = extendVarSetList (extendVarSetList s vs1) vs2.
 Proof.
-  intros.
-  rewrite extendVarSetList_foldl'.
-  autorewrite with hs_simpl.
-  reflexivity.
+  revert s; induction vs1 as [|v vs IH]; intro s; simpl List.app; [reflexivity|].
+  rewrite !extendVarSetList_cons. apply IH.
 Qed.
-
-#[export] Hint Rewrite extendVarSetList_nil
-             extendVarSetList_cons
-             extendVarSetList_singleton
-             extendVarSetList_append : hs_simpl.
-
-
-
-(** ** [delVarSetList] simplification  *)
-
-Lemma delVarSetList_nil:
-  forall e, delVarSetList e [] = e.
+Lemma delVarSetList_single e a : delVarSetList e [a] = delVarSet e a.
+Proof. rewrite -> delVarSetList_cons, delVarSetList_nil. reflexivity. Qed.
+Lemma delVarSetList_app s vs1 vs2 :
+  delVarSetList s (vs1 ++ vs2) = delVarSetList (delVarSetList s vs1) vs2.
 Proof.
-  intros.
-  rewrite delVarSetList_foldl.
-  reflexivity.
+  revert s; induction vs1 as [|v vs IH]; intro s; simpl List.app.
+  - rewrite !delVarSetList_nil. reflexivity.
+  - rewrite !delVarSetList_cons. apply IH.
 Qed.
 
-Lemma delVarSetList_single:
-  forall e a, delVarSetList e [a] = delVarSet e a.
-Proof.
-  intros.
-  rewrite delVarSetList_foldl.
-  autorewrite with hs_simpl.
-  reflexivity.
-Qed.
-
-Lemma delVarSetList_cons:
-  forall e a vs, delVarSetList e (a :: vs) = delVarSetList (delVarSet e a) vs.
-Proof.
-  intros.
-  repeat rewrite delVarSetList_foldl.
-  autorewrite with hs_simpl.
-  reflexivity.
-Qed.
-
-Lemma delVarSetList_app:
-  forall e vs vs', delVarSetList e (vs ++ vs') = delVarSetList (delVarSetList e vs) vs'.
-Proof.
-  intros.
-  repeat rewrite delVarSetList_foldl.
-  autorewrite with hs_simpl.
-  reflexivity.
-Qed.
-
-#[export] Hint Rewrite delVarSetList_nil
-             delVarSetList_cons
-             delVarSetList_single
-             delVarSetList_app : hs_simpl.
-
-
-(** ** [elemVarSet] simplification *)
-
-Lemma elemVarSet_emptyVarSet : forall v, (elemVarSet v emptyVarSet) = false.
-  intro v.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-Lemma elemVarSet_unionVarSet:
-  forall v vs1 vs2,
-    elemVarSet v (unionVarSet vs1 vs2) = elemVarSet v vs1 || elemVarSet v vs2.
-Proof.
-  move => v [[i]] [[i0]] /=.
-  rewrite member_union.
-  auto.
-Qed.
-
-#[export] Hint Rewrite elemVarSet_emptyVarSet elemVarSet_unionVarSet : hs_simpl.
-
-
-(** ** [extendVarSet]  *)
-
-Lemma extendVarSet_elemVarSet_true : forall set v, 
-    elemVarSet v set -> extendVarSet set v [=] set.
-Proof. 
-  intros.
-  apply add_equal.
-  auto.
-Qed.
-
-
-Lemma elemVarSet_extendVarSet:
-  forall v vs v',
+Lemma elemVarSet_emptyVarSet v : elemVarSet v emptyVarSet = false.
+Proof. reflexivity. Qed.
+Lemma elemVarSet_extendVarSet v vs v' : WF vs ->
   elemVarSet v (extendVarSet vs v') = (v' == v) || elemVarSet v vs.
-Proof.
-  intros.
-  rewrite var_eq_realUnique.
-  replace (realUnique v' == realUnique v) with
-      (F.eqb v' v).
-  - eapply F.add_b.
-  - unfold F.eqb.
-    destruct F.eq_dec as [e | ne].
-    + unfold Var_as_DT.eq, Var_as_DT.eqb in e.
-      rewrite -> var_eq_realUnique in e.
-      rewrite e. auto.
-    + unfold Var_as_DT.eq, Var_as_DT.eqb in ne.
-      rewrite -> var_eq_realUnique in ne.
-      apply not_true_is_false in ne.
-      rewrite ne. auto.
-Qed.
-
-#[export] Hint Rewrite elemVarSet_extendVarSet : hs_simpl.
-
-Lemma elemVarSet_extendVarSetList:
-  forall v vs vs',
+Proof. intro W. rewrite -> (elemVarSet_extend_eq vs v' v W), Eq_sym. reflexivity. Qed.
+Lemma elemVarSet_delVarSet v1 vs v2 : WF vs ->
+  elemVarSet v1 (delVarSet vs v2) = negb (v2 == v1) && elemVarSet v1 vs.
+Proof. intro W. rewrite -> (elemVarSet_del vs v2 v1 W). rewrite <- Var_eq_key. rewrite Eq_sym. reflexivity. Qed.
+Lemma elemVarSet_extendVarSetList v vs vs' : WF vs ->
   elemVarSet v (extendVarSetList vs vs') = Foldable.elem v vs' || elemVarSet v vs.
 Proof.
-  intros.
-  generalize vs.
-  induction vs'.
-  + intros vs0. hs_simpl.
-    simpl.
-    auto.
-  + intros vs0. hs_simpl.
-    rewrite IHvs'.
-    hs_simpl.
-    rewrite Eq_sym.
-    ssrbool.bool_congr.
-    reflexivity.
+  revert vs. induction vs' as [|x xs IH]; intros vs W.
+  - rewrite -> extendVarSetList_nil, elem_nil. reflexivity.
+  - rewrite -> extendVarSetList_cons, IH by (apply extendVarSet_WF; exact W).
+    rewrite -> elemVarSet_extendVarSet by exact W. rewrite elem_cons.
+    rewrite Eq_sym. destruct (v == x), (Foldable.elem v xs), (elemVarSet v vs); reflexivity.
 Qed.
-
-#[export] Hint Rewrite elemVarSet_extendVarSetList : hs_simpl.
-
-Lemma extendVarSet_commute : forall x y vs, 
-    extendVarSet (extendVarSet vs y) x  [=] extendVarSet (extendVarSet vs x) y.
+Lemma extendVarSetList_iff l x vs : WF vs ->
+  (In x (extendVarSetList vs l) <-> In x vs \/ Foldable.elem x l).
 Proof.
-  intros.
-  set_b_iff.
-  fsetdec.
+  intro W. unfold In. rewrite -> elemVarSet_extendVarSetList by exact W.
+  rewrite Bool.orb_true_iff. tauto.
 Qed.
-
-
-
-(** ** [extendVarSetList] and [delVarSetList] are Proper **)
-
-(* These lemmas show that extendVarSetList respects [=] *)
-
-Lemma extendVarSetList_iff : forall l x vs,
-  In x (extendVarSetList vs l) <->
-  In x vs \/ Foldable.elem x l.
+Lemma delVarSetList_iff l x vs : WF vs ->
+  (In x (delVarSetList vs l) <-> In x vs /\ ~ Foldable.elem x l).
 Proof.
-  induction l.
-  - intros x vs.
-    hs_simpl.
-    intuition.
-  - intros x vs.
-    hs_simpl.
-    rewrite IHl.
-    set_b_iff.
-    rewrite add_iff.
-    unfold Var_as_DT.eqb.
-    rewrite Eq_sym.
-    rewrite orE.
-    intuition.
+  revert vs; induction l as [|v vs IH]; intros s W.
+  - rewrite -> delVarSetList_nil, elem_nil. unfold is_true; intuition discriminate.
+  - rewrite -> delVarSetList_cons, IH by (apply delVarSet_WF; exact W).
+    rewrite -> delVarSet_remove, remove_iff by exact W.
+    rewrite elem_cons. unfold is_true. rewrite Bool.orb_true_iff. unfold E.eq, E.eqb, E.t.
+    rewrite Eq_sym. tauto.
 Qed.
 
-Lemma delVarSetList_iff : forall l x vs,
-  In x (delVarSetList vs l) <->
-  In x vs /\ ~ (Foldable.elem x l).
+Lemma extendVarSet_elemVarSet_true s v : WF s -> elemVarSet v s ->
+  extendVarSet s v [=] s.
+Proof. apply add_equal. Qed.
+Lemma delVarSet_elemVarSet_false v s : WF s -> elemVarSet v s = false ->
+  delVarSet s v [=] s.
+Proof. intros W H. apply remove_equal; [exact W|]. unfold In; rewrite H; discriminate. Qed.
+Lemma extendVarSet_commute x y s : WF s ->
+  extendVarSet (extendVarSet s y) x [=] extendVarSet (extendVarSet s x) y.
 Proof.
-  induction l.
-  - intros x vs. 
-    hs_simpl.
-    intuition.
-  - intros x vs.
-    hs_simpl.
-    rewrite IHl.
-    rewrite delVarSet_remove. rewrite remove_iff.
-    unfold Var_as_DT.eqb.
-    rewrite Eq_sym.
-    rewrite orE.
-    intuition.
+  intros W a. rewrite -> !extendVarSet_add, !add_iff by solve_varset_inv. tauto.
 Qed.
-
-Instance extendVarSetList_m : 
-  Proper (Equal ==> (eqlistA (fun x y => x == y)) ==> Equal) extendVarSetList.
+Lemma delVarSet_commute x y s : WF s ->
+  delVarSet (delVarSet s x) y [=] delVarSet (delVarSet s y) x.
+Proof. intros W; fsetdec. Qed.
+Lemma delVarSet_emptyVarSet x : delVarSet emptyVarSet x = emptyVarSet.
+Proof. reflexivity. Qed.
+Lemma delVarSet_extendVarSet s v : WF s -> elemVarSet v s = false ->
+  delVarSet (extendVarSet s v) v [=] s.
 Proof.
-  unfold Equal.
-  intros x y H s s' H0 a.
-  do 2 rewrite extendVarSetList_iff.
-  rewrite H.
-  intuition; right.
-  erewrite <- eqlist_Foldable_elem; eauto.
-  eapply EqLaws_Var.
-  erewrite eqlist_Foldable_elem; eauto.
-  eapply EqLaws_Var.
+  intros W H x. rewrite -> delVarSet_remove, remove_iff by solve_varset_inv.
+  rewrite -> extendVarSet_add, add_iff by exact W.
+  split; [tauto|]. intro K; split; [auto|]. intro E.
+  assert (L : In v s) by (eapply In_1; [symmetry; exact E|exact K]).
+  unfold In in L; rewrite H in L; discriminate.
 Qed.
-
-Instance delVarSetList_m : 
-  Proper (Equal ==> (eqlistA (fun x y => x == y)) ==> Equal) delVarSetList.
+Lemma elemVarSet_delVarSet_eq x y s : WF s -> x == y ->
+  elemVarSet x (delVarSet s y) = false.
+Proof. intros W E. rewrite -> elemVarSet_delVarSet by exact W. rewrite -> Eq_sym, E. reflexivity. Qed.
+Lemma lookupVarSet_delVarSet_neq v1 v2 s : WF s -> ~ (v1 == v2) ->
+  lookupVarSet (delVarSet s v1) v2 = lookupVarSet s v2.
 Proof.
-  unfold Equal.
-  intros x y H s s' H0 a.
-  do 2 rewrite delVarSetList_iff.
-  rewrite H.
-  intuition.
-  apply H3.
-  erewrite eqlist_Foldable_elem; eauto using EqLaws_Var.
-  apply H3.
-  erewrite <- eqlist_Foldable_elem; eauto using EqLaws_Var.
+  intros W E. rewrite -> (lookupVarSet_del s v1 v2 W). rewrite <- Var_eq_key. rewrite Eq_sym.
+  destruct (v1 == v2) eqn:K; [exfalso; apply E; reflexivity|reflexivity].
 Qed.
 
-Instance delVarSet_m : 
-  Proper (Equal ==> (fun x y => x == y) ==> Equal) delVarSet.
+Lemma extendVarSetList_m s t xs ys : WF s -> WF t ->
+  s [=] t -> eqlistA (fun x y => x == y) xs ys ->
+  extendVarSetList s xs [=] extendVarSetList t ys.
 Proof.
-  intros x y H s s' H0 a.
-  replace (delVarSet x s) with (delVarSetList x [s]).
-  replace (delVarSet y s') with (delVarSetList y [s']).
-  assert (eqlistA (_==_) [s] [s']).
-  { constructor; [assumption|constructor]. }
-  rewrite H. rewrite H1. reflexivity.
-  rewrite delVarSetList_cons delVarSetList_nil //=. 
-  rewrite delVarSetList_cons delVarSetList_nil //=.
+  intros W T E L. revert s t W T E. induction L; intros s t W T E.
+  - exact E.
+  - rewrite !extendVarSetList_cons. apply IHL;
+      try (apply extendVarSet_WF; assumption).
+    apply extendVarSet_m; assumption.
 Qed.
-
-(* We can commute the order of addition to varsets. 
-   This is only true for [=] *)
-Lemma extendVarSetList_extendVarSet_iff: forall l x vs,
-  extendVarSetList (extendVarSet vs x) l [=]
-  extendVarSet (extendVarSetList vs l) x.
+Lemma delVarSetList_m s t xs ys : WF s -> WF t ->
+  s [=] t -> eqlistA (fun x y => x == y) xs ys ->
+  delVarSetList s xs [=] delVarSetList t ys.
 Proof.
-  induction l.
-  - intros.
-    hs_simpl.
-    reflexivity.
-  - intros.
-    hs_simpl.
-    rewrite extendVarSet_commute.
-    rewrite IHl.
-    reflexivity.
+  intros W T E L. revert s t W T E. induction L; intros s t W T E.
+  - rewrite !delVarSetList_nil. exact E.
+  - rewrite !delVarSetList_cons. apply IHL;
+      try (apply delVarSet_WF; assumption).
+    apply delVarSet_m; assumption.
 Qed.
-
-
-Lemma elemVarSet_extend_add : forall v s vs a,
-  elemVarSet v (extendVarSetList s vs) ->
-  elemVarSet v (extendVarSetList (add a s) vs).
-Proof. 
-  intros v s vs a.
-  rewrite InE.
-  rewrite InE.
-  rewrite extendVarSetList_iff.
-  rewrite extendVarSetList_iff.
-  intuition.
-  left.
-  fsetdec.
-Qed.
-
-Lemma elemVarSet_extendVarSetList_r:
-  forall v s vs,
-  elemVarSet v (mkVarSet vs)  ->
-  elemVarSet v (extendVarSetList s vs) .
+Lemma extendVarSetList_extendVarSet_iff l x s : WF s ->
+  extendVarSetList (extendVarSet s x) l [=] extendVarSet (extendVarSetList s l) x.
 Proof.
-  intros v s vs.
-  rewrite mkVarSet_extendVarSetList.
-  rewrite InE.
-  rewrite InE.
-  rewrite extendVarSetList_iff.
-  rewrite extendVarSetList_iff.
-  intuition.
+  intros W y. rewrite -> !extendVarSet_add, add_iff by solve_varset_inv.
+  rewrite -> !extendVarSetList_iff by solve_varset_inv.
+  rewrite -> add_iff by exact W. tauto.
 Qed.
-
-
-Lemma elemVarSet_mkVarSet_cons:
-  forall v v' vs,
-  elemVarSet v (mkVarSet (v' :: vs)) = false
-  <-> (v' == v) = false /\ elemVarSet v (mkVarSet vs) = false.
+Lemma elemVarSet_extend_add v s vs a : WF s ->
+  elemVarSet v (extendVarSetList s vs) -> elemVarSet v (extendVarSetList (add a s) vs).
 Proof.
-  intros v v' vs.
-  rewrite mkVarSet_extendVarSetList.
-  rewrite extendVarSetList_cons.
-  rewrite mkVarSet_extendVarSetList.
-  rewrite <- not_mem_iff.
-  rewrite <- not_mem_iff.
-  rewrite extendVarSetList_iff.
-  rewrite extendVarSetList_iff.
-  set_b_iff.
-  rewrite add_iff.
-  unfold Var_as_DT.eqb.
-  intuition.
-  apply not_true_is_false.
-  unfold not. auto.
-  destruct H.
-  rewrite H1 in H0.
-  done.
+  intros W. rewrite -> !InE, !extendVarSetList_iff by solve_varset_inv.
+  rewrite -> add_iff by exact W. tauto.
 Qed.
-
-
-(* ** Properties about [lookupVarSet (extendVarSetList vs vars) v]
-
-   Note, we can specify what happens when v is an Foldable.elem of vars with
-   varying degrees of precision. When we lookup v, we won't get [Some v]
-   exactly, but we will get something == to v, and that was the most recently
-   added var in vars.
-   
-*)
-
-
-Lemma lookupVarSet_extendVarSetList_false:
-  forall (vars:list Var) v vs,
-    ~~ (Foldable.elem v vars ) -> 
-    lookupVarSet (extendVarSetList vs vars) v = lookupVarSet vs v.
+Lemma elemVarSet_extendVarSetList_r v s vs : WF s ->
+  elemVarSet v (mkVarSet vs) -> elemVarSet v (extendVarSetList s vs).
 Proof.
-  elim=> [|x xs IH] //.   (* // is try done. *)
-  - move => v vs.
-    hs_simpl.
-    rewrite negb_or.     (* de morgan law to push ~~ in *)
-    move => /andP [h1 h2]. (* split && into two hypotheses *)
-    rewrite IH //.
-    rewrite lookupVarSet_extendVarSet_neq //.
-    rewrite Eq_sym. by apply /negP.
+  intros W. rewrite -> mkVarSet_extendVarSetList, !InE,
+    !extendVarSetList_iff by solve_varset_inv.
+  rewrite -> emptyVarSet_empty, empty_iff. tauto.
+Qed.
+Lemma elemVarSet_mkVarSet_cons v v' vs :
+  elemVarSet v (mkVarSet (v' :: vs)) = false <->
+  (v' == v) = false /\ elemVarSet v (mkVarSet vs) = false.
+Proof.
+  rewrite -> (mkVarSet_extendVarSetList (v' :: vs)), (mkVarSet_extendVarSetList vs), extendVarSetList_cons.
+  rewrite -> !elemVarSet_extendVarSetList by solve_varset_inv.
+  rewrite -> elemVarSet_extendVarSet by solve_varset_inv.
+  rewrite -> !elemVarSet_emptyVarSet. destruct (Foldable.elem v vs), (v' == v); simpl; intuition discriminate.
+Qed.
+Lemma elemVarSet_mkVarset_iff_In v vs :
+  elemVarSet v (mkVarSet vs) <-> List.In (varUnique v) (map varUnique vs).
+Proof.
+  rewrite -> mkVarSet_extendVarSetList, elemVarSet_extendVarSetList by solve_varset_inv.
+  rewrite -> elemVarSet_emptyVarSet, Bool.orb_false_r. symmetry. apply In_varUnique_elem.
 Qed.
 
-
-Lemma lookupVarSet_extendVarSetList_l
-  v vs vars :
+Lemma lookupVarSet_extendVarSetList_false vars v s : WF s ->
+  ~~ Foldable.elem v vars ->
+  lookupVarSet (extendVarSetList s vars) v = lookupVarSet s v.
+Proof.
+  revert s. induction vars as [|x xs IH]; intros s W H; [reflexivity|].
+  rewrite -> elem_cons, negb_orb in H. apply Bool.andb_true_iff in H.
+  destruct H as [H H']. rewrite -> extendVarSetList_cons, IH by (solve_varset_inv || assumption).
+  apply lookupVarSet_extendVarSet_neq; [exact W|].
+  rewrite Eq_sym. intro E. rewrite E in H. discriminate.
+Qed.
+Lemma lookupVarSet_extendVarSetList_l v s vars : WF s ->
   ~~ elemVarSet v (mkVarSet vars) ->
-  lookupVarSet (extendVarSetList vs vars) v = lookupVarSet vs v.
+  lookupVarSet (extendVarSetList s vars) v = lookupVarSet s v.
 Proof.
-  hs_simpl.
-  elim: vars vs => [|a vars IH] vs //.
-  hs_simpl.
-
-  rewrite negb_orb => /andP [? ?].
-
-  rewrite lookupVarSet_extendVarSetList_false //.
-  rewrite lookupVarSet_extendVarSet_neq //.
-
-  apply /negP.
-  rewrite Eq_sym //. 
+  intro W. rewrite -> mkVarSet_extendVarSetList,
+    elemVarSet_extendVarSetList by solve_varset_inv.
+  rewrite -> elemVarSet_emptyVarSet, Bool.orb_false_r.
+  apply lookupVarSet_extendVarSetList_false; exact W.
 Qed.
-
-
-Lemma lookupVarSet_extendVarSetList_self_in:
-  forall (vars:list Var) v vs,
-    List.In v vars -> 
-    NoDup (map varUnique vars) -> 
-    lookupVarSet (extendVarSetList vs vars) v = Some v.
+Lemma lookupVarSet_extendVarSetList_self vars v s : WF s ->
+  Foldable.elem v vars -> lookupVarSet (extendVarSetList s vars) v == Some v.
 Proof.
-  induction vars.
-  - intros v vs H.
-    inversion H.
-  - intros v vs H ND.
-    hs_simpl.
-    simpl in ND.
-    inversion ND. subst.
-    inversion H; subst.
-    + rewrite lookupVarSet_extendVarSetList_false.
-      by hs_simpl.
-      apply /negP.
-      by rewrite -In_varUnique_elem.
-    + eauto. 
-Qed.      
-
-
-Lemma lookupVarSet_extendVarSetList_self:
-  forall (vars:list Var) v vs,
-    (Foldable.elem v vars) -> 
-    lookupVarSet (extendVarSetList vs vars) v == Some v.
+  revert s. induction vars as [|x xs IH]; intros s W H.
+  - rewrite elem_nil in H. discriminate.
+  - rewrite elem_cons in H. apply Bool.orb_true_iff in H.
+    rewrite extendVarSetList_cons.
+    destruct (Foldable.elem v xs) eqn:M.
+    + apply IH; [solve_varset_inv|reflexivity].
+    + assert (N : negb (Foldable.elem v xs) = true) by (rewrite M; reflexivity).
+      rewrite -> (lookupVarSet_extendVarSetList_false xs v (extendVarSet s x)
+        (extendVarSet_WF s x W) N).
+      destruct H as [H|H]; [|discriminate].
+      assert (E : x == v) by (rewrite Eq_sym; exact H).
+      rewrite -> (lookupVarSet_extendVarSet_eq x v s W E).
+      change (x == v). rewrite Eq_sym. exact H.
+Qed.
+Lemma lookupVarSet_extendVarSetList_self_in vars v s : WF s ->
+  List.In v vars -> NoDup (map varUnique vars) ->
+  lookupVarSet (extendVarSetList s vars) v = Some v.
 Proof.
-  induction vars.
-  - intros v vs H.
-    rewrite elem_nil in H.
-    done.
-  - intros v vs H.
-    rewrite elem_cons in H.
-    hs_simpl.
-    rewrite -> orE in H.
-    elim: H.
-    move => H.
-    destruct (Foldable.elem v vars) eqn:Hv.
-    + specialize (IHvars v (extendVarSet vs a)).
-      unfold is_true in *.
-      apply IHvars. 
-      done.
-    + rewrite (lookupVarSet_eq _ H).
-      rewrite lookupVarSet_extendVarSetList_false.
-      rewrite lookupVarSet_extendVarSet_self.
-      hs_simpl.
-      symmetry. done.
-      setoid_rewrite H in Hv.
-      rewrite Hv. done.
-    + move=> h.
-      apply IHvars.
-      auto.
+  revert s. induction vars as [|x xs IH]; intros s W H D; [contradiction|].
+  inversion D as [|u us N ND]; subst.
+  rewrite extendVarSetList_cons. destruct H as [H|H].
+  - subst x. assert (M : negb (Foldable.elem v xs) = true).
+    { apply Bool.negb_true_iff; apply Bool.not_true_is_false.
+      intro M; apply N; apply In_varUnique_elem; exact M. }
+    rewrite -> (lookupVarSet_extendVarSetList_false xs v (extendVarSet s v)
+      (extendVarSet_WF s v W) M).
+    apply lookupVarSet_extendVarSet_self; exact W.
+  - apply IH; [solve_varset_inv|exact H|exact ND].
 Qed.
 
 Inductive LastIn : Var -> list Var -> Prop :=
-  | LastIn_head: forall v1 vs, 
-      Foldable.elem v1 vs = false ->
-      LastIn v1 (v1 :: vs)
-  | LastIn_tail: forall v1 v2 vs,
-      LastIn v1 vs ->
-      LastIn v1 (v2 :: vs).
-
-Lemma LastIn_elem : forall v vs, 
-    LastIn v vs -> Foldable.elem v vs.
+| LastIn_head : forall v vs, Foldable.elem v vs = false -> LastIn v (v :: vs)
+| LastIn_tail : forall v w vs, LastIn v vs -> LastIn v (w :: vs).
+Lemma LastIn_elem v vs : LastIn v vs -> Foldable.elem v vs.
 Proof.
-  move => v vs h. 
-  induction h; hs_simpl; apply /orP. 
-  left. reflexivity.
-  right. assumption.
-Qed.  
-  
-Lemma LastIn_inj : forall v1 v2 vs, 
-    LastIn v1 vs -> v1 == v2 -> LastIn v2 vs -> v1 = v2.
-Proof.    
-  move=> v1 v2 vs h. induction h.
-  - move=> eq FI.
-    inversion FI. auto. 
-    subst. 
-    move: (LastIn_elem H2) => h.
-    rewrite -> HSUtil.elem_resp_eq with (a:= v2) in H; try done.
-    rewrite Eq_sym. done.
-  - move=> eq FI. inversion FI.
-    subst. 
-    move: (LastIn_elem h) => h0.
-    rewrite -> HSUtil.elem_resp_eq with (a:= v1) in H1; try done.
-    subst. eauto.
+  intro H; induction H; rewrite elem_cons; apply Bool.orb_true_iff;
+    [left; apply Eq_refl|right; assumption].
 Qed.
 
-
-
-Lemma lookupVarSet_extendVarSetList_self_exists_LastIn:
-  forall (vars:list Var) v vs,
-    (Foldable.elem v vars) -> 
-    exists v', and3 (lookupVarSet (extendVarSetList vs vars) v = Some v')
-               (v == v')
-               (LastIn v' vars).
+Lemma elemVarSet_delVarSetList_false_l v s xs : WF s ->
+  elemVarSet v s = false -> elemVarSet v (delVarSetList s xs) = false.
 Proof.
-  elim => // a vars IH.       (* Do induction on first var, 
-                                then trivially discharge goal. *)
-                          (* Then introduce names for list components *)
-  move=> v vs.
-  hs_simpl.
-
-  move => /orP [h1 | h1].  (* case analysis on boolean || *)
-
-  destruct (Foldable.elem v vars) eqn:IN. 
-
-  + unfold is_true in *.
-    move: (IH v (extendVarSet vs a) IN) => [v' [p q r]].
-    exists v'; split; eauto.
-    eapply LastIn_tail. auto.
-  + rewrite lookupVarSet_extendVarSetList_false ; try by rewrite IN.
-    exists a. split; eauto.
-    rewrite lookupVarSet_extendVarSet_eq //. 
-    symmetry => //.
-    eapply LastIn_head.
-    rewrite <- (elem_eq vars _ _ h1).
-    done.
-  + unfold is_true in *.
-    move: (IH v (extendVarSet vs a) h1) => [v' [p q r]].
-    exists v'; split; eauto.
-    eapply LastIn_tail. auto.
+  intros W H. apply Bool.not_true_is_false. change (~ In v (delVarSetList s xs)).
+  rewrite -> delVarSetList_iff by exact W. unfold In. rewrite H. intuition discriminate.
 Qed.
-
-
-(*
-Lemma lookupVarSet_extendVarSetList_self_exists_in:
-  forall (vars:list Var) v vs,
-    (Foldable.elem v vars) -> 
-    exists v', and3 (lookupVarSet (extendVarSetList vs vars) v = Some v')
-               (v == v')
-               (List.In v' vars).
+Lemma delVarSetList_cons2 xs s a : WF s ->
+  delVarSetList s (a :: xs) [=] delVarSet (delVarSetList s xs) a.
 Proof.
-  elim => // a vars IH.       (* Do induction on first var, 
-                                then trivially discharge goal. *)
-                          (* Then introduce names for list components *)
-  move=> v vs.
-  hs_simpl.
-
-  move => /orP [h1 | h1].  (* case analysis on boolean || *)
-
-  case IN: (Foldable.elem v vars). 
-
-  all: try ( unfold is_true in * ; match goal with 
-      [ H : Foldable.elem ?v ?vars = true |- _ ] =>
-        move: (IH v (extendVarSet vs a) H) => [v'[]]* ;
-        exists v'; split; eauto using in_cons
-     end ).
-
-   + rewrite lookupVarSet_extendVarSetList_false ; try by rewrite IN.
-     exists a. split; eauto.
-       rewrite lookupVarSet_extendVarSet_eq //. 
-       symmetry => //.
-       eapply in_eq.
+  intros W x. rewrite -> delVarSetList_iff by exact W.
+  rewrite -> delVarSet_remove, remove_iff by solve_varset_inv.
+  rewrite -> delVarSetList_iff by exact W.
+  rewrite elem_cons. unfold is_true. rewrite Bool.orb_true_iff.
+  unfold E.eq, E.eqb, E.t. rewrite Eq_sym. tauto.
 Qed.
-*)
-
-
-Lemma extendVarSetList_same v vars : forall vs1 vs2 ,
-  Foldable.elem v vars ->
-  lookupVarSet (extendVarSetList  vs1 vars) v = 
-  lookupVarSet (extendVarSetList vs2 vars)  v.
+Lemma delVarSetList_rev s xs : WF s -> delVarSetList s (rev xs) [=] delVarSetList s xs.
 Proof.
-  elim: vars => // a vars IHvars. 
-  - move => vs1 vs2.
-    hs_simpl.  
-    move=> /orP [h1|h2].
-    + destruct (Foldable.elem v vars) eqn:h; eauto.
-      (* ! rewrites one or more times. *)
-      rewrite !lookupVarSet_extendVarSetList_false; try (rewrite h; done).
-      rewrite !lookupVarSet_extendVarSet_eq // ; symmetry ; done.
-    + auto.
+  intros W x. rewrite -> !delVarSetList_iff by exact W.
+  rewrite <- (In_varUnique_elem x (rev xs)), <- (In_varUnique_elem x xs), map_rev, in_rev.
+  rewrite rev_involutive. reflexivity.
 Qed.
 
-
-
-(** ** [mkVarSet]  *)
-
-
-Lemma elemVarSet_mkVarset_iff_In:
-  forall v vs,
-  elemVarSet v (mkVarSet vs)  <->  List.In (varUnique v) (map varUnique vs).
+Lemma elemVarSet_filterVarSet x f s : WF s -> ValidVarSet s -> RespectsVar f ->
+  elemVarSet x (filterVarSet f s) = f x && elemVarSet x s.
 Proof.
-  intros.
-  rewrite mkVarSet_extendVarSetList.
-  induction vs.
-  - hs_simpl.
-    simpl.
-    done.
-  - hs_simpl.
-    simpl map.
-    split.
-    + move /orP.        
-      rewrite -> varUnique_iff.
-      rewrite -In_varUnique_elem //. 
-      move => [h1|h2] //.
-      rewrite h1.
-      apply in_eq.
-      apply in_cons => //.
-    + move => h.
-      apply /orP.
-      inversion h.
-      ++ left.
-         rewrite varUnique_iff //.
-      ++ right.
-         apply In_varUnique_elem => //.
+  intros W V R. apply Bool.eq_true_iff_eq.
+  change (In x (filter f s) <-> (f x && elemVarSet x s) = true).
+  rewrite -> filter_iff by assumption. rewrite Bool.andb_true_iff. unfold In. tauto.
 Qed.
-
-(** ** [delVarSet]  *)
-
-Lemma delVarSet_elemVarSet_false : forall v set, 
-    elemVarSet v set = false -> delVarSet set v [=] set.
-intros.
-set_b_iff.
-apply remove_equal.
-auto.
-Qed.
-
-
-Lemma delVarSet_emptyVarSet x :
-  delVarSet emptyVarSet x = emptyVarSet.
-Proof.
-  unfold delVarSet, emptyVarSet.
-  unfold  UniqSet.delOneFromUniqSet , UniqSet.emptyUniqSet.
-  unfold UniqFM.delFromUFM, UniqFM.emptyUFM.
-  repeat f_equal.
-Qed.
-#[export] Hint Rewrite delVarSet_emptyVarSet : hs_simpl.
-
-
-Lemma delVarSet_extendVarSet : 
-  forall set v, 
-    elemVarSet v set = false -> (delVarSet (extendVarSet set v) v) [=] set.
-Proof.
-  intros.
-  set_b_iff.
-  apply remove_add.
-  auto.
-Qed.
-
-Lemma elemVarSet_delVarSet: forall v1 fvs v2,
-  elemVarSet v1 (delVarSet fvs v2) = negb (v2 == v1) && elemVarSet v1 fvs.
-Proof.
-  intros.
-  destruct elemVarSet eqn:EL.
-  + symmetry.
-    apply andb_true_intro.
-    set_b_iff.
-    rewrite -> remove_iff in EL.
-    unfold Var_as_DT.eqb in EL. unfold not in EL.
-    rewrite negb_true_iff.
-    intuition.
-    apply not_true_is_false.
-    auto.
-  + symmetry.
-    apply not_true_is_false.
-    intro H.
-    apply andb_prop in H.
-    set_b_iff.
-    rewrite -> remove_iff in EL.
-    unfold Var_as_DT.eqb in *.
-    intuition.
-    rewrite -> negb_true_iff in H0.
-    apply H2.
-    intro h.
-    unfold Var_as_DT.t in *.
-    rewrite h in H0.
-    inversion H0.
-Qed.
-
-#[export] Hint Rewrite elemVarSet_delVarSet : hs_simpl.
-
-Lemma lookupVarSet_delVarSet_neq :
-      forall v1 v2 vs,
-      not (v1 == v2) ->
-      lookupVarSet (delVarSet vs v1) v2 = lookupVarSet vs v2.
-Proof.
-  intros v1 v2 vs H.
-  unfold lookupVarSet,delVarSet.
-  unfold UniqSet.lookupUniqSet, UniqSet.delOneFromUniqSet.
-  destruct vs.
-  unfold UniqFM.lookupUFM, UniqFM.delFromUFM.
-  destruct getUniqSet'.
-  assert (Unique.getWordKey (Unique.getUnique v1) <>
-          Unique.getWordKey (Unique.getUnique v2)).
-  { intro h. apply H. rewrite eq_unique. done. }
-  rewrite delete_neq.
-  auto.
-  auto.
-Qed.
-
-
-
-Lemma elemVarSet_delVarSet_eq x y vs :
-  (x == y) -> elemVarSet x (delVarSet vs y) = false.
-Proof.
-  rewrite -> eq_unique.
-  move => Eq.
-  unfold elemVarSet, delVarSet.
-  unfold UniqSet.elementOfUniqSet, UniqSet.delOneFromUniqSet.
-  move: vs => [i].
-  move: i => [m].
-  unfold UniqFM.elemUFM, UniqFM.delFromUFM.
-  rewrite Eq.
-  set key :=  Unique.getWordKey (Unique.getUnique y).
-  move: (@delete_eq key Var m).
-  rewrite <- (non_member_lookup _ _ (Data.IntMap.Internal.delete key m)
-    (IntMapProofs.delete_WF key m (IntMapProofs.All_IntMaps_WF _ m))).
-  move => h. rewrite h.
-  done.
-Qed.
-
-
-(** ** [delVarSetList]  *)
-
-(* These next two rely on this strong property about the unique 
-   representations of IntMaps. *)
-Lemma delVarSet_commute : forall x y vs, 
-    delVarSet (delVarSet vs x) y [=] delVarSet (delVarSet vs y) x.
-Proof.
-  intros.
-  unfold delVarSet.
-  unfold UniqSet.delOneFromUniqSet.
-  destruct vs.
-  unfold UniqFM.delFromUFM. destruct getUniqSet'.
-  apply IntMapEq_VarSetEq.
-  eapply delete_commute; eauto.
-  apply EqLaws_Var.
-Qed.
-
-Lemma delVarSetList_cons2:
-  forall vs e a, delVarSetList e (a :: vs) [=] delVarSet (delVarSetList e vs) a.
-Proof.
-  induction vs; intros e a1;
-  rewrite -> delVarSetList_cons in *.
-  - set_b_iff.
-    hs_simpl.
-    reflexivity.
-  - rewrite delVarSetList_cons.
-    rewrite delVarSetList_cons.
-    rewrite delVarSet_commute.
-    rewrite <- IHvs.
-    rewrite delVarSetList_cons.
-    reflexivity.
-Qed.
-
-Lemma delVarSetList_rev:
-  forall vs1 vs2,
-  delVarSetList vs1 (rev vs2) [=] delVarSetList vs1 vs2.
-Proof.
-  induction vs2.
-  - simpl. reflexivity.
-  - simpl rev.
-    rewrite delVarSetList_cons.
-    rewrite delVarSetList_app.
-    rewrite IHvs2.
-    rewrite delVarSetList_cons.
-    rewrite delVarSetList_nil.
-    rewrite <- delVarSetList_cons2.
-    rewrite delVarSetList_cons.
-    reflexivity.
-Qed.
-
-
-Lemma elemVarSet_delVarSetList_false_l:
-  forall v vs vs2,
-  elemVarSet v vs = false ->
-  elemVarSet v (delVarSetList vs vs2) = false.
-Proof.
-  intros.
-  revert vs H; induction vs2; intros.
-  * rewrite delVarSetList_nil.
-    assumption.
-  * rewrite delVarSetList_cons.
-    apply IHvs2.
-    set_b_iff; fsetdec.
-Qed.
-
-Lemma delVarSet_unionVarSet:
-  forall vs1 vs2 x,
-  delVarSet (unionVarSet vs1 vs2) x [=] 
-  unionVarSet (delVarSet vs1 x) (delVarSet vs2 x).
-Proof.
-  intros.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-Lemma delVarSetList_unionVarSet:
-  forall vs3 vs1 vs2,
-  delVarSetList (unionVarSet vs1 vs2) vs3 [=] 
-  unionVarSet (delVarSetList vs1 vs3) (delVarSetList vs2 vs3).
-Proof.
-  induction vs3; intros.
-  - repeat rewrite delVarSetList_nil.
-    reflexivity.
-  - repeat rewrite delVarSetList_cons.
-    rewrite delVarSet_unionVarSet.
-    rewrite IHvs3.
-    reflexivity.
-Qed.
-
-
-(**************************************)
-
-
-(** ** [subVarSet]  *)
-  
-Lemma subVarSet_refl:
-  forall vs1,
-  subVarSet vs1 vs1 .
-Proof.
-  intros.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-Lemma subVarSet_trans:
-  forall vs1 vs2 vs3,
-  subVarSet vs1 vs2  ->
-  subVarSet vs2 vs3  ->
-  subVarSet vs1 vs3 .
-Proof.
-  intros.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-
-Lemma subVarSet_emptyVarSet:
-  forall vs,
-  subVarSet emptyVarSet vs .
-Proof.
-  intros.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-Lemma subVarSet_equal_empty:
-  forall s vs,
-  s [=] emptyVarSet ->
-  subVarSet s vs = true.
-Proof.
-  intros s vs Heq.
-  set_b_iff.
-  intros a Ha.
-  exfalso. rewrite Heq in Ha. fsetdec.
-Qed.
-
-Lemma subVarSet_unitVarSet:
-  forall v vs,
-  subVarSet (unitVarSet v) vs = elemVarSet v vs.
-Proof.
-  intros.
-  destruct subVarSet eqn:SV; symmetry.
-  + set_b_iff.
-    fsetdec.
-  + rewrite -> false_is_not_true in *.
-    set_b_iff.
-    intro h.
-    unfold Subset in SV.
-    apply SV.
-    intros.
-    rewrite In_eq_iff; eauto.
-    apply singleton_1 in H; symmetry; auto.
-Qed.
-
-Lemma elemVarSet_false_true:
-  forall v1 fvs v2,
-  elemVarSet v1 fvs = false ->
-  elemVarSet v2 fvs  ->
-  varUnique v1 <> varUnique v2.
-Proof.
-  intros v1 fvs v2.
-  intros.
-  assert (not (v2 == v1 )).
-  intro h. 
-  set_b_iff.
-  rewrite -> In_eq_iff in H0; eauto.
-  intro h.
-  rewrite <- varUnique_iff in h.
-  apply H1.
-  rewrite Eq_sym.
-  auto.
-Qed.
-
-Lemma subVarSet_elemVarSet_true:
-  forall v vs vs',
-  subVarSet vs vs'  ->
-  elemVarSet v vs  ->
-  elemVarSet v vs' .
-Proof.
-  intros v vs vs'.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-Lemma subVarSet_elemVarSet_false:
-  forall v vs vs',
-  subVarSet vs vs'  ->
-  elemVarSet v vs' = false ->
-  elemVarSet v vs = false.
-Proof.
-  intros v vs vs'.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-Lemma subVarSet_extendVarSetList_l:
-  forall vs1 vs2 vs,
-  subVarSet vs1 vs2  ->
-  subVarSet vs1 (extendVarSetList vs2 vs) .
-Proof.
-  intros vs1 vs2 vs.
-  generalize dependent vs2.
-  induction vs.
-  - intro vs2. rewrite extendVarSetList_nil. auto.
-  - intro vs2. intro h. 
-    rewrite extendVarSetList_cons. 
-    rewrite IHvs. auto. 
-    set_b_iff. fsetdec.
-Qed.
-
-
-    
-
-Lemma subVarSet_extendVarSet_both:
-  forall vs1 vs2 v,
-  subVarSet vs1 vs2  ->
-  subVarSet (extendVarSet vs1 v) (extendVarSet vs2 v) .
-Proof.
-  intros.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-
-Lemma subVarSet_extendVarSet:
-  forall vs1 vs2 v,
-  subVarSet vs1 vs2  ->
-  subVarSet vs1 (extendVarSet vs2 v) .
-Proof.
-  intros.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-
-Lemma subVarSet_extendVarSetList:
-  forall vs1 vs2 vs3,
-  subVarSet vs1 vs2  ->
-  subVarSet vs1 (extendVarSetList vs2 vs3) .
-Proof.
-
-  induction vs3; autorewrite with hs_simpl.
-  - auto.
-  - intro h. 
-    rewrite extendVarSetList_extendVarSet_iff.
-    rewrite subVarSet_extendVarSet; auto.
-Qed.
-
-Lemma subVarSet_extendVarSet_l:
-  forall vs1 vs2 v v',
-  subVarSet vs1 vs2  ->
-  lookupVarSet vs2 v = Some v' ->
-  subVarSet (extendVarSet vs1 v) vs2 .
-Proof.
-  intros.
-  set_b_iff.
-  apply MP.subset_add_3; try assumption.
-  apply lookupVarSet_In.
-  eauto.
-Qed.
-
-Lemma extendVarSet_subset: forall v1 v2 x,
-  v1 [<=] v2 ->
-  extendVarSet v1 x [<=] extendVarSet v2 x.
-Proof.
-  intros.
-  set_b_iff.
-  fsetdec.
-Qed.
-  
-Lemma extendVarSetList_subset: forall x y vs,
-  x [<=] y ->
-  extendVarSetList x vs [<=] extendVarSetList y vs.
-Proof.
-  intros.
-  induction vs; hs_simpl; [assumption|].
-  do 2 rewrite extendVarSetList_extendVarSet_iff.
-  apply extendVarSet_subset.
-  assumption.
-Qed.
-
-Lemma subVarSet_extendVarSetList_r:
-  forall vs vs1 vs2,
-  subVarSet vs1 (mkVarSet vs)  ->
-  subVarSet vs1 (extendVarSetList vs2 vs) .
-Proof.
-  intros vs. 
-  rewrite mkVarSet_extendVarSetList.
-  induction vs; intros vs1 vs2.
-  - autorewrite with hs_simpl.
-    set_b_iff.
-    fsetdec.
-  - intro h.     
-    autorewrite with hs_simpl in *.
-    rewrite -> extendVarSetList_extendVarSet_iff in *.
-    destruct (mem a (extendVarSetList empty vs)) eqn:Hd;
-    [|destruct (mem a vs1) eqn:Hd'].
-    + specialize (IHvs vs1 vs2). 
-      set_b_iff.
-      assert (Hvs2: In a (extendVarSetList vs2 vs)).
-      * clear -Hd.
-        eapply MP.in_subset.
-        apply Hd. clear Hd a.
-        apply extendVarSetList_subset.
-        fsetdec.
-      * pose proof (subset_equal
-                     (equal_sym (add_equal Hvs2))).
-        eapply (Subset_trans); [apply IHvs| apply H].
-        pose proof (subset_equal (add_equal Hd)).
-        fsetdec.
-    + specialize (IHvs (remove a vs1) vs2). 
-      set_b_iff.
-      apply remove_s_m with (x:= a) (y:=a) in h;
-        [|fsetdec].
-      assert (Hs: remove a (add a
-                                (extendVarSetList empty vs))
-                         [<=] (extendVarSetList empty vs)).
-      { apply subset_equal.
-        apply remove_add.
-        assumption. }
-        specialize (IHvs (Subset_trans h Hs)).
-      apply add_s_m with (x:= a) (y:=a) in IHvs;
-        [|fsetdec].
-      assert (Hs': vs1 [<=] add a (remove a vs1)).
-      { apply subset_equal.
-        apply equal_sym.
-        apply add_remove.
-        assumption. }
-      eapply Subset_trans.
-      apply Hs'.
-      assumption.
-    + specialize (IHvs vs1 vs2). 
-      set_b_iff.
-      apply subset_add_2.
-      apply IHvs.
-      eapply remove_s_m with (x:= a) (y:=a) in h;
-        [|fsetdec].
-      apply remove_equal in Hd'.
-      fsetdec.
-Qed.
-
-    
-
-Lemma subVarSet_delVarSet:
-  forall vs1 v,
-  subVarSet (delVarSet vs1 v) vs1 .
-Proof.
-  intros.
-  set_b_iff.
-  fsetdec.
-Qed.
-
-
-Lemma subVarSet_delVarSetList:
-  forall vs1 vl,
-  subVarSet (delVarSetList vs1 vl) vs1 .
-Proof.
-  intros.
-  set_b_iff.
-  generalize vs1. clear vs1. induction vl.
-  - intros vs1. hs_simpl. 
-    fsetdec.
-  - intros vs1. revert IHvl.
-    hs_simpl.
-    simpl.
-    intro IH. 
-    rewrite -> IH with (vs1 := delVarSet vs1 a).
-    set_b_iff.
-    fsetdec.
-Qed.
-
-
-Lemma subVarSet_delVarSetList_both:
-  forall vs1 vs2 vl,
-  subVarSet vs1 vs2  ->
-  subVarSet (delVarSetList vs1 vl) (delVarSetList vs2 vl) .
-Proof.
-  intros.
-  revert vs1 vs2 H. induction vl; intros.
-  - rewrite !delVarSetList_nil.
-    assumption.
-  - rewrite !delVarSetList_cons.
-    apply IHvl.
-    set_b_iff.
-    fsetdec.
-Qed.
-
-Lemma subVarSet_delVarSet_extendVarSet:
-  forall jps isvs v,
-  subVarSet jps isvs  ->
-  subVarSet (delVarSet jps v) (extendVarSet isvs v) .
-Proof.
-  intros.
-  eapply subVarSet_trans.
-  apply subVarSet_delVarSet.
-  apply subVarSet_extendVarSet.
-  assumption.
-Qed.
-
-Lemma subVarSet_delVarSetList_extendVarSetList:
-  forall jps isvs vs,
-  subVarSet jps isvs  ->
-  subVarSet (delVarSetList jps vs) (extendVarSetList isvs vs) .
-Proof.
-  intros.
-  eapply subVarSet_trans.
-  apply subVarSet_delVarSetList.
-  apply subVarSet_extendVarSetList.
-  assumption.
-Qed.
-
-
-Lemma subVarSet_delVarSetList_extendVarSetList_dual:
-  forall jps isvs vs,
-  subVarSet jps (extendVarSetList isvs vs)  ->
-  subVarSet (delVarSetList jps vs) isvs .
-Proof.
-  intros.
-  revert jps isvs H.
-  induction vs; intros.
-  - rewrite !delVarSetList_nil.
-    rewrite !extendVarSetList_nil in H.
-    assumption.
-  - rewrite delVarSetList_cons2.
-    revert H.
-    hs_simpl.
-    intro H.
-    apply IHvs in H.
-    set_b_iff.
-    fsetdec.
-Qed.
-
-
-Lemma mapUnionVarSet_In_subVarSet:
-  forall a (x : a) xs f,
-  List.In x xs ->
-  subVarSet (f x) (mapUnionVarSet f xs).
-Proof.
-  intros a x xs f H.
-  generalize dependent x.
-  induction xs; intros x H.
-  - inversion H.
-  - 
-    inversion H as [H'|H'].
-    + unfold mapUnionVarSet.
-      unfold_Foldable_foldr.
-      subst.
-      simpl.
-      set_b_iff.
-      fsetdec.
-    + apply IHxs in H'.
-      clear H IHxs.
-      revert H'.
-      unfold mapUnionVarSet.
-      unfold_Foldable_foldr.
-      intros H'.
-      eapply subVarSet_trans.
-      apply H'.
-      clear H'.
-      set_b_iff.
-      simpl.
-      fsetdec.
-Qed.
-
-
-Lemma subVarSet_mapUnionVarSet:
-  forall a (xs : list a) f vs,
-  Forall (fun x => subVarSet (f x) vs ) xs ->
-  subVarSet (mapUnionVarSet f xs) vs.
-Proof.
-  intros a xs f vs H.
-  induction xs.
-  - unfold mapUnionVarSet.
-    unfold_Foldable_foldr.
-    simpl.
-    apply subVarSet_emptyVarSet.
-  - inversion H.
-    subst.
-    apply IHxs in H3.
-    clear IHxs.
-    revert H3.
-    unfold mapUnionVarSet.
-    unfold_Foldable_foldr.
-    intros H3.
-    set_b_iff.
-    simpl.
-    fsetdec.
-Qed.
-
-
-Lemma subVarSet_unionVarSet:
-  forall vs1 vs2 vs3,
-  subVarSet (unionVarSet vs1 vs2) vs3 = subVarSet vs1 vs3 && subVarSet vs2 vs3.
-Proof.
-  intros.
-  apply eq_iff_eq_true.
-  rewrite andb_true_iff.
-  set_b_iff.
-  split; intro H.
-  - split; fsetdec.
-  - destruct H; fsetdec.
-Qed.
-
-
-(** ** [disjointVarSet]  *)
-
-Instance disjointVarSet_m : Proper (Equal ==> Equal ==> Logic.eq) disjointVarSet.
-Proof.
-  move => x1 y1 E1 x2 y2 E2.
-  move: x1 y1 E1 x2 y2 E2 => [[i1]] [[i2]] E1 [[i3]] [[i4]] E2.
-  unfold disjointVarSet.
-  unfold UniqSet.getUniqSet, UniqSet.getUniqSet'.
-  unfold UniqFM.disjointUFM.
-  apply disjoint_eq.
-  - move=> k1.
-    unfold Equal, In, elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM in E1.
-    specialize (E1 (Mk_Id HsToRocq.Err.default (Unique.MkUnique k1) HsToRocq.Err.default HsToRocq.Err.default HsToRocq.Err.default HsToRocq.Err.default HsToRocq.Err.default)).
-    simpl in E1. auto.
-  - move=> k1.
-    unfold Equal, In, elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM in E2.
-    specialize (E2 (Mk_Id HsToRocq.Err.default (Unique.MkUnique k1) HsToRocq.Err.default HsToRocq.Err.default HsToRocq.Err.default HsToRocq.Err.default HsToRocq.Err.default)).
-    simpl in E2. auto.
-Qed.
-
-(*
-Lemma foldl'_simplify (a b c :Type) (f:c -> b) (g:b->c) (h:b -> a -> b)
-      (xb:b) (xs : list a):
-  (forall x, f (g x) = x) ->
-  Foldable.foldl' (fun x y => g (h (f x) y)) (g xb) xs = 
-  g (Foldable.foldl' h xb xs).
-Proof.  
-  move => eq.
-  induction xs.
-  hs_simpl. auto.
-  hs_simpl.
-  rewrite eq.
-*)
-
-Lemma UniqSet_Mk_UniqSet_eta :
-  forall a b (x : UniqSet.UniqSet a) (f : UniqSet.UniqSet a -> b), 
-    match x with
-    | UniqSet.Mk_UniqSet set => f (UniqSet.Mk_UniqSet set)
-    end = f x.
-Proof.            
-  move => a b [set] //.
-Qed.
-
-
-Lemma disjointVarSet_empytVarSet:
-  forall vs,
-  disjointVarSet vs emptyVarSet.
-Proof.
-  move => [[i]].
-  unfold disjointVarSet, emptyVarSet.
-  unfold UniqSet.getUniqSet, UniqSet.getUniqSet', UniqSet.emptyUniqSet.
-  unfold UniqFM.disjointUFM, UniqFM.emptyUFM.
-  apply disjoint_empty_r.
-Qed.
-#[export] Hint Rewrite disjointVarSet_empytVarSet:hs_simpl.
-
-Lemma disjointVarSet_mkVarSet_nil:
-  forall vs,
-  disjointVarSet vs (mkVarSet []).
-Proof.
-  rewrite mkVarSet_extendVarSetList.
-  hs_simpl.
-  apply disjointVarSet_empytVarSet.
-Qed.
-
-Lemma disjointVarSet_extendVarSet vs1 var vs2 :
-  disjointVarSet vs1 (extendVarSet vs2 var) <->
-  elemVarSet var vs1 = false /\ disjointVarSet vs1 vs2.
-Proof.
-  move: vs1 vs2 => [[i1]] [[i2]].
-  unfold disjointVarSet, elemVarSet, extendVarSet.
-  unfold UniqSet.getUniqSet,UniqSet.getUniqSet',
-         UniqSet.elementOfUniqSet, UniqSet.addOneToUniqSet.
-  unfold UniqFM.disjointUFM, UniqFM.elemUFM, UniqFM.addToUFM.
-  set k:=  (Unique.getWordKey (Unique.getUnique var)).
-  apply disjoint_non_member.
-Qed.
-
-Lemma disjointVarSet_mkVarSet_cons:
-  forall v vs1 vs2,
-  disjointVarSet vs1 (mkVarSet (v :: vs2))  <->
-  elemVarSet v vs1 = false /\ disjointVarSet vs1 (mkVarSet vs2) .
-Proof.
-  move=> v vs1 vs2.
-  rewrite mkVarSet_extendVarSetList.
-  hs_simpl.
-  rewrite extendVarSetList_extendVarSet_iff.
-  rewrite disjointVarSet_extendVarSet.
-  tauto.
-Qed.
-
-      
-Lemma disjointVarSet_mkVarSet_append:
-  forall vs1 vs2 vs3,
-  disjointVarSet vs1 (mkVarSet (vs2 ++ vs3))  <->
-  disjointVarSet vs1 (mkVarSet vs2)  /\ disjointVarSet vs1 (mkVarSet vs3).
-Proof.  
-  move=> vs1 vs2 vs3.
-  rewrite mkVarSet_extendVarSetList.
-  hs_simpl.
-  elim: vs3 => [|var vars IH]; hs_simpl.
-  + rewrite mkVarSet_extendVarSetList.
-    intuition.
-  + rewrite disjointVarSet_mkVarSet_cons.
-    rewrite and_comm.
-    rewrite and_assoc.
-    rewrite -> and_comm in IH.
-    rewrite <- IH.
-    rewrite extendVarSetList_extendVarSet_iff.
-    rewrite disjointVarSet_extendVarSet.
-    tauto.
-Qed. 
-
-
-Lemma disjointVarSet_mkVarSet:
-  forall vs1 vs2,
-  disjointVarSet vs1 (mkVarSet vs2)  <->
-  Forall (fun v => elemVarSet v vs1 = false) vs2.
-Proof.
-  move => vs1 vs2.
-  elim: vs2 => [|v vars IH].
-  rewrite disjointVarSet_mkVarSet_nil. intuition.
-  rewrite disjointVarSet_mkVarSet_cons. rewrite IH.
-  intuition.
-  - inversion H1. auto.
-  - inversion H1. auto.
-Qed.
-
-
-Lemma disjointVarSet_subVarSet_l:
-  forall vs1 vs2 vs3,
-  disjointVarSet vs2 vs3  ->
-  subVarSet vs1 vs2  ->
-  disjointVarSet vs1 vs3 .
-Proof.
-  move => [[i1]] [[i2]] [[i3]].
-  unfold disjointVarSet, subVarSet, isEmptyVarSet, minusVarSet.
-  unfold UniqSet.getUniqSet, UniqSet.getUniqSet'.
-  unfold UniqFM.disjointUFM, UniqFM.isNullUFM, UniqFM.minusUFM.
-  apply disjoint_difference.
-Qed.
-
-
-(** ** [filterVarSet] *)
-
-Lemma filterVarSet_comp : forall f f' vs,
-    filterVarSet f (filterVarSet f' vs) [=] filterVarSet (fun v => f v && f' v) vs.
-Proof.
-  intros. destruct vs, getUniqSet'. simpl.
-  apply IntMapEq_VarSetEq, filter_comp, EqLaws_Var.
-Qed.
-
-Lemma filterSingletonTrue : forall f x,
-  RespectsVar f ->
-  f x = true ->
+Lemma filterVarSet_equal f s t : WF s -> WF t ->
+  ValidVarSet s -> ValidVarSet t -> RespectsVar f -> s [=] t ->
+  filterVarSet f s [=] filterVarSet f t.
+Proof. intros W T V U R E x. rewrite -> !filterVarSet_filter, !filter_iff by assumption. rewrite E. reflexivity. Qed.
+Lemma filterVarSet_emptyVarSet f : filterVarSet f emptyVarSet = emptyVarSet.
+Proof. reflexivity. Qed.
+Lemma filterSingletonTrue f x : RespectsVar f -> f x = true ->
   filterVarSet f (unitVarSet x) [=] unitVarSet x.
 Proof.
-  move=> f x RR TR.
-  set_b_iff.
-  replace (singleton x) with (add x empty) by
-    (simpl; unfold singleton, unitVarSet, UniqSet.unitUniqSet;
-     repeat f_equal; try apply proof_irrelevance).
-  rewrite -> filter_add_1; auto.
-  fsetdec.
+  intros R H y. rewrite -> filterVarSet_filter, filter_iff by (solve_varset_inv || assumption).
+  rewrite -> unitVarSet_singleton, singleton_iff. split; [tauto|].
+  intro E; split; [exact E|]. rewrite <- (R x y E). exact H.
 Qed.
-
-Lemma filterSingletonFalse : forall f x,
-  RespectsVar f ->
-  f x = false ->
+Lemma filterSingletonFalse f x : RespectsVar f -> f x = false ->
   filterVarSet f (unitVarSet x) [=] emptyVarSet.
 Proof.
-  move=> f x RR TR.
-  set_b_iff.
-  replace (singleton x) with (add x empty) by
-    (simpl; unfold singleton, unitVarSet, UniqSet.unitUniqSet;
-     repeat f_equal; try apply proof_irrelevance).
-  rewrite -> filter_add_2; auto.
+  intros R H y. rewrite -> filterVarSet_filter, filter_iff by (solve_varset_inv || assumption).
+  rewrite -> unitVarSet_singleton, singleton_iff, emptyVarSet_empty, empty_iff.
+  split; [|tauto]. intros [E K]. rewrite <- (R x y E), H in K. discriminate.
+Qed.
+Lemma filterVarSet_constTrue s : WF s ->
+  filterVarSet (const true) s [=] s.
+Proof.
+  intro W. apply lookupVarSet_Equal; [solve_varset_inv|exact W|].
+  intro x. rewrite -> (lookupVarSet_filter (const true) s x W).
+  destruct (lookupVarSet s x); reflexivity.
+Qed.
+Lemma lookupVarSet_filterVarSet_true f v s : WF s -> ValidVarSet s ->
+  RespectsVar f -> f v = true -> lookupVarSet (filterVarSet f s) v = lookupVarSet s v.
+Proof.
+  intros W V R H. rewrite (lookupVarSet_filter f s v W).
+  destruct (lookupVarSet s v) as [w|] eqn:L; [|reflexivity].
+  rewrite <- (R v w (V v w L)), H. reflexivity.
+Qed.
+Lemma lookupVarSet_filterVarSet_false f v s : WF s -> ValidVarSet s ->
+  RespectsVar f -> f v = false -> lookupVarSet (filterVarSet f s) v = None.
+Proof.
+  intros W V R H. rewrite (lookupVarSet_filter f s v W).
+  destruct (lookupVarSet s v) as [w|] eqn:L; [|reflexivity].
+  rewrite <- (R v w (V v w L)), H. reflexivity.
+Qed.
+
+Lemma elemVarSet_unionVarSet v s t : WF s -> WF t ->
+  elemVarSet v (unionVarSet s t) = elemVarSet v s || elemVarSet v t.
+Proof. apply elemVarSet_union. Qed.
+Lemma unionVarSet_sym s t : WF s -> WF t -> unionVarSet s t [=] unionVarSet t s.
+Proof. intros W T; fsetdec. Qed.
+Lemma unionEmpty_l s : unionVarSet emptyVarSet s [=] s.
+Proof.
+  destruct s as [[m]].
+  change (UniqSet.Mk_UniqSet (UniqFM.UFM (Data.IntMap.Internal.union m Data.IntMap.Internal.Nil))
+    [=] UniqSet.Mk_UniqSet (UniqFM.UFM m)).
+  rewrite IntMapUnionProofs.union_Nil_r. reflexivity.
+Qed.
+Lemma unionEmpty_r s : unionVarSet s emptyVarSet [=] s.
+Proof.
+  destruct s as [[m]].
+  change (UniqSet.Mk_UniqSet (UniqFM.UFM (Data.IntMap.Internal.union Data.IntMap.Internal.Nil m))
+    [=] UniqSet.Mk_UniqSet (UniqFM.UFM m)).
+  rewrite IntMapUnionProofs.union_Nil_l. reflexivity.
+Qed.
+Lemma unionSingle_l x s : WF s -> unionVarSet (unitVarSet x) s [=] extendVarSet s x.
+Proof. intros W; fsetdec. Qed.
+Lemma unionSingle_r x s : WF s -> unionVarSet s (unitVarSet x) [=] extendVarSet s x.
+Proof. intros W; fsetdec. Qed.
+Lemma delVarSet_unionVarSet s t x : WF s -> WF t ->
+  delVarSet (unionVarSet s t) x [=] unionVarSet (delVarSet s x) (delVarSet t x).
+Proof. intros W T; fsetdec. Qed.
+Lemma delVarSetList_unionVarSet xs s t : WF s -> WF t ->
+  delVarSetList (unionVarSet s t) xs [=]
+  unionVarSet (delVarSetList s xs) (delVarSetList t xs).
+Proof.
+  intros W T x. rewrite -> !delVarSetList_iff by solve_varset_inv.
+  rewrite -> !unionVarSet_union, !union_iff by solve_varset_inv.
+  rewrite -> !delVarSetList_iff by assumption. tauto.
+Qed.
+Lemma unionVarSet_filterVarSet f s t : WF s -> WF t ->
+  ValidVarSet s -> ValidVarSet t -> RespectsVar f ->
+  unionVarSet (filterVarSet f s) (filterVarSet f t) [=] filterVarSet f (unionVarSet s t).
+Proof. intros W T V U R; fsetdec. Qed.
+Lemma filterVarSet_delVarSet f s v : WF s -> RespectsVar f ->
+  filterVarSet f (delVarSet s v) [=] delVarSet (filterVarSet f s) v.
+Proof.
+  intros W R. apply lookupVarSet_Equal; [solve_varset_inv|solve_varset_inv|].
+  intro x. rewrite -> (lookupVarSet_filter f (delVarSet s v) x (delVarSet_WF s v W)),
+    (lookupVarSet_del s v x W),
+    (lookupVarSet_del (filterVarSet f s) v x (filterVarSet_WF f s W)),
+    (lookupVarSet_filter f s x W).
+  destruct (N.eqb (Unique.getWordKey (Unique.getUnique x))
+    (Unique.getWordKey (Unique.getUnique v))); reflexivity.
+Qed.
+Lemma filterVarSet_comp f g s : WF s ->
+  filterVarSet f (filterVarSet g s) [=] filterVarSet (fun v => f v && g v) s.
+Proof.
+  intro W. apply lookupVarSet_Equal; [solve_varset_inv|solve_varset_inv|].
+  intro x. rewrite -> (lookupVarSet_filter f (filterVarSet g s) x (filterVarSet_WF g s W)),
+    (lookupVarSet_filter g s x W), (lookupVarSet_filter (fun v => f v && g v) s x W).
+  destruct (lookupVarSet s x) as [v|]; [destruct (g v), (f v)|]; reflexivity.
+Qed.
+Lemma filterVarSet_extendVarSet f v s : WF s -> ValidVarSet s -> RespectsVar f ->
+  filterVarSet f (extendVarSet s v) [=]
+    if f v then extendVarSet (filterVarSet f s) v else filterVarSet f s.
+Proof.
+  intros W V R x. rewrite -> filterVarSet_filter, filter_iff by (solve_varset_inv || assumption).
+  rewrite -> extendVarSet_add, add_iff by exact W.
+  destruct (f v) eqn:F.
+  - rewrite -> extendVarSet_add, add_iff by solve_varset_inv.
+    rewrite -> filter_iff by assumption.
+    assert (K : E.eq v x -> f x = true) by (intro E; rewrite <- (R v x E); exact F).
+    tauto.
+  - rewrite -> filter_iff by assumption.
+    assert (K : E.eq v x -> f x <> true) by (intro E; rewrite <- (R v x E), F; discriminate).
+    tauto.
+Qed.
+Lemma filterVarSet_delVarSetList f xs s : WF s -> RespectsVar f ->
+  filterVarSet f (delVarSetList s xs) [=] delVarSetList (filterVarSet f s) xs.
+Proof.
+  revert s. induction xs as [|x xs IH]; intros s W R.
+  - rewrite !delVarSetList_nil. reflexivity.
+  - rewrite !delVarSetList_cons.
+    transitivity (delVarSetList (filterVarSet f (delVarSet s x)) xs).
+    + apply IH; [solve_varset_inv|exact R].
+    + apply delVarSetList_m; [solve_varset_inv|solve_varset_inv| |].
+      * apply filterVarSet_delVarSet; assumption.
+      * clear IH. induction xs as [|y ys IHy]; [constructor|].
+        constructor; [apply Eq_refl|exact IHy].
+Qed.
+
+Lemma subVarSet_refl s : WF s -> ValidVarSet s -> subVarSet s s.
+Proof. intros W V. apply (proj2 (subVarSet_spec s s W W V)); auto. Qed.
+Lemma subVarSet_trans s t u : WF s -> WF t -> WF u ->
+  ValidVarSet s -> ValidVarSet t ->
+  subVarSet s t -> subVarSet t u -> subVarSet s u.
+Proof.
+  intros W T U V Q H K. apply (proj2 (subVarSet_spec s u W U V)).
+  intros x M. apply (proj1 (subVarSet_spec t u T U Q) K).
+  apply (proj1 (subVarSet_spec s t W T V) H). exact M.
+Qed.
+Lemma subVarSet_emptyVarSet s : WF s -> subVarSet emptyVarSet s.
+Proof.
+  intro W. apply (proj2 (subVarSet_spec _ _ emptyVarSet_WF W emptyVarSet_valid)).
+  intros x H. discriminate H.
+Qed.
+Lemma subVarSet_equal_empty s t : WF s -> WF t -> ValidVarSet s ->
+  s [=] emptyVarSet -> subVarSet s t = true.
+Proof.
+  intros W T V E. apply (proj2 (subVarSet_spec _ _ W T V)).
+  intros x H. apply (proj1 (E x)) in H. discriminate H.
+Qed.
+Lemma subVarSet_elemVarSet_true v s t : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> elemVarSet v s -> elemVarSet v t.
+Proof. intros W T V H; apply (proj1 (subVarSet_spec s t W T V) H). Qed.
+Lemma subVarSet_elemVarSet_false v s t : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> elemVarSet v t = false -> elemVarSet v s = false.
+Proof.
+  intros W T V H K. destruct (elemVarSet v s) eqn:M; [|reflexivity].
+  pose proof (subVarSet_elemVarSet_true v s t W T V H M) as N.
+  rewrite K in N. discriminate.
+Qed.
+Lemma subVarSet_unitVarSet v s : WF s ->
+  subVarSet (unitVarSet v) s = elemVarSet v s.
+Proof.
+  intro W. apply Bool.eq_true_iff_eq.
+  rewrite (subVarSet_spec _ _ (unitVarSet_WF v) W (unitVarSet_valid v)).
+  split.
+  - intro H. apply H. rewrite elemVarSet_unit. apply Eq_refl.
+  - intros H x M. rewrite elemVarSet_unit in M.
+    rewrite (elemVarSet_eq x v s M). exact H.
+Qed.
+Lemma extendVarSet_subset s t x : WF s -> WF t ->
+  s [<=] t -> extendVarSet s x [<=] extendVarSet t x.
+Proof. intros W T H; fsetdec. Qed.
+Lemma extendVarSetList_subset s t xs : WF s -> WF t ->
+  s [<=] t -> extendVarSetList s xs [<=] extendVarSetList t xs.
+Proof.
+  intros W T H x. rewrite -> !extendVarSetList_iff by assumption. firstorder.
+Qed.
+Lemma subVarSet_extendVarSet s t v : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> subVarSet s (extendVarSet t v).
+Proof. intros W T V H; fsetdec. Qed.
+Lemma subVarSet_extendVarSet_both s t v : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> subVarSet (extendVarSet s v) (extendVarSet t v).
+Proof. intros W T V H; fsetdec. Qed.
+Lemma subVarSet_extendVarSet_l s t v w : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> lookupVarSet t v = Some w -> subVarSet (extendVarSet s v) t.
+Proof.
+  intros W T V H K. pose proof (lookupVarSet_member t v w T K) as M.
   fsetdec.
 Qed.
-
-Lemma filterVarSet_emptyVarSet f :
-  filterVarSet f emptyVarSet = emptyVarSet.
+Lemma subVarSet_extendVarSetList s t xs : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> subVarSet s (extendVarSetList t xs).
 Proof.
-  set_b_iff.
-  simpl. unfold empty, emptyVarSet, UniqSet.emptyUniqSet.
-  repeat f_equal; try apply proof_irrelevance.
+  intros W T V H. apply (proj2 (subVarSet_spec _ _ W
+    (extendVarSetList_WF t xs T) V)).
+  intros x M. change (In x (extendVarSetList t xs)). rewrite -> extendVarSetList_iff by exact T. left.
+  apply (proj1 (subVarSet_spec s t W T V) H). exact M.
 Qed.
-#[export] Hint Rewrite filterVarSet_emptyVarSet : hs_simpl.
-
-
-Lemma filterVarSet_constTrue vs : 
-  filterVarSet (const true) vs [=] vs.
-Proof. 
-  unfold filterVarSet.
-  elim: vs => [i].
-  elim: i => [m].
-  simpl. apply IntMapEq_VarSetEq.
-  apply filter_true, EqLaws_Var.
-Qed.
-#[export] Hint Rewrite filterVarSet_constTrue : hs_simpl.
-
-Lemma elemVarSet_filterVarSet x f vs :
-  RespectsVar f ->
-  elemVarSet x (filterVarSet f vs) = f x && elemVarSet x vs.
+Lemma subVarSet_extendVarSetList_l s t xs : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> subVarSet s (extendVarSetList t xs).
+Proof. apply subVarSet_extendVarSetList. Qed.
+Lemma subVarSet_delVarSet s v : WF s -> ValidVarSet s -> subVarSet (delVarSet s v) s.
+Proof. intros W V; fsetdec. Qed.
+Lemma subVarSet_delVarSetList s xs : WF s -> ValidVarSet s ->
+  subVarSet (delVarSetList s xs) s.
 Proof.
-  move => h.
-  rewrite eqE.
-  set_b_iff.
-  rewrite andE.
-  unfold is_true.
-  set_b_iff.
-  rewrite and_comm.
-  apply F.filter_iff.
-  auto.
+  intros W V. apply (proj2 (subVarSet_spec _ _ (delVarSetList_WF s xs W) W
+    (delVarSetList_valid s xs W V))).
+  intros x H. change (In x (delVarSetList s xs)) in H.
+  rewrite -> delVarSetList_iff in H by exact W. exact (proj1 H).
 Qed.
-
-(* filterVarSet_iff removed: unused and requires IntMap-level reasoning
-   beyond the FSet interface. Use filterVarSet_equal instead. *)
-
-Lemma filterVarSet_equal f vs1 vs2 :
-  RespectsVar f -> 
-  vs1 [=] vs2 ->
-  filterVarSet f vs1 [=] filterVarSet f vs2.
+Lemma subVarSet_unionVarSet s t u : WF s -> WF t -> WF u ->
+  ValidVarSet s -> ValidVarSet t ->
+  subVarSet (unionVarSet s t) u = subVarSet s u && subVarSet t u.
 Proof.
-  move => RF EQ.
-  set_b_iff.
-  eapply filter_equal; eauto.
+  intros W T U V Q. apply Bool.eq_true_iff_eq. rewrite Bool.andb_true_iff.
+  rewrite -> !subVarSet_spec by solve_varset_inv.
+  split.
+  - intro H. split; intros x M; apply H; rewrite -> elemVarSet_union by assumption;
+      apply Bool.orb_true_iff; auto.
+  - intros [H K] x M. rewrite -> elemVarSet_union in M by assumption.
+    apply Bool.orb_true_iff in M. destruct M; auto.
 Qed.
 
-Lemma filterVarSet_extendVarSet : 
-  forall f v vs,
-    RespectsVar f ->
-    filterVarSet f (extendVarSet vs v) [=] 
-    if (f v) then extendVarSet (filterVarSet f vs) v 
-    else (filterVarSet f vs).
+Lemma subVarSet_delVarSetList_both s t xs : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> subVarSet (delVarSetList s xs) (delVarSetList t xs).
 Proof.
-  intros.
-  set_b_iff.
-  destruct (f v) eqn:Hfv; auto.
-  rewrite -> filter_add_1; try done.
-  rewrite -> filter_add_2; try done.
+  intros W T V H. apply (proj2 (subVarSet_spec _ _
+    (delVarSetList_WF s xs W) (delVarSetList_WF t xs T) (delVarSetList_valid s xs W V))).
+  intros x M. change (In x (delVarSetList s xs)) in M.
+  rewrite -> delVarSetList_iff in M by exact W.
+  change (In x (delVarSetList t xs)). rewrite -> delVarSetList_iff by exact T. split; [|exact (proj2 M)].
+  apply (proj1 (subVarSet_spec _ _ W T V) H). exact (proj1 M).
 Qed.
-
-
-Lemma lookupVarSet_filterVarSet_true : forall f v vs,
-  RespectsVar f ->
-  f v = true ->
-  lookupVarSet (filterVarSet f vs) v = lookupVarSet vs v.
+Lemma subVarSet_delVarSet_extendVarSet s t v : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> subVarSet (delVarSet s v) (extendVarSet t v).
+Proof. intros W T V H; fsetdec. Qed.
+Lemma subVarSet_delVarSetList_extendVarSetList s t xs : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s t -> subVarSet (delVarSetList s xs) (extendVarSetList t xs).
 Proof.
-  intros.
-  destruct (lookupVarSet (filterVarSet f vs) v) eqn:Hl.
-  - revert Hl.
-    unfold_VarSet_to_IntMap.
-    unfold IntMap.filter.
-    symmetry.
-    erewrite lookup_filterWithKey.
-    + reflexivity.
-    + apply Hl.
-  - apply lookupVarSet_None_elemVarSet in Hl.
-    symmetry.
-    apply lookupVarSet_None_elemVarSet.
-    set_b_iff.
-    intros Hin.
-    eapply filter_3 in Hin; eauto.
+  intros W T V H. apply (proj2 (subVarSet_spec _ _
+    (delVarSetList_WF s xs W) (extendVarSetList_WF t xs T) (delVarSetList_valid s xs W V))).
+  intros x M. change (In x (delVarSetList s xs)) in M.
+  rewrite -> delVarSetList_iff in M by exact W.
+  change (In x (extendVarSetList t xs)). rewrite -> extendVarSetList_iff by exact T. left.
+  apply (proj1 (subVarSet_spec _ _ W T V) H). exact (proj1 M).
 Qed.
-
-Lemma lookupVarSet_filterVarSet_false : forall f v vs,
-  RespectsVar f ->
-  f v = false ->
-  lookupVarSet (filterVarSet f vs) v = None.
+Lemma subVarSet_delVarSetList_extendVarSetList_dual s t xs : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s (extendVarSetList t xs) -> subVarSet (delVarSetList s xs) t.
 Proof.
-  intros.
-  apply lookupVarSet_None_elemVarSet.
-  set_b_iff.
-  rewrite filter_iff; [|auto].
-  intros [H1 H2].
-  rewrite H0 in H2.
-  inversion H2.
+  intros W T V H. apply (proj2 (subVarSet_spec _ _
+    (delVarSetList_WF s xs W) T (delVarSetList_valid s xs W V))).
+  intros x M. change (In x (delVarSetList s xs)) in M.
+  rewrite -> delVarSetList_iff in M by exact W.
+  pose proof (proj1 (subVarSet_spec _ _ W (extendVarSetList_WF t xs T) V) H x (proj1 M)) as N.
+  change (In x (extendVarSetList t xs)) in N.
+  rewrite -> extendVarSetList_iff in N by exact T. tauto.
 Qed.
-
-Lemma unionVarSet_filterVarSet f vs1 vs2 :
-  RespectsVar f ->
-  unionVarSet (filterVarSet f vs1) (filterVarSet f vs2) [=] filterVarSet f (unionVarSet vs1 vs2).
+Lemma subVarSet_extendVarSetList_r xs s t : WF s -> WF t -> ValidVarSet s ->
+  subVarSet s (mkVarSet xs) -> subVarSet s (extendVarSetList t xs).
 Proof.
-  move=> g.
-  set_b_iff.
-  rewrite <- filter_union.
-  reflexivity.
-  eauto.
+  intros W T V H. apply (proj2 (subVarSet_spec _ _ W (extendVarSetList_WF t xs T) V)).
+  intros x M. pose proof (proj1 (subVarSet_spec _ _ W (mkVarSet_WF xs) V) H x M) as N.
+  change (In x (mkVarSet xs)) in N.
+  rewrite -> mkVarSet_extendVarSetList, extendVarSetList_iff in N by solve_varset_inv.
+  change (In x (extendVarSetList t xs)).
+  rewrite -> extendVarSetList_iff by exact T. destruct N as [N|N]; [discriminate N|auto].
 Qed.
-
-Lemma filterVarSet_delVarSet f vs v :
-  RespectsVar f ->
-  filterVarSet f (delVarSet vs v) [=]
-  delVarSet (filterVarSet f vs) v.
+Lemma elemVarSet_false_true v1 s v2 :
+  elemVarSet v1 s = false -> elemVarSet v2 s -> varUnique v1 <> varUnique v2.
 Proof.
-  move=> Ff. unfold RespectsVar in Ff.
-  set_b_iff. 
-  unfold Equal.
-  move=> x.
-  rewrite filter_iff; auto.
-  rewrite remove_iff; auto.
-  rewrite remove_iff; auto.
-  rewrite filter_iff; auto.
-  fsetdec.
+  intros H K E. assert (Q : v1 == v2) by (rewrite varUnique_iff; exact E).
+  rewrite -> (elemVarSet_eq v1 v2 s Q), K in H. discriminate.
 Qed.
 
-
-Lemma filterVarSet_delVarSetList:
-  forall (f : Var -> bool)  (vars : list Var) (vs : VarSet),
-  RespectsVar f ->
-  filterVarSet f (delVarSetList  vs vars) [=] delVarSetList (filterVarSet f vs) vars.
+Lemma mapUnionVarSet_In_subVarSet {a} (x : a) xs f :
+  (forall y, List.In y xs -> WF (f y)) ->
+  (forall y, List.In y xs -> ValidVarSet (f y)) ->
+  List.In x xs -> subVarSet (f x) (mapUnionVarSet f xs).
 Proof.
-  induction vars.
-  - move=> vs h. hs_simpl. reflexivity.
-  - move=> vs h.  hs_simpl. 
-    rewrite IHvars; try done.
-    rewrite <- filterVarSet_delVarSet; try done.
+  intros W V H. apply (proj2 (subVarSet_spec _ _ (W x H)
+    (mapUnionVarSet_WF f xs W) (V x H))).
+  intros v M. revert W V H. induction xs as [|y ys IH]; intros W V H; [contradiction|].
+  change (elemVarSet v (unionVarSet (f y) (mapUnionVarSet f ys)) = true).
+  assert (Wy : WF (f y)) by (apply W; left; reflexivity).
+  assert (Ws : WF (mapUnionVarSet f ys)) by
+    (apply mapUnionVarSet_WF; intros z Z; apply W; right; exact Z).
+  rewrite -> elemVarSet_union by assumption.
+  apply Bool.orb_true_iff. destruct H as [H|H].
+  - subst y. auto.
+  - right. apply IH; auto; intros z Z; [apply W|apply V]; right; exact Z.
 Qed.
 
-
-(** ** [unionVarSet] *)
-
-Lemma unionVarSet_sym vs1 vs2 : unionVarSet vs1 vs2 [=] unionVarSet vs2 vs1.
-Proof. set_b_iff. fsetdec. Qed.
-
-
-Lemma unionEmpty_l : forall vs,
-    unionVarSet emptyVarSet vs [=] vs.
-Proof. set_b_iff. fsetdec. Qed.
-Lemma unionEmpty_r : forall vs,
-    unionVarSet vs emptyVarSet [=] vs.
-Proof. set_b_iff. fsetdec. Qed.
-Lemma unionSingle_l : forall x s,
-    unionVarSet (unitVarSet x) s [=] extendVarSet s x.
-Proof. intros. set_b_iff. fsetdec. Qed.
-Lemma unionSingle_r : forall x s,
-    unionVarSet s (unitVarSet x) [=] extendVarSet s x.
-Proof. intros. set_b_iff. fsetdec. Qed.
-
-#[export] Hint Rewrite unionEmpty_l unionEmpty_r
-     unionSingle_l unionSingle_r :
-  hs_simpl.
-
-
-(** ** [unionVarSets] *)
-
-Lemma unionVarSet_commute (ss : list VarSet) : forall v a,
-      unionVarSet v (Foldable.foldr unionVarSet a ss)
-  [=] unionVarSet a (Foldable.foldr unionVarSet v ss).
-Proof.   
-  induction ss.
-  + intros v a. hs_simpl. eapply unionVarSet_sym.
-  + intros v b. hs_simpl.
-    rewrite (IHss a b).
-    rewrite (IHss a v).
-    fsetdec.
-Qed.
-
-Lemma unionVarSets_cons a ss : unionVarSets (a :: ss) [=] unionVarSet a (unionVarSets ss).
+Lemma lookupVarSet_ae vs v1 v2 : almostEqual v1 v2 ->
+  lookupVarSet vs v1 = lookupVarSet vs v2.
+Proof. induction 1; simpl; unfold UniqFM.lookupUFM; simpl; auto. Qed.
+Lemma delVarSet_ae vs v1 v2 : almostEqual v1 v2 ->
+  delVarSet vs v1 = delVarSet vs v2.
+Proof. induction 1; simpl; unfold UniqFM.delFromUFM; simpl; auto. Qed.
+Lemma elemVarSet_ae vs v1 v2 : almostEqual v1 v2 ->
+  elemVarSet v1 vs = elemVarSet v2 vs.
+Proof. induction 1; simpl; unfold UniqFM.delFromUFM; simpl; auto. Qed.
+Lemma Forall2_diag a P (xs : list a) :
+  Forall2 P xs xs <-> Forall (fun x => P x x) xs.
+Proof. induction xs; split; intro H; constructor; inversion H; intuition. Qed.
+Lemma lookupVarSet_delVarSet_None v s : WF s -> lookupVarSet (delVarSet s v) v = None.
+Proof. intro W. rewrite -> (lookupVarSet_del s v v W), N.eqb_refl. reflexivity. Qed.
+Definition freshList (vars : list Var) (vs : VarSet) :=
+  forall v, Foldable.elem v vars -> lookupVarSet vs v = None.
+Lemma freshList_nil s : freshList nil s.
+Proof. intros v H. rewrite elem_nil in H. discriminate. Qed.
+Lemma freshList_cons x xs s :
+  lookupVarSet s x = None /\ freshList xs s <-> freshList (x :: xs) s.
 Proof.
-  unfold unionVarSets.
-  unfold UniqSet.unionManyUniqSets.
-  destruct ss.
-  + hs_simpl. reflexivity.
-  + hs_simpl. rewrite unionVarSet_commute.
-    reflexivity.
+  unfold freshList. split.
+  - intros [H K] v M. rewrite elem_cons in M. apply Bool.orb_true_iff in M.
+    destruct M as [E|M]; [rewrite (lookupVarSet_eq v x s E); exact H|apply K; exact M].
+  - intro H; split.
+    + apply H. rewrite -> elem_cons, Eq_refl. reflexivity.
+    + intros v M. apply H. rewrite -> elem_cons, M, Bool.orb_true_r. reflexivity.
 Qed.
-#[export] Hint Rewrite unionVarSets_cons : hs_simpl.
-
-
-Lemma unionVarSets_def ss : 
-  unionVarSets ss [=] Foldable.foldr unionVarSet emptyVarSet ss.
+Lemma freshList_app s xs ys : freshList (xs ++ ys) s <-> freshList xs s /\ freshList ys s.
 Proof.
-  induction ss. cbv. done.
-  hs_simpl. 
-  rewrite IHss. reflexivity.
+  induction xs as [|x xs IH]; simpl List.app.
+  - split; [intro H; split; [apply freshList_nil|exact H]|tauto].
+  - rewrite <- !freshList_cons, IH. tauto.
 Qed.
+Lemma elemVarSet_unitVarSet_is_eq x v : elemVarSet x (unitVarSet v) = (x == v).
+Proof. apply elemVarSet_unit. Qed.
+Lemma UniqSet_Mk_UniqSet_eta a b (x : UniqSet.UniqSet a) (f : UniqSet.UniqSet a -> b) :
+  match x with UniqSet.Mk_UniqSet s => f (UniqSet.Mk_UniqSet s) end = f x.
+Proof. destruct x; reflexivity. Qed.
 
-
-Lemma unionsVarSet_equal : forall vss1 vss2, Forall2 Equal vss1 vss2 ->
-  (Foldable.foldr unionVarSet emptyVarSet) vss1 [=]
-  (Foldable.foldr unionVarSet emptyVarSet) vss2.
+(* These higher-order instances are raw-true: the premise explicitly demands
+   the congruence law for the supplied folding function.  They do not assert
+   any such law for the structural VarSet operations. *)
+#[export] Instance foldr_m :
+  Proper (((fun x y : Var => x == y) ==> Equal ==> Equal) ==> Equal ==>
+    (fun a b : list Var => a = b) ==> Equal) Foldable.foldr.
 Proof.
-  move=>vss1 vss2.
-  elim.
-  hs_simpl. reflexivity.
-  move=> x y l l' Eq1 Eq2 IH.
-  hs_simpl.
-  f_equiv; auto.
+  intros f g F s t E xs ys L; subst ys. revert s t E.
+  induction xs as [|x xs IH]; intros s t E.
+  - exact E.
+  - rewrite !Foldable_foldr_cons. apply F; [apply Eq_refl|apply IH; exact E].
 Qed.
-
-Instance unionsVarSet_m : 
-   Proper (Forall2 Equal ==> Equal) unionVarSets.
+#[export] Instance foldr_mE :
+  Proper ((Equal ==> Equal ==> Equal) ==> Equal ==> Forall2 Equal ==> Equal) Foldable.foldr.
 Proof.
-  move=> vss1 vss2 Eq. 
-  rewrite unionVarSets_def. rewrite unionVarSets_def.
-  eapply unionsVarSet_equal. auto.
-Defined.
+  intros f g F s t E xs ys L. revert s t E.
+  induction L; intros s t E.
+  - exact E.
+  - rewrite !Foldable_foldr_cons. apply F; [assumption|apply IHL; exact E].
+Qed.
 
-
-Lemma delVarSet_unionVarSets ss x :
-  delVarSet (unionVarSets ss) x [=] unionVarSets (List.map (fun s => delVarSet s x) ss).
+Lemma LastIn_inj v1 v2 vs : LastIn v1 vs -> v1 == v2 -> LastIn v2 vs -> v1 = v2.
 Proof.
-  induction ss.
-  + cbv. done.
-  + hs_simpl.
-    rewrite delVarSet_unionVarSet. rewrite IHss.
-    rewrite unionVarSets_cons.
-    unfold map. reflexivity.
+  intro H. induction H; intros E K; inversion K; subst; try reflexivity;
+    try solve [eapply IHLastIn; eauto].
+  all: match goal with
+    | N : Foldable.elem ?a ?xs = false, L : LastIn ?b ?xs |- _ =>
+      let M := fresh "M" in
+      let Q := fresh "Q" in
+      pose proof (LastIn_elem b xs L) as M;
+      assert (Q : a == b) by (assumption || (rewrite Eq_sym; assumption));
+      rewrite <- (elem_eq xs a b Q) in M; rewrite N in M; discriminate M
+    end.
 Qed.
-    
-Lemma mapUnionVarSet_cons {A} f (x:A) xs : 
-  mapUnionVarSet f (x :: xs) [=] unionVarSet (f x) (mapUnionVarSet f xs).
-Proof.                                           
-  unfold mapUnionVarSet.
-  hs_simpl. unfold Base.op_z2218U__.
-  reflexivity.
-Qed.
-
-Lemma mapUnionVarSets_unionVarSets {A} (f : A -> VarSet) ss :
-  mapUnionVarSet f ss [=] unionVarSets (List.map f ss).
-Proof. 
-  induction ss. cbv. done.
-  rewrite mapUnionVarSet_cons.
-  rewrite unionVarSets_cons.
-  rewrite IHss.
-  reflexivity.
-Qed.
-
-
-(** ** [minusVarSet] *)
-
-Lemma minusVarSet_emptyVarSet vs : 
-  minusVarSet vs emptyVarSet = vs.
+Lemma lookupVarSet_extendVarSetList_self_exists_LastIn vars v s : WF s ->
+  Foldable.elem v vars -> exists v', and3
+    (lookupVarSet (extendVarSetList s vars) v = Some v') (v == v') (LastIn v' vars).
 Proof.
-  unfold minusVarSet, emptyVarSet.
-  unfold UniqSet.minusUniqSet, UniqSet.emptyUniqSet.
-  elim: vs => [i].
-  elim: i => [m].
-  unfold UniqFM.minusUFM, UniqFM.emptyUFM.
-  f_equal.
-  f_equal.
-  unfold IntMap.empty.
-  rewrite difference_nil_r.
-  reflexivity.
+  revert s. induction vars as [|x xs IH]; intros s W M.
+  - rewrite elem_nil in M; discriminate.
+  - rewrite elem_cons in M. apply Bool.orb_true_iff in M.
+    rewrite extendVarSetList_cons. destruct (Foldable.elem v xs) eqn:T.
+    + destruct (IH (extendVarSet s x) (extendVarSet_WF s x W) (Logic.eq_refl true))
+        as [w [L E K]]. exists w; split; [exact L|exact E|apply LastIn_tail; exact K].
+    + destruct M as [E|M]; [|discriminate M].
+      assert (N : negb (Foldable.elem v xs) = true) by (rewrite T; reflexivity).
+      rewrite -> (lookupVarSet_extendVarSetList_false xs v (extendVarSet s x)
+        (extendVarSet_WF s x W) N).
+      exists x; split; [|exact E|].
+      * apply lookupVarSet_extendVarSet_eq; [exact W|rewrite Eq_sym; exact E].
+      * apply LastIn_head. rewrite <- (elem_eq xs v x E). exact T.
 Qed.
-
-#[export] Hint Rewrite minusVarSet_emptyVarSet : hs_simpl.
-
-Lemma minusVarSet_emptyVarSet_l vs : 
-  minusVarSet emptyVarSet vs = emptyVarSet.
+Lemma extendVarSetList_same v vars s t : WF s -> WF t -> Foldable.elem v vars ->
+  lookupVarSet (extendVarSetList s vars) v = lookupVarSet (extendVarSetList t vars) v.
 Proof.
-  unfold minusVarSet, emptyVarSet.
-  unfold UniqSet.minusUniqSet, UniqSet.emptyUniqSet.
-  elim: vs => [i].
-  elim: i => [m].
-  unfold UniqFM.minusUFM, UniqFM.emptyUFM.
-  f_equal.
-  f_equal.
-  unfold IntMap.empty.
-  rewrite difference_nil_l.
-  reflexivity.
+  intros W T M.
+  destruct (lookupVarSet_extendVarSetList_self_exists_LastIn vars v s W M) as [x [L E K]].
+  destruct (lookupVarSet_extendVarSetList_self_exists_LastIn vars v t T M) as [y [L' E' K']].
+  assert (Q : x == y) by (eapply Eq_trans; [rewrite Eq_sym; exact E|exact E']).
+  pose proof (LastIn_inj x y vars K Q K') as F. subst y. rewrite -> L, L'. reflexivity.
 Qed.
 
-#[export] Hint Rewrite minusVarSet_emptyVarSet_l : hs_simpl.
-
-
-
-Lemma elemVarSet_minusVarSetTrue : forall x s,
-  elemVarSet x s = true ->
+Lemma IntMapEq_VarSetEq x y : x == y ->
+  UniqSet.Mk_UniqSet (UniqFM.UFM x) [=] UniqSet.Mk_UniqSet (UniqFM.UFM y).
+Proof.
+  intros E v. unfold In, elemVarSet, UniqSet.elementOfUniqSet, UniqFM.elemUFM.
+  rewrite -> (Proofs.ContainerProofs.Eq_membership Var _ EqLaws_Var x y E). reflexivity.
+Qed.
+Lemma minusVarSet_emptyVarSet s : minusVarSet s emptyVarSet = s.
+Proof.
+  destruct s as [[m]]. unfold minusVarSet, emptyVarSet, UniqSet.minusUniqSet,
+    UniqSet.emptyUniqSet, UniqFM.minusUFM, UniqFM.emptyUFM.
+  rewrite Proofs.ContainerProofs.difference_nil_r. reflexivity.
+Qed.
+Lemma minusVarSet_emptyVarSet_l s : minusVarSet emptyVarSet s = emptyVarSet.
+Proof.
+  destruct s as [[m]]. unfold minusVarSet, emptyVarSet, UniqSet.minusUniqSet,
+    UniqSet.emptyUniqSet, UniqFM.minusUFM, UniqFM.emptyUFM.
+  rewrite Proofs.ContainerProofs.difference_nil_l. reflexivity.
+Qed.
+Lemma elemVarSet_minusVarSet x s t : WF s -> WF t ->
+  elemVarSet x (minusVarSet s t) = elemVarSet x s && negb (elemVarSet x t).
+Proof. apply elemVarSet_minus. Qed.
+Lemma elemVarSet_minusVarSetTrue x s : WF s -> elemVarSet x s = true ->
   minusVarSet (unitVarSet x) s [=] emptyVarSet.
-Proof.
-  intros x s H.
-  intro a.
-  set_b_iff.
-  rewrite F.diff_iff.
-  rewrite F.empty_iff.
-  split; [|tauto].
-  intros [H1 H2].
-  exfalso. apply H2.
-  rewrite F.singleton_iff in H1.
-  apply In_1 with (x := x); [exact H1 | exact H].
-Qed.
-
-
-Lemma elemVarSet_minusVarSetFalse : forall x s,
-  elemVarSet x s = false ->
+Proof. intros W H; fsetdec. Qed.
+Lemma elemVarSet_minusVarSetFalse x s : WF s -> elemVarSet x s = false ->
   minusVarSet (unitVarSet x) s [=] unitVarSet x.
 Proof.
-  intros x s H.
-  intro a.
-  set_b_iff.
-  rewrite F.diff_iff.
+  intros W H a. rewrite -> minusVarSet_diff, diff_iff by solve_varset_inv.
+  rewrite -> unitVarSet_singleton, singleton_iff. split; [tauto|].
+  intro E; split; [exact E|]. intro K.
+  assert (L : In x s) by (eapply In_1; [symmetry; exact E|exact K]).
+  unfold In in L; rewrite H in L; discriminate.
+Qed.
+Lemma unionVarSet_minusVarSet s t u : WF s -> WF t -> WF u ->
+  unionVarSet (minusVarSet s u) (minusVarSet t u) [=] minusVarSet (unionVarSet s t) u.
+Proof. intros W T U; fsetdec. Qed.
+
+Lemma extendVarSetList_foldl' s xs :
+  extendVarSetList s xs = Foldable.foldl' (fun s x => add x s) s xs.
+Proof. reflexivity. Qed.
+Lemma delVarSetList_foldl xs s : delVarSetList s xs = Foldable.foldl delVarSet s xs.
+Proof.
+  revert s. induction xs as [|x xs IH]; intro s.
+  - rewrite delVarSetList_nil. reflexivity.
+  - rewrite -> delVarSetList_cons, Foldable_foldl_cons. apply IH.
+Qed.
+Lemma foldl_m s t (xs ys : list Var) : WF s -> WF t -> s [=] t -> xs = ys ->
+  Foldable.foldl delVarSet s xs [=] Foldable.foldl delVarSet t ys.
+Proof.
+  intros W T E L; subst ys. rewrite <- !delVarSetList_foldl.
+  apply delVarSetList_m; [exact W|exact T|exact E|].
+  induction xs; constructor; [apply Eq_refl|assumption].
+Qed.
+Lemma delVarSetList_commute (xs : list Var) s x : WF s ->
+  Foldable.foldl delVarSet (delVarSet s x) xs [=]
+  delVarSet (Foldable.foldl delVarSet s xs) x.
+Proof.
+  intro W. rewrite <- !delVarSetList_foldl.
+  rewrite <- (delVarSetList_cons2 xs s x W). rewrite delVarSetList_cons. reflexivity.
+Qed.
+Lemma delVarSetList_foldr s xs : WF s ->
+  delVarSetList s xs [=] Foldable.foldr (fun x s => delVarSet s x) s xs.
+Proof.
+  revert s. induction xs as [|x xs IH]; intros s W.
+  - rewrite delVarSetList_nil. reflexivity.
+  - rewrite Foldable_foldr_cons. transitivity (delVarSet (delVarSetList s xs) x).
+    + apply delVarSetList_cons2; exact W.
+    + apply delVarSet_m; [solve_varset_inv| |apply IH; exact W|apply Eq_refl].
+      clear IH. induction xs as [|y ys IH]; [exact W|].
+      rewrite Foldable_foldr_cons. apply delVarSet_WF. exact IH.
+Qed.
+Lemma delVarSetList_commute_foldr (xs : list Var) s x : WF s ->
+  Foldable.foldr (fun x s => delVarSet s x) (delVarSet s x) xs [=]
+  delVarSet (Foldable.foldr (fun x s => delVarSet s x) s xs) x.
+Proof.
+  intro W. transitivity (delVarSetList (delVarSet s x) xs).
+  - symmetry. apply delVarSetList_foldr. solve_varset_inv.
+  - transitivity (delVarSet (delVarSetList s xs) x).
+    + rewrite <- delVarSetList_cons. apply delVarSetList_cons2; exact W.
+    + apply delVarSet_m; [solve_varset_inv| |apply delVarSetList_foldr; exact W|apply Eq_refl].
+      induction xs as [|y ys IH]; [exact W|].
+      rewrite Foldable_foldr_cons. apply delVarSet_WF. exact IH.
+Qed.
+
+Lemma fold_unionVarSet_iff (ss : list VarSet) s x :
+  (forall t, List.In t ss -> WF t) -> WF s ->
+  (In x (Foldable.foldr unionVarSet s ss) <->
+   In x s \/ exists t, List.In t ss /\ In x t).
+Proof.
+  intros W S. induction ss as [|t ts IH].
+  - change (In x s <-> In x s \/ exists t, False /\ In x t). firstorder.
+  - rewrite Foldable_foldr_cons. rewrite -> unionVarSet_union, union_iff.
+    + rewrite -> IH by (intros u U; apply W; right; exact U).
+      split.
+      * intros [H|[H|[u [U H]]]].
+        -- right; exists t; split; [left; reflexivity|exact H].
+        -- left; exact H.
+        -- right; exists u; split; [right; exact U|exact H].
+      * intros [H|[u [[U|U] H]]].
+        -- right; left; exact H.
+        -- subst u; left; exact H.
+        -- right; right; exists u; auto.
+    + apply W; left; reflexivity.
+    + apply fold_unionVarSet_WF; [intros u U; apply W; right; exact U|exact S].
+Qed.
+Lemma unionVarSet_commute (ss : list VarSet) v a :
+  (forall s, List.In s ss -> WF s) -> WF v -> WF a ->
+  unionVarSet v (Foldable.foldr unionVarSet a ss) [=]
+  unionVarSet a (Foldable.foldr unionVarSet v ss).
+Proof.
+  intros W V A x. rewrite -> !unionVarSet_union, !union_iff by
+    (assumption || (apply fold_unionVarSet_WF; assumption)).
+  rewrite -> !fold_unionVarSet_iff by assumption. tauto.
+Qed.
+Lemma unionVarSets_def ss : (forall s, List.In s ss -> WF s) ->
+  unionVarSets ss [=] Foldable.foldr unionVarSet emptyVarSet ss.
+Proof.
+  intros W x. destruct ss as [|s ss]; [reflexivity|].
+  change (In x (Foldable.foldr unionVarSet s ss) <->
+    In x (Foldable.foldr unionVarSet emptyVarSet (s :: ss))).
+  rewrite -> !fold_unionVarSet_iff by
+    (assumption || solve_varset_inv || (apply W; left; reflexivity) ||
+     (intros t T; apply W; right; exact T)).
+  rewrite -> emptyVarSet_empty, empty_iff.
   split.
-  - intros [H1 H2]. auto.
-  - intro H1.
-    split; [auto|].
-    intro Habs.
-    rewrite F.singleton_iff in H1.
-    apply H. apply In_1 with (x := a); [symmetry; exact H1 | exact Habs].
+  - intros [H|[t [T H]]]; right.
+    + exists s; split; [left; reflexivity|exact H].
+    + exists t; split; [right; exact T|exact H].
+  - intros [H|[t [[T|T] H]]]; [contradiction|subst t; auto|right; exists t; auto].
+Qed.
+Lemma unionVarSets_cons s ss : WF s -> (forall t, List.In t ss -> WF t) ->
+  unionVarSets (s :: ss) [=] unionVarSet s (unionVarSets ss).
+Proof.
+  intros S W x.
+  rewrite -> (unionVarSets_def (s :: ss)) by (intros t [E|T]; [subst t; exact S|apply W; exact T]).
+  rewrite Foldable_foldr_cons.
+  rewrite -> !unionVarSet_union, !union_iff by
+    (solve_varset_inv || (apply fold_unionVarSet_WF; [exact W|apply emptyVarSet_WF]) ||
+      (apply unionVarSets_WF; exact W)).
+  rewrite <- (unionVarSets_def ss W). reflexivity.
+Qed.
+Lemma unionsVarSet_equal ss ts :
+  (forall s, List.In s ss -> WF s) -> (forall t, List.In t ts -> WF t) ->
+  Forall2 Equal ss ts ->
+  Foldable.foldr unionVarSet emptyVarSet ss [=] Foldable.foldr unionVarSet emptyVarSet ts.
+Proof.
+  intros W T L. revert W T. induction L; intros W T; [reflexivity|].
+  rewrite !Foldable_foldr_cons. apply unionVarSet_m.
+  - apply W; left; reflexivity.
+  - apply T; left; reflexivity.
+  - apply fold_unionVarSet_WF; [intros s S; apply W; right; exact S|apply emptyVarSet_WF].
+  - apply fold_unionVarSet_WF; [intros s S; apply T; right; exact S|apply emptyVarSet_WF].
+  - assumption.
+  - apply IHL; intros s S; [apply W|apply T]; right; exact S.
+Qed.
+Lemma unionsVarSet_m ss ts :
+  (forall s, List.In s ss -> WF s) -> (forall t, List.In t ts -> WF t) ->
+  Forall2 Equal ss ts -> unionVarSets ss [=] unionVarSets ts.
+Proof.
+  intros W T L. rewrite -> (unionVarSets_def ss W), (unionVarSets_def ts T).
+  apply unionsVarSet_equal; assumption.
+Qed.
+Lemma mapUnionVarSet_cons {a} f (x : a) xs :
+  mapUnionVarSet f (x :: xs) [=] unionVarSet (f x) (mapUnionVarSet f xs).
+Proof. reflexivity. Qed.
+Lemma mapUnionVarSets_unionVarSets {a} (f : a -> VarSet) xs :
+  (forall x, List.In x xs -> WF (f x)) ->
+  mapUnionVarSet f xs [=] unionVarSets (List.map f xs).
+Proof.
+  intro W. rewrite -> unionVarSets_def by
+    (intros s S; apply in_map_iff in S; destruct S as [x [E X]]; subst s; apply W; exact X).
+  change (fold_right (fun x s => unionVarSet (f x) s) emptyVarSet xs [=]
+    fold_right unionVarSet emptyVarSet (List.map f xs)).
+  assert (E : fold_right (fun x s => unionVarSet (f x) s) emptyVarSet xs =
+    fold_right unionVarSet emptyVarSet (List.map f xs)).
+  { clear W. induction xs; simpl; [reflexivity|rewrite IHxs; reflexivity]. }
+  rewrite E. reflexivity.
+Qed.
+Lemma delVarSet_unionVarSets ss x : (forall s, List.In s ss -> WF s) ->
+  delVarSet (unionVarSets ss) x [=] unionVarSets (List.map (fun s => delVarSet s x) ss).
+Proof.
+  intro W. induction ss as [|s ss IH]; [reflexivity|].
+  assert (S : WF s) by (apply W; left; reflexivity).
+  assert (T : forall t, List.In t ss -> WF t) by (intros t U; apply W; right; exact U).
+  transitivity (delVarSet (unionVarSet s (unionVarSets ss)) x).
+  - apply delVarSet_m; [apply unionVarSets_WF; exact W|solve_varset_inv|apply unionVarSets_cons; assumption|apply Eq_refl].
+  - transitivity (unionVarSet (delVarSet s x) (delVarSet (unionVarSets ss) x)).
+    + apply delVarSet_unionVarSet; [exact S|apply unionVarSets_WF; exact T].
+    + transitivity (unionVarSet (delVarSet s x) (unionVarSets (List.map (fun s => delVarSet s x) ss))).
+      * apply unionVarSet_m; try solve_varset_inv.
+        -- apply unionVarSets_WF; intros t U; apply in_map_iff in U;
+             destruct U as [u [E U]]; subst t; apply delVarSet_WF; apply T; exact U.
+        -- reflexivity.
+        -- apply IH; exact T.
+      * symmetry. apply unionVarSets_cons; [solve_varset_inv|].
+        intros t U; apply in_map_iff in U; destruct U as [u [E U]];
+          subst t; apply delVarSet_WF; apply T; exact U.
+Qed.
+Lemma subVarSet_mapUnionVarSet {a} (xs : list a) f s : WF s ->
+  (forall x, List.In x xs -> WF (f x)) ->
+  (forall x, List.In x xs -> ValidVarSet (f x)) ->
+  Forall (fun x => subVarSet (f x) s) xs -> subVarSet (mapUnionVarSet f xs) s.
+Proof.
+  intros S W V H. induction xs as [|x xs IH]; [apply subVarSet_emptyVarSet; exact S|].
+  inversion H as [|y ys Hx Hxs]; subst.
+  change (subVarSet (unionVarSet (f x) (mapUnionVarSet f xs)) s = true).
+  rewrite -> subVarSet_unionVarSet by
+    (solve_varset_inv || (apply W; left; reflexivity) || (apply V; left; reflexivity) ||
+     (apply mapUnionVarSet_WF; intros y Y; apply W; right; exact Y) ||
+     (apply mapUnionVarSet_valid; intros y Y; [apply W|apply V]; right; exact Y)).
+  apply Bool.andb_true_iff; split; [exact Hx|].
+  apply IH; [intros y Y; apply W; right; exact Y|intros y Y; apply V; right; exact Y|exact Hxs].
 Qed.
 
-
-
-Lemma elemVarSet_minusVarSet x vs1 vs2 :
-  elemVarSet x (minusVarSet vs1 vs2) = elemVarSet x vs1 && ~~ elemVarSet x vs2.
+Lemma disjointVarSet_iff s t : WF s -> WF t -> ValidVarSet s ->
+  (disjointVarSet s t = true <-> forall x, In x s -> ~ In x t).
 Proof.
-  rewrite eqE.
-  set_b_iff.
-  rewrite F.diff_iff.
+  intros W T V. rewrite -> (disjointVarSet_spec s t W T V).
+  unfold In. split; intros H x M; specialize (H x M).
+  - rewrite H; discriminate.
+  - apply Bool.not_true_is_false; exact H.
+Qed.
+Lemma disjointVarSet_m s t u v : WF s -> WF t -> WF u -> WF v ->
+  ValidVarSet s -> ValidVarSet t -> s [=] t -> u [=] v ->
+  disjointVarSet s u = disjointVarSet t v.
+Proof.
+  intros W T U V P Q E F. apply Bool.eq_true_iff_eq.
+  rewrite -> !disjointVarSet_iff by assumption.
+  split; intros H x M N.
+  - apply (H x); [apply (proj2 (E x)); exact M|apply (proj2 (F x)); exact N].
+  - apply (H x); [apply (proj1 (E x)); exact M|apply (proj1 (F x)); exact N].
+Qed.
+Lemma disjointVarSet_empytVarSet s : disjointVarSet s emptyVarSet.
+Proof.
+  destruct s as [[m]]. apply Proofs.ContainerProofs.disjoint_empty_r.
+Qed.
+Lemma disjointVarSet_mkVarSet_nil s : disjointVarSet s (mkVarSet []).
+Proof. apply disjointVarSet_empytVarSet. Qed.
+Lemma disjointVarSet_extendVarSet s x t : WF s -> WF t -> ValidVarSet s ->
+  (disjointVarSet s (extendVarSet t x) <-> elemVarSet x s = false /\ disjointVarSet s t).
+Proof.
+  intros W T V. unfold is_true.
+  rewrite -> !disjointVarSet_iff by solve_varset_inv.
   split.
-  move => [h1 h2]. apply /andP. split. auto.
-  apply /negPf.
-  set_b_iff. auto.
-  move => /andP [h1 h2].
-  move: h2 => /negPf => h2.
-  set_b_iff. auto.
+  - intro H; split.
+    + apply Bool.not_true_is_false. intro M. apply (H x M).
+      apply add_1; [exact T|apply E.eq_refl].
+    + intros y M N. apply (H y M). apply add_2; assumption.
+  - intros [H K] y M N. change (In y (add x t)) in N.
+    rewrite -> add_iff in N by exact T. destruct N as [E|N].
+    + assert (L : In x s) by (eapply In_1; [symmetry; exact E|exact M]).
+      unfold In in L. rewrite H in L; discriminate.
+    + exact (K y M N).
 Qed.
-
-
-Lemma unionVarSet_minusVarSet vs1 vs2 vs :
-  unionVarSet (minusVarSet vs1 vs) (minusVarSet vs2 vs) [=]
-  minusVarSet (unionVarSet vs1 vs2) vs.
+Lemma disjointVarSet_mkVarSet s xs : WF s -> ValidVarSet s ->
+  (disjointVarSet s (mkVarSet xs) <-> Forall (fun v => elemVarSet v s = false) xs).
 Proof.
-  unfold Equal.
-  move=> x.
-  unfold In.
-  rewrite! elemVarSet_minusVarSet.
-  rewrite! elemVarSet_unionVarSet.
-  rewrite! elemVarSet_minusVarSet.
-  rewrite! andb_orb_distrib_l.
-  reflexivity.
+  intros W V. unfold is_true.
+  rewrite -> (disjointVarSet_spec s (mkVarSet xs) W (mkVarSet_WF xs) V).
+  rewrite Forall_forall. split.
+  - intros H x X. apply Bool.not_true_is_false. intro M.
+    specialize (H x M). assert (K : elemVarSet x (mkVarSet xs) = true).
+    { apply elemVarSet_mkVarset_iff_In. apply in_map; exact X. }
+    rewrite H in K; discriminate.
+  - intros H x M. apply Bool.not_true_is_false. intro K.
+    apply elemVarSet_mkVarset_iff_In in K. apply in_map_iff in K.
+    destruct K as [v [E X]]. specialize (H v X).
+    assert (Q : x == v) by (apply varUnique_iff; symmetry; exact E).
+    rewrite <- (elemVarSet_eq x v s Q) in H. rewrite M in H; discriminate.
 Qed.
-
-
-(** ** Compatibility with [almostEqual] *)
-
-Lemma lookupVarSet_ae : 
-  forall vs v1 v2, 
-    almostEqual v1 v2 -> 
-    lookupVarSet vs v1 = lookupVarSet vs v2.
-Proof. 
-  induction 1; simpl; unfold UniqFM.lookupUFM; simpl; auto.
-Qed.
-
-Lemma delVarSet_ae:
-  forall vs v1 v2,
-  almostEqual v1 v2 ->
-  delVarSet vs v1 = delVarSet vs v2.
+Lemma disjointVarSet_mkVarSet_cons v s xs : WF s -> ValidVarSet s ->
+  (disjointVarSet s (mkVarSet (v :: xs)) <->
+   elemVarSet v s = false /\ disjointVarSet s (mkVarSet xs)).
 Proof.
-  induction 1; simpl;
-  unfold UniqFM.delFromUFM; simpl; auto.
+  intros W V. rewrite -> !disjointVarSet_mkVarSet by assumption.
+  rewrite Forall_cons_iff. reflexivity.
 Qed.
-
-Lemma elemVarSet_ae:
-  forall vs v1 v2,
-  almostEqual v1 v2 ->
-  elemVarSet v1 vs = elemVarSet v2 vs.
+Lemma disjointVarSet_mkVarSet_append s xs ys : WF s -> ValidVarSet s ->
+  (disjointVarSet s (mkVarSet (xs ++ ys)) <->
+   disjointVarSet s (mkVarSet xs) /\ disjointVarSet s (mkVarSet ys)).
 Proof.
-  induction 1; simpl;
-  unfold UniqFM.delFromUFM; simpl; auto.
+  intros W V. rewrite -> !disjointVarSet_mkVarSet by assumption.
+  apply Forall_app.
 Qed.
-
-
-Lemma elemNegbDisjoint : forall vs vs2, 
-    disjointVarSet vs (mkVarSet vs2) ->
-    forall v, Foldable.elem v vs2 -> negb (elemVarSet v vs).
+Lemma elemNegbDisjoint s xs : WF s -> ValidVarSet s ->
+  disjointVarSet s (mkVarSet xs) -> forall v, Foldable.elem v xs -> negb (elemVarSet v s).
 Proof.
-  move=> vs.
-  elim => [|x xs IHxs].
-  - move => ? v. hs_simpl. done.
-  - rewrite disjointVarSet_mkVarSet_cons.
-    move => [h1 h2] v.
-    hs_simpl.
-    move => /orP [h3|h3].
-    erewrite (@elemVarSet_eq x v) in h1.
-    rewrite h1. done.
-    symmetry. done.
-    apply IHxs; try done.
+  intros W V H v M. apply Bool.negb_true_iff.
+  pose proof (proj1 (disjointVarSet_spec s (mkVarSet xs) W (mkVarSet_WF xs) V) H) as D.
+  apply Bool.not_true_is_false. intro K. specialize (D v K).
+  rewrite -> mkVarSet_extendVarSetList, elemVarSet_extendVarSetList in D by solve_varset_inv.
+  rewrite -> M, Bool.orb_true_l in D. discriminate.
 Qed.
-
-
-
-Lemma Forall2_diag:
-  forall a P (xs: list a),
-  Forall2 P xs xs <-> Forall (fun x => P x x) xs.
+Lemma disjointVarSet_subVarSet_l s t u : WF s -> WF t -> WF u ->
+  ValidVarSet s -> ValidVarSet t -> disjointVarSet t u -> subVarSet s t -> disjointVarSet s u.
 Proof.
-  intros.
-  induction xs.
-  * split; intro; constructor.
-  * split; intro H; constructor; inversion H; intuition.
+  intros W T U V Q H K. apply (proj2 (disjointVarSet_spec s u W U V)).
+  intros x M. apply (proj1 (disjointVarSet_spec t u T U Q) H).
+  apply (proj1 (subVarSet_spec s t W T V) K). exact M.
 Qed.
 
-
-Lemma lookupVarSet_delVarSet_None:
-  forall v vs, lookupVarSet (delVarSet vs v) v = None.
-Proof.
-  intros.
-  unfold lookupVarSet,
-  UniqSet.lookupUniqSet,
-  UniqFM.lookupUFM.
-  unfold delVarSet,
-  UniqSet.delOneFromUniqSet,
-  UniqFM.delFromUFM.
-  destruct vs.
-  destruct getUniqSet'.
-  simpl.
-  apply delete_eq.
-Qed.
-
-
-
-
-
-(* A list of variables is fresh for a given varset when 
-   any variable with a unique found in the list is not found 
-   in the set. i.e. this is list membership using GHC.Base.==
-   for vars. 
-*)
-
-Definition freshList (vars: list Var) (vs :VarSet) :=
-  (forall (v:Var), Foldable.elem v vars  -> 
-              lookupVarSet vs v = None).
-
-Lemma freshList_nil : forall v,  freshList nil v.
-Proof.
-  unfold freshList. intros v v0 H. inversion H.
-Qed.
-
-Lemma freshList_cons : forall (x:Var) l (v:VarSet),  
-    lookupVarSet v x = None /\ freshList l v <-> freshList (x :: l) v.
-Proof.
-  unfold freshList. intros. 
-  split. 
-  + intros [? ?] ? ?.
-    rewrite elem_cons in H1.
-    destruct (orb_prop _ _ H1) as [EQ|IN].
-    rewrite -> lookupVarSet_eq with (v2 := x); auto.
-    eauto.
-  + intros. split.
-    eapply H. 
-    rewrite elem_cons.
-    eapply orb_true_intro.
-    left. eapply Base.Eq_refl.
-    intros.
-    eapply H.
-    rewrite elem_cons.
-    eapply orb_true_intro.
-    right. auto.
-Qed.
-
-
-Lemma freshList_app :
-  forall v l1 l2, freshList (l1 ++ l2) v <-> freshList l1 v /\ freshList l2 v.
-Proof.
-  intros.
-  induction l1; simpl.
-  split.
-  intros. split. apply freshList_nil. auto.
-  tauto.
-  split.
-  + intros.
-    rewrite <- freshList_cons in *. tauto. 
-  + intros.
-    rewrite <- freshList_cons in *. tauto.
-Qed.
-    
-
-
-Lemma elemVarSet_unitVarSet_is_eq :
-  forall x v, elemVarSet x (unitVarSet v) = GHC.Base.op_zeze__ x v.
-Proof.
-  intros x v.
-  destruct x as [xn xu xt xm xs xd xi].
-  destruct v as [vn vu vt vm vs vd vi].
-  destruct xu as [xk]. destruct vu as [vk].
-  reflexivity.
-Qed.
-
-
-(** A very specialized [Proper] instance, written for the sole purpose
-    of proving [delVarSetList_commute]. *)
-Instance foldl_m :
-  Proper (Equal ==> (fun (a b : list Var) => a = b) ==> Equal)
-         (Foldable.foldl delVarSet).
-Proof.
-  intros s1 s2 Heqs l1 l2 Heql; subst.
-  generalize dependent s2.
-  generalize dependent s1.
-  induction l2.
-  - rewrite /Foldable.foldl //=.
-  - intros s1 s2 Heqs. rewrite !Foldable_foldl_cons.
-    apply IHl2. rewrite Heqs. reflexivity.
-Qed.
-
-
-Lemma delVarSetList_commute :forall (bndrs:list Var) vs bndr,
-  Foldable.foldl delVarSet (delVarSet vs bndr) bndrs [=]
-  delVarSet (Foldable.foldl delVarSet vs bndrs) bndr.
-Proof.
-  elim => [|bndr' bndrs].
-  - move=> vs bndr. hs_simpl. reflexivity.
-  - move=> IH vs bndr.
-    hs_simpl.
-    rewrite delVarSet_commute.
-    eapply IH.
-Qed.
-
-
-
-(** A [Proper] instance, written for the sole purpose
-    of proving [delVarSetList_commute]. *)
-Instance foldr_m :
-  Proper (((fun x y => (x == y)) ==> Equal ==> Equal) ==> Equal ==> (fun (a b : list Var) => a = b) ==> Equal)
-         Foldable.foldr.
-Proof.
-  intros f1 f2 Hf s1 s2 Heqs l1 l2 Heql; subst.
-  generalize dependent s2.
-  generalize dependent s1.
-  induction l2.
-  - rewrite /Foldable.foldr //=.
-  - intros s1 s2 Heqs. rewrite !Foldable_foldr_cons.
-    specialize (IHl2 s1 s2 Heqs).
-    eapply Hf. reflexivity.
-    eapply IHl2.  
-Qed.
-
-
-
-(** A [Proper] instance, written for showing that folding a unionVarSet like term  *)
-Instance foldr_mE :
-  Proper ((Equal ==> Equal ==> Equal) ==> Equal ==> (Forall2 Equal) ==> Equal)
-         Foldable.foldr.
-Proof.
-  intros f1 f2 Hf s1 s2 Heqs l1 l2 Heql; subst.
-  generalize dependent s2.
-  generalize dependent s1.
-  generalize dependent l1. 
-  induction l2.
-  - move=> l1 Heql. inversion Heql. rewrite /Foldable.foldr //=.
-  - move=> l1 Heql. inversion Heql. subst. 
-    intros s1 s2 Heqs. rewrite !Foldable_foldr_cons.   
-    specialize (IHl2 _ H3 s1 s2 Heqs).
-    eapply Hf. auto.
-    eapply IHl2.  
-Qed.
-
-Lemma delVarSetList_commute_foldr : forall (bndrs:list Var) vs bndr,
-  Foldable.foldr (fun x y => delVarSet y x) (delVarSet vs bndr) bndrs [=]
-  delVarSet (Foldable.foldr (fun x y => delVarSet y x) vs bndrs) bndr.
-Proof.
-  elim => [|bndr' bndrs].
-  - move=> vs bndr. hs_simpl. reflexivity.
-  - move=> IH vs bndr.
-    hs_simpl.
-    rewrite delVarSet_commute.
-    rewrite IH. reflexivity.
-Qed.
-
-Lemma delVarSetList_foldr ss xs : 
-  delVarSetList ss xs [=] Foldable.foldr (fun x ss => delVarSet ss x) ss xs.
-Proof.
-  generalize dependent ss.
-  induction xs.
-  cbv. destruct ss. auto.
-  - move=> ss. hs_simpl.
-    rewrite <- delVarSetList_commute_foldr.
-    rewrite <- IHxs.
-    reflexivity.
-Qed.
+#[export] Hint Rewrite elemVarSet_emptyVarSet
+  extendVarSetList_nil extendVarSetList_cons extendVarSetList_singleton
+  extendVarSetList_append delVarSetList_nil delVarSetList_cons
+  delVarSetList_single delVarSetList_app delVarSet_emptyVarSet
+  filterVarSet_emptyVarSet minusVarSet_emptyVarSet minusVarSet_emptyVarSet_l
+  elemVarSet_unitVarSet_is_eq : hs_simpl.
+#[export] Hint Rewrite elemVarSet_extendVarSet elemVarSet_extendVarSetList
+  elemVarSet_delVarSet elemVarSet_unionVarSet elemVarSet_minusVarSet
+  using solve_varset_inv : hs_simpl.

@@ -222,7 +222,7 @@ Key GHC 9.10 type changes: `Alt` uses `Mk_Alt` constructor (not tuple); `Mk_Id` 
 
 Proof bridge lemmas: `GHC.Base.foldl'` is CPS-via-`fold_right` (not `fold_left`). Use `Foldable.foldl'_is_foldl` (base-thy) to convert `foldl'` to `foldl` in proofs, or `hs_coq_foldl'_base` (base-thy/GHC/Base.v) to convert to `fold_left` directly.
 
-**WF contract recovery**: When changing IntMap/VarSet proofs or their callers, follow the "WF contract recovery" section in `examples/ghc/README.md`. Keep WF and validity premises explicit and use operation-preservation proofs to discharge them. Remaining raw-interface uses of `All_IntMaps_WF` are migration debt.
+**WF contract recovery**: When changing IntMap/VarSet proofs or their callers, follow the "WF contract recovery" section in `examples/ghc/README.md`. Supply explicit WF and validity evidence using `VarSetInvariant`; raw membership equality does not establish either invariant. `IntMapRecursion` derives operation equations from guarded deferred recursion, and `IntMapUnionProofs` proves semantic preservation. `RecoveryChecks.v` fixes the final Exitify contract and checks that the rejected blanket declarations remain absent.
 
 **Exitify/CSE recovery**: When changing their translation, proofs, or assumptions, read [Exitify and CSE proof recovery](examples/ghc/README.md#exitify-and-cse-proof-recovery). It covers guarded unfolding, edit-only Identity support, the restored locality axiom, remaining theorem assumptions, and validation scope.
 

@@ -27,6 +27,41 @@ Require Import Proofs.VarSetStrong.
 Require Import Proofs.VarEnv.
 Require Import Proofs.CoreInduct.
 Require Import Proofs.Var.
+Require Import Proofs.VarSetFSet.
+
+(* These extensional predicates are raw-true. No structural set operation
+   receives an unrestricted Proper instance. *)
+#[local] Instance Scope_Subset_Equal_m : Morphisms.Proper
+  (Morphisms.respectful Equal (Morphisms.respectful Equal iff)) Subset.
+Proof. intros s t E u v F; unfold Subset; setoid_rewrite E; setoid_rewrite F; reflexivity. Qed.
+
+#[local] Instance Scope_elemVarSet_Equal_m x : Morphisms.Proper
+  (Morphisms.respectful Equal Logic.eq) (elemVarSet x).
+Proof. intros s t E. apply Bool.eq_true_iff_eq. exact (E x). Qed.
+
+Local Lemma scope_disjoint_del_rev s xs t : WF s -> ValidVarSet s -> WF t ->
+  disjointVarSet (delVarSetList s (rev xs)) t = disjointVarSet (delVarSetList s xs) t.
+Proof.
+  intros W V T. apply disjointVarSet_m; try solve [solve_varset_inv].
+  - apply delVarSetList_rev; exact W.
+  - reflexivity.
+Qed.
+
+Ltac scope_fresh_disjoint H :=
+  lazymatch type of H with
+  | disjointVarSet ?t ?u = true =>
+    eapply (disjointVarSet_subVarSet_l _ t u);
+      [solve_varset_inv | solve_varset_inv | solve_varset_inv |
+       solve_varset_inv | solve_varset_inv | exact H |]
+  end.
+
+#[local] Hint Resolve exprFreeVars_WF exprFreeVars_valid
+  exprsFreeVars_WF exprsFreeVars_valid : varset_inv.
+#[local] Hint Resolve emptyVarSet_WF unitVarSet_WF mkVarSet_WF
+  extendVarSet_WF extendVarSetList_WF delVarSet_WF delVarSetList_WF
+  emptyVarSet_valid unitVarSet_valid mkVarSet_valid
+  extendVarSet_valid extendVarSetList_valid delVarSet_valid delVarSetList_valid
+  exprFreeVars_WF exprFreeVars_valid exprsFreeVars_WF exprsFreeVars_valid : core.
 
 Import GHC.Base.Notations.
 
@@ -254,12 +289,13 @@ Qed. *)
 
 Lemma WellScopedVar_extendVarSet:
   forall v vs,
+  WF vs ->
   GoodVar v ->
   WellScopedVar v (extendVarSet vs v).
 Proof.
   intros.
   unfold WellScopedVar.
-  rewrite lookupVarSet_extendVarSet_self.
+  rewrite -> lookupVarSet_extendVarSet_self by assumption.
   destruct_match.
   * split. apply almostEqual_refl. trivial.
   * trivial.
@@ -366,69 +402,13 @@ Proof.
 Qed.
 *)
 
-Lemma WellScoped_StrongSubset : forall e vs1 vs2, 
-    WellScoped e vs1 -> StrongSubset vs1 vs2 -> WellScoped e vs2.
-Proof.
-  intro e.
-  apply (core_induct e); intros; try (destruct binds);
-    unfold WellScoped in *; fold WellScoped in *; eauto.
-  - eapply WellScopedVar_StrongSubset; eauto.
-  - destruct H1. split; eauto.
-  - split; only 1: apply H0.
-    destruct H0 as [_ H0].
-    eapply H; eauto.
-    unfold StrongSubset in *.
-    intro var.
-    specialize (H1 var).
-    unfold CoreBndr in v. (* make sure that the type class looks right.*)
-    destruct (v GHC.Base.== var) eqn:Eq.
-    + rewrite lookupVarSet_extendVarSet_eq; auto.
-      rewrite lookupVarSet_extendVarSet_eq; auto.
-      eapply almostEqual_refl.
-    + rewrite lookupVarSet_extendVarSet_neq.
-      destruct (lookupVarSet vs1 var) eqn:IN; auto.
-      rewrite lookupVarSet_extendVarSet_neq.
-      auto.
-      intro h;
-      rewrite Eq in h; discriminate.
-      intro h;
-      rewrite Eq in h; discriminate.
-  - destruct H1 as [[GLV WE] Wb].
-     split; only 1: split; eauto.
-     eapply H0; eauto.
-     eapply StrongSubset_extendVarSetList.
-     auto.
-  - destruct H1 as [[WE1 [WE2 WE3]] Wb].
-     repeat split; auto.
-     rewrite -> Forall'_Forall in *.
-     rewrite -> Forall_forall in *.
-     intros h IN. destruct h as [v rhs].
-     specialize (WE3 (v,rhs)).
-     simpl in *.
-     eauto using StrongSubset_extendVarSetList.
-     eauto using StrongSubset_extendVarSetList.
-  - destruct H1 as [W1 [W2 W3]].    split; only 2: split; eauto.
-     rewrite -> Forall'_Forall in *.
-     rewrite -> Forall_forall in *.
-     intros h IN. destruct h as [dc pats rhs].
-     specialize (H0 dc pats rhs IN).
-     specialize (W3 (Mk_Alt dc pats rhs) IN).
-     simpl in *.
-     destruct W3 as [GLV WS].
-     eauto using StrongSubset_extendVarSetList.
-(*
-  - move: H0 => [? ?].
-    eauto using WellScopedTickish_StrongSubset.
-*)
-Qed.
 
 (** *** Relation to [exprFreeVars] *)
 
-Require Import Proofs.VarSetFSet.
-
 Lemma WellScoped_subset:
   forall e vs,
-    WellScoped e vs -> subVarSet (exprFreeVars e) vs = true.
+    WellScoped e vs -> WF vs -> ValidVarSet vs ->
+    subVarSet (exprFreeVars e) vs = true.
 Proof.
   intro e.
   apply (core_induct e); intros.
@@ -436,63 +416,79 @@ Proof.
     destruct (isLocalVar v) eqn:HisLocal.
     + destruct (lookupVarSet vs v) eqn:Hl; try contradiction.
       rewrite -> exprFreeVars_Var by assumption.
-      rewrite subVarSet_unitVarSet.
+      rewrite -> subVarSet_unitVarSet by assumption.
       eapply lookupVarSet_elemVarSet; eassumption.
     + rewrite -> exprFreeVars_global_Var by assumption.
-      apply subVarSet_emptyVarSet. 
-  - apply subVarSet_emptyVarSet.
+      apply subVarSet_emptyVarSet; assumption.
+  - apply subVarSet_emptyVarSet; assumption.
   - simpl in H1.
+    destruct H1 as [S1 S2].
+    pose proof (H _ S1 H2 H3) as F1.
+    pose proof (H0 _ S2 H2 H3) as F2.
+    set_b_iff.
     rewrite exprFreeVars_App.
-    rewrite subVarSet_unionVarSet.
-    rewrite andb_true_iff.
-    intuition.
+    fsetdec.
   - simpl in H0.
     destruct H0.
-    rewrite exprFreeVars_Lam.
-    apply H in H1.
-    set_b_iff. fsetdec.
+    specialize (H _ H3 (extendVarSet_WF _ _ H1) (extendVarSet_valid _ _ H1 H2)).
+    set_b_iff. rewrite exprFreeVars_Lam.
+    unfold Subset in H |- *.
+    change (forall x, In x (remove v (exprFreeVars e0)) -> In x vs).
+    intro x. rewrite -> remove_iff by solve_varset_inv.
+    intro M. specialize (H x (proj1 M)).
+    rewrite -> add_iff in H by solve_varset_inv. tauto.
   - destruct binds as [v rhs | pairs].
     + simpl in H1. decompose [and] H1; clear H1.
-      rewrite exprFreeVars_Let_NonRec.
-      apply H in H5.
-      apply H0 in H3.
-      rewrite -> extendVarSetList_cons, extendVarSetList_nil in H3.
-      set_b_iff. fsetdec.
+      match goal with S : WellScoped rhs vs |- _ => apply H in S; try solve [solve_varset_inv] end.
+      match goal with S : WellScoped body _ |- _ => apply H0 in S; try solve [solve_varset_inv] end.
+      rewrite -> extendVarSetList_cons, extendVarSetList_nil in *.
+      set_b_iff. rewrite exprFreeVars_Let_NonRec. fsetdec.
+      specialize (H5 a H1).
+      rewrite -> add_iff in H5 by (exists x; exact H2). tauto.
     + simpl in H1. decompose [and] H1; clear H1.
-      rewrite -> Forall'_Forall in H6.
-      rewrite exprFreeVars_Let_Rec.
-      apply H0 in H3; clear H0.
-      rewrite Core.bindersOf_Rec_cleanup in H3.
-      apply subVarSet_delVarSetList_extendVarSetList_dual.
+      rewrite -> Forall'_Forall in *.
+      match goal with S : WellScoped body _ |- _ => apply H0 in S; try solve [solve_varset_inv] end.
+      clear H0.
+      rewrite -> Core.bindersOf_Rec_cleanup in *.
+      set_b_iff. rewrite exprFreeVars_Let_Rec.
+      rewrite <- SubsetE by solve_varset_inv.
+      apply subVarSet_delVarSetList_extendVarSetList_dual; try solve [solve_varset_inv].
       unfold is_true.
-      rewrite -> subVarSet_unionVarSet, andb_true_iff; split.
-      * apply subVarSet_exprsFreeVars.
+      rewrite -> subVarSet_unionVarSet, andb_true_iff by solve_varset_inv; split.
+      * apply subVarSet_exprsFreeVars; try solve [solve_varset_inv].
         rewrite -> Forall_map, Forall_forall in *.
         intros [v rhs] HIn. simpl in *.
-        apply (H _ _ HIn).
-        apply (H6 _ HIn).
-      * assumption.
+        apply (H _ _ HIn); try solve [solve_varset_inv].
+        match goal with F : forall p, List.In p pairs -> WellScoped _ _ |- _ => exact (F _ HIn) end.
+      * set_b_iff. assumption.
   - simpl in H1. decompose [and] H1; clear H1.
-    rewrite -> Forall'_Forall in H5.
-    rewrite exprFreeVars_Case.
-    rewrite -> subVarSet_unionVarSet, andb_true_iff; split.
+    rewrite -> Forall'_Forall in *.
+    assert (WM : IntMapProofs.WF (VarSet_IntMap (mapUnionVarSet
+      (fun '(Mk_Alt _ pats rhs) => delVarSetList (exprFreeVars rhs) (pats ++ [bndr])) alts))).
+    { apply mapUnionVarSet_WF. intros [dc pats rhs] _. solve_varset_inv. }
+    assert (VM : ValidVarSet (mapUnionVarSet
+      (fun '(Mk_Alt _ pats rhs) => delVarSetList (exprFreeVars rhs) (pats ++ [bndr])) alts)).
+    { apply mapUnionVarSet_valid; intros [dc pats rhs] _; solve_varset_inv. }
+    set_b_iff. rewrite exprFreeVars_Case.
+    rewrite <- SubsetE by (solve_varset_inv || (apply mapUnionVarSet_WF; intros [dc pats rhs] _; solve_varset_inv) || (apply mapUnionVarSet_valid; intros [dc pats rhs] _; solve_varset_inv)).
+    unfold is_true.
+    rewrite -> subVarSet_unionVarSet, andb_true_iff by (solve_varset_inv || (apply mapUnionVarSet_WF; intros [dc pats rhs] _; solve_varset_inv) || (apply mapUnionVarSet_valid; intros [dc pats rhs] _; solve_varset_inv)); split.
     * apply H; assumption.
-    * apply subVarSet_mapUnionVarSet.
+    * apply subVarSet_mapUnionVarSet; try solve [solve_varset_inv];
+        try solve [intros [dc pats rhs] _; solve_varset_inv].
       rewrite -> Forall_forall in *.
       intros [dc pats rhs] HIn.
-      specialize (H5 _ HIn). destruct H5. simpl in *.
-      (* Some reordering is needed here. This is a bit smelly,
-         maybe there should be a [rev] in [exprFreeVars_Case] already? *)
-      rewrite <- delVarSetList_rev.
-      rewrite rev_app_distr.
-      rewrite delVarSetList_app.
-      rewrite !delVarSetList_rev.
-      rewrite <- delVarSetList_app.
-      simpl.
-      apply subVarSet_delVarSetList_extendVarSetList_dual.
-      apply (H0 _ _ _ HIn).
-      assumption.
-  - rewrite exprFreeVars_Cast. apply H; assumption.
+      match goal with F : forall a, List.In a alts -> _ |- _ =>
+        specialize (F _ HIn); destruct F
+      end. simpl in *.
+      rewrite -> delVarSetList_app, delVarSetList_single.
+      set_b_iff.
+      change (delVarSet (delVarSetList (exprFreeVars rhs) pats) bndr [<=] vs).
+      rewrite <- delVarSetList_cons2 by solve_varset_inv.
+      rewrite <- SubsetE by solve_varset_inv.
+      apply subVarSet_delVarSetList_extendVarSetList_dual; try solve [solve_varset_inv].
+      apply (H0 _ _ _ HIn); try solve [solve_varset_inv]; assumption.
+  - specialize (H _ H0 H1 H2). set_b_iff. rewrite exprFreeVars_Cast. exact H.
 (*  - rewrite exprFreeVars_Tick.
     simpl in H0.
     by apply H.
@@ -523,11 +519,9 @@ Proof.
     eapply lookupVarSet_elemVarSet; eauto.
     rewrite h in WSy. done.
     *)
-  - apply subVarSet_equal_empty. apply exprFreeVars_Type.
-  - apply subVarSet_equal_empty. apply exprFreeVars_Coercion.
+  - apply subVarSet_equal_empty; try solve [solve_varset_inv]. apply exprFreeVars_Type.
+  - apply subVarSet_equal_empty; try solve [solve_varset_inv]. apply exprFreeVars_Coercion.
 Qed.
-
-Print Assumptions WellScoped_subset.
 
 
 
@@ -537,17 +531,16 @@ Lemma WellScopedVar_extendVarSetList_l:
   forall v vs1 vs2,
   WellScopedVar v vs1 ->
   elemVarSet v (mkVarSet vs2) = false ->
+  WF vs1 ->
   WellScopedVar v (extendVarSetList vs1 vs2).
 Proof.
   intros.
   unfold WellScopedVar in *.
   destruct_match; only 2: assumption.
   destruct_match; only 2: contradiction.
-  rewrite lookupVarSet_extendVarSetList_l. 
+  rewrite -> lookupVarSet_extendVarSetList_l by (auto; rewrite H0; auto).
   rewrite Heq0.
   assumption.
-  rewrite H0. 
-  auto.
 Qed.
 
 Lemma WellScopedVar_extendVarSetList_r:
@@ -555,6 +548,7 @@ Lemma WellScopedVar_extendVarSetList_r:
   Forall GoodVar vs2 ->
   List.In v vs2 ->
   NoDup (map varUnique vs2) ->
+  WF vs1 ->
   WellScopedVar v (extendVarSetList vs1 vs2).
 Proof.
   intros.
@@ -571,48 +565,49 @@ Qed.
 Lemma WellScopedVar_extendVarSetList_fresh_under v vs vs1 vs2 :
   disjointVarSet (delVarSetList (exprFreeVars (Mk_Var v)) (rev vs2))
                  (mkVarSet vs1) = true ->
+  WF vs ->
   WellScopedVar v (extendVarSetList (extendVarSetList vs vs1) vs2) <->
   WellScopedVar v (extendVarSetList vs vs2).
 Proof.
-    intro H.
+    intros H W.
     unfold WellScopedVar.
     destruct_match; only 2: reflexivity.
     enough (lookupVarSet (extendVarSetList (extendVarSetList vs vs1) vs2) v = 
             lookupVarSet (extendVarSetList vs vs2) v) as Htmp
       by (rewrite Htmp; reflexivity).
     rewrite -> exprFreeVars_Var in H by assumption.
-    setoid_rewrite delVarSetList_rev in H.
-    clear -H.
+    rewrite -> scope_disjoint_del_rev in H by solve_varset_inv.
+    clear -H W.
     (* duplication with isJoinPointsValid_fresh_updJPSs_aux here *)
     induction vs2 using rev_ind.
     + rewrite !extendVarSetList_nil.
       rewrite delVarSetList_nil in H.
-      revert vs; induction vs1; intros.
+      revert vs W; induction vs1; intros.
       - rewrite extendVarSetList_nil.
         reflexivity.
       - rewrite extendVarSetList_cons.
         rewrite -> fold_is_true in H.
-        rewrite -> disjointVarSet_mkVarSet_cons in H.
+        rewrite -> disjointVarSet_mkVarSet_cons in H by solve_varset_inv.
         destruct H.
-        rewrite -> IHvs1 by assumption.
-        apply lookupVarSet_extendVarSet_neq.
+        rewrite -> IHvs1 by (assumption || solve_varset_inv).
+        apply lookupVarSet_extendVarSet_neq; [exact W|].
         rewrite <- elemVarSet_unitVarSet_is_eq. intro.
         contradict H. rewrite H1=>//.
     + rewrite -> delVarSetList_app, delVarSetList_cons, delVarSetList_nil in H.
       rewrite -> !extendVarSetList_append, !extendVarSetList_cons, !extendVarSetList_nil.
       destruct (x GHC.Base.== v) eqn:?.
-      -- rewrite -> !lookupVarSet_extendVarSet_eq by assumption.
+      -- rewrite -> !lookupVarSet_extendVarSet_eq by (assumption || solve_varset_inv).
          reflexivity.
       -- rewrite <- not_true_iff_false in Heqb.
-         rewrite -> !lookupVarSet_extendVarSet_neq by assumption.
+         rewrite -> !lookupVarSet_extendVarSet_neq by (assumption || solve_varset_inv).
          apply IHvs2.
          rewrite -> fold_is_true in *.
-         rewrite -> disjointVarSet_mkVarSet in *.
+         rewrite -> disjointVarSet_mkVarSet in * by solve_varset_inv.
          eapply Forall_impl; only 2: eapply H. intros v2 ?.
          cbv beta in H0.
-         rewrite -> delVarSet_elemVarSet_false in H0; only 1: assumption.
+         rewrite -> delVarSet_elemVarSet_false in H0; try solve [solve_varset_inv]; only 1: assumption.
          clear -Heqb.
-         apply elemVarSet_delVarSetList_false_l.
+         apply elemVarSet_delVarSetList_false_l; try solve [solve_varset_inv].
          rewrite elemVarSet_unitVarSet_is_eq.
          apply negbTE, notE => //. 
 Qed.
@@ -628,6 +623,7 @@ Qed.
 Lemma WellScoped_extendVarSetList_fresh_under:
   forall vs1 vs2 e vs,
   disjointVarSet (delVarSetList (exprFreeVars e) vs2) (mkVarSet vs1)  = true ->
+  WF vs ->
   WellScoped e (extendVarSetList (extendVarSetList vs vs1) vs2) <->
   WellScoped e (extendVarSetList vs vs2).
 Proof.
@@ -636,44 +632,51 @@ Proof.
     cases is identical (although here we have more inductive cases than there.
     Once could common it up with a deidcated induction rule. Or live with the duplication.
   *)
-  intros.
-  rewrite <- delVarSetList_rev in H.
-  revert vs2 vs H.
+  intros vs1 vs2 e vs H W.
+  rewrite <- scope_disjoint_del_rev in H by solve_varset_inv.
+  revert vs2 vs H W.
   apply (core_induct e); intros.
   * simpl.
     eapply WellScopedVar_extendVarSetList_fresh_under; eauto.
   * reflexivity.
   * simpl.
     apply and_iff_compat_both.
-    - apply H.
-      eapply disjointVarSet_subVarSet_l; only 1: apply H1.
-      apply subVarSet_delVarSetList_both.
-      rewrite exprFreeVars_App.
+    - apply H; try assumption.
+      scope_fresh_disjoint H1.
+      apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+      set_b_iff. rewrite exprFreeVars_App.
       set_b_iff; fsetdec.
-    - apply H0.
-      eapply disjointVarSet_subVarSet_l; only 1: apply H1.
-      apply subVarSet_delVarSetList_both.
-      rewrite exprFreeVars_App.
+    - apply H0; try assumption.
+      scope_fresh_disjoint H1.
+      apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+      set_b_iff. rewrite exprFreeVars_App.
       set_b_iff; fsetdec.
   * simpl.
     apply and_iff_compat_both; try reflexivity.
     rewrite <- !extendVarSetList_singleton.
     rewrite <- !extendVarSetList_append with (vs1 := vs2).
-    apply H.
-    rewrite -> exprFreeVars_Lam in H0.
+    apply H; try assumption.
     rewrite rev_app_distr.
     simpl.
     rewrite delVarSetList_cons.
-    assumption.
+    set_b_iff.
+    assert (E : delVarSetList (exprFreeVars (Lam v e0)) (rev vs2) [=]
+      delVarSetList (delVarSet (exprFreeVars e0) v) (rev vs2)).
+    { apply delVarSetList_m; try solve [solve_varset_inv].
+      - apply exprFreeVars_Lam.
+      - clear -vs2. induction (rev vs2) as [|x xs IH].
+        + exact (SetoidList.eqlistA_nil _).
+        + apply SetoidList.eqlistA_cons; [apply Eq_refl|exact IH]. }
+    intros x M. apply H0. exact (proj2 (E x) M).
   * simpl.
     apply and_iff_compat_both.
     - destruct binds as [v rhs | pairs].
       + simpl.
         apply and_iff_compat_both; only 1: reflexivity.
-        apply H.
-        eapply disjointVarSet_subVarSet_l; only 1: apply H1.
-        apply subVarSet_delVarSetList_both.
-        rewrite exprFreeVars_Let_NonRec.
+        apply H; try assumption.
+        scope_fresh_disjoint H1.
+        apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+        set_b_iff. rewrite exprFreeVars_Let_NonRec.
         set_b_iff; fsetdec.
       + simpl.
         repeat apply and_iff_compat_both; try reflexivity.
@@ -682,61 +685,81 @@ Proof.
         rewrite Forall_forall.
         intros [v rhs] HIn.
         rewrite <- !extendVarSetList_append with (vs1 := vs2).
-        apply (H _ _ HIn).
-        eapply disjointVarSet_subVarSet_l; only 1: apply H1.
+        apply (H _ _ HIn); try assumption.
+        scope_fresh_disjoint H1.
         rewrite rev_app_distr; simpl.
         rewrite delVarSetList_app.
-        apply subVarSet_delVarSetList_both.
-        rewrite exprFreeVars_Let_Rec.
+        apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+        set_b_iff. rewrite exprFreeVars_Let_Rec.
         pose proof (subVarSet_exprFreeVars_exprsFreeVars _ _ _ HIn).
-        rewrite delVarSetList_rev.
-        apply subVarSet_delVarSetList_both.
+        rewrite -> delVarSetList_rev by solve_varset_inv.
+        rewrite <- SubsetE by solve_varset_inv.
+        apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
         set_b_iff; fsetdec.
     - rewrite <- !extendVarSetList_append with (vs1 := vs2).
-      apply H0.
-      eapply disjointVarSet_subVarSet_l; only 1: apply H1; clear H1.
+      apply H0; try assumption.
+      scope_fresh_disjoint H1.
       rewrite -> rev_app_distr, delVarSetList_app.
-      apply subVarSet_delVarSetList_both.
+      apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
       destruct binds as [v rhs | pairs].
-      -- rewrite exprFreeVars_Let_NonRec.
+      -- set_b_iff. rewrite exprFreeVars_Let_NonRec.
          simpl.
          rewrite -> delVarSetList_cons, delVarSetList_nil.
          set_b_iff; fsetdec.
-      -- rewrite exprFreeVars_Let_Rec.
+      -- set_b_iff. rewrite exprFreeVars_Let_Rec.
          simpl. rewrite Core.bindersOf_Rec_cleanup.
-         rewrite delVarSetList_rev.
-         apply subVarSet_delVarSetList_both.
+         rewrite -> delVarSetList_rev by solve_varset_inv.
+         rewrite <- SubsetE by solve_varset_inv.
+         apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
          set_b_iff; fsetdec.
 
   * simpl.
     repeat apply and_iff_compat_both; try reflexivity.
-    - apply H.
-      eapply disjointVarSet_subVarSet_l; only 1: apply H1; clear H1.
-      apply subVarSet_delVarSetList_both.
-      rewrite exprFreeVars_Case.
+    - apply H; try assumption.
+      scope_fresh_disjoint H1.
+      apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+      set_b_iff. rewrite exprFreeVars_Case.
       set_b_iff; fsetdec.
+      apply union_2; [solve_varset_inv| |exact H2].
+      apply mapUnionVarSet_WF; intros [dc pats rhs] _; solve_varset_inv.
     - rewrite !Forall'_Forall.
       apply Forall_iff.
       rewrite Forall_forall.
       intros [dc pats rhs] HIn; simpl.
       repeat apply and_iff_compat_both; try reflexivity.
       rewrite <- !extendVarSetList_append with (vs1 := vs2).
-      apply (H0 _ _ _ HIn).
-      eapply disjointVarSet_subVarSet_l; only 1: apply H1.
+      apply (H0 _ _ _ HIn); try assumption.
+      scope_fresh_disjoint H1.
       rewrite rev_app_distr; simpl.
       rewrite -> !delVarSetList_app, delVarSetList_cons, delVarSetList_nil.
-      apply subVarSet_delVarSetList_both.
-      rewrite exprFreeVars_Case.
+      apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+      set_b_iff. rewrite exprFreeVars_Case.
       unfold is_true.
       match goal with HIn : List.In _ ?xs |- context [mapUnionVarSet ?f ?xs] =>
-        let H := fresh in
-        epose proof (mapUnionVarSet_In_subVarSet f HIn) as H ; simpl in H end.
-      rewrite -> delVarSetList_rev, <- delVarSetList_single, <- delVarSetList_app.
-      set_b_iff; fsetdec.
-  * apply H. 
-    eapply disjointVarSet_subVarSet_l; only 1: apply H0.
-    apply subVarSet_delVarSetList_both.
-    rewrite exprFreeVars_Cast.
+        let Wf := fresh "Wf" in let Vf := fresh "Vf" in
+        assert (Wf : forall y, List.In y xs -> WF (f y)) by (intros [dc' pats' rhs'] _; solve_varset_inv);
+        assert (Vf : forall y, List.In y xs -> ValidVarSet (f y)) by (intros [dc' pats' rhs'] _; solve_varset_inv);
+        let H := fresh "HM" in pose proof (@mapUnionVarSet_In_subVarSet _ _ xs f Wf Vf HIn) as H;
+        let WM := fresh in pose proof (mapUnionVarSet_WF f xs Wf) as WM;
+        let VM := fresh in pose proof (mapUnionVarSet_valid f xs Wf Vf) as VM;
+        simpl in H end.
+      assert (E : delVarSet (delVarSetList (exprFreeVars rhs) (rev pats)) bndr [=]
+        delVarSetList (exprFreeVars rhs) (pats ++ [bndr])).
+      { transitivity (delVarSet (delVarSetList (exprFreeVars rhs) pats) bndr).
+        - apply delVarSet_m; try solve [solve_varset_inv].
+          + apply delVarSetList_rev; solve_varset_inv.
+          + apply Eq_refl.
+        - rewrite -> delVarSetList_app, delVarSetList_single. reflexivity. }
+      match goal with |- Subset _ ?s =>
+        change (delVarSet (delVarSetList (exprFreeVars rhs) (rev pats)) bndr [<=] s)
+      end.
+      rewrite E. set_b_iff.
+      intros x M. apply union_3; try solve [solve_varset_inv].
+      match goal with HM : Subset _ _ |- _ => apply HM; exact M end.
+  * apply H; try assumption.
+    scope_fresh_disjoint H0.
+    apply subVarSet_delVarSetList_both; try solve [solve_varset_inv].
+    set_b_iff. rewrite exprFreeVars_Cast.
     set_b_iff; fsetdec.
 (*  * simpl.
     apply H.
@@ -782,43 +805,43 @@ Qed.
 Lemma WellScoped_extendVarSetList_fresh:
   forall vs e vs1,
   disjointVarSet (exprFreeVars e) (mkVarSet vs) = true ->
+  WF vs1 ->
   WellScoped e (extendVarSetList vs1 vs) <->
   WellScoped e vs1.
 Proof.
-  intros.
-  epose proof (WellScoped_extendVarSetList_fresh_under vs [] e vs1 _).
-  rewrite !extendVarSetList_nil in H0.
-  eassumption.
-  Unshelve.
-  rewrite delVarSetList_nil. assumption.
+  intros vs e vs1 H W.
+  assert (D : disjointVarSet (delVarSetList (exprFreeVars e) []) (mkVarSet vs) = true).
+  { rewrite delVarSetList_nil. exact H. }
+  pose proof (WellScoped_extendVarSetList_fresh_under vs [] e vs1 D W) as K.
+  rewrite !extendVarSetList_nil in K. exact K.
 Qed.
 
 Lemma WellScoped_extendVarSet_fresh:
   forall v e vs,
   elemVarSet v (exprFreeVars e) = false ->
+  WF vs ->
   WellScoped e (extendVarSet vs v) <-> WellScoped e vs.
 Proof.
-  intros.
-  epose proof (WellScoped_extendVarSetList_fresh [v] e vs _).
-  rewrite -> extendVarSetList_cons,extendVarSetList_nil in H0.
-  assumption.
-  Unshelve.
-  rewrite -> fold_is_true in *.
-  rewrite -> disjointVarSet_mkVarSet_cons, disjointVarSet_mkVarSet_nil.
-  intuition congruence.
+  intros v e vs H W.
+  assert (D : disjointVarSet (exprFreeVars e) (mkVarSet [v]) = true).
+  { rewrite -> fold_is_true.
+    rewrite -> disjointVarSet_mkVarSet_cons, disjointVarSet_mkVarSet_nil by solve_varset_inv.
+    split; [exact H|reflexivity]. }
+  pose proof (WellScoped_extendVarSetList_fresh [v] e vs D W) as K.
+  rewrite -> extendVarSetList_cons, extendVarSetList_nil in K. exact K.
 Qed.
 
 Lemma WellScoped_extendVarSetList_fresh_between:
   forall (vs1 vs2 vs3 : list Var) (e : CoreExpr) (vs : VarSet),
   disjointVarSet (delVarSetList (exprFreeVars e) vs3) (mkVarSet vs2) = true ->
+  WF vs ->
   WellScoped e (extendVarSetList vs ((vs1 ++ vs2) ++ vs3)) <->
   WellScoped e (extendVarSetList vs (vs1 ++ vs3)).
 Proof.
   intros.
   rewrite <- app_assoc.
   rewrite !extendVarSetList_append.
-  apply WellScoped_extendVarSetList_fresh_under.
-  assumption.
+  apply WellScoped_extendVarSetList_fresh_under; [assumption|solve_varset_inv].
 Qed.
 
 (** *** The invariants respect [StrongSubset] *)
@@ -826,7 +849,7 @@ Qed.
 
 Instance Respects_StrongSubset_WellScopedVar v : Respects_StrongSubset (WellScopedVar v).
 Proof.
-  intros ????.
+  intros vs1 vs2 W1 W2 H H0.
   unfold WellScopedVar in *.
   destruct_match; only 2: assumption.
   destruct_match; only 2: contradiction.
@@ -898,6 +921,14 @@ Proof.
    * apply Respects_StrongSubset_const. 
 Qed.
 
+Lemma WellScoped_StrongSubset : forall e vs1 vs2,
+    WellScoped e vs1 -> StrongSubset vs1 vs2 ->
+    WF vs1 -> WF vs2 -> WellScoped e vs2.
+Proof.
+  intros e vs1 vs2 S H W1 W2.
+  exact (Respects_StrongSubset_WellScoped e vs1 vs2 W1 W2 H S).
+Qed.
+
 
 
 (* This seems straitforward to prove given our current
@@ -906,90 +937,14 @@ Qed.
    are a *strong subset* of the in_scope set.
 *)
 Lemma WellScoped_exprFreeVars :
-  forall e vs, WellScoped e vs -> exprFreeVars e [<=] vs.
+  forall e vs, WellScoped e vs -> WF vs -> ValidVarSet vs ->
+  exprFreeVars e [<=] vs.
 Proof.
-  intro e. apply (core_induct e); intros; unfold WellScoped in H.
-  - destruct (isLocalVar v) eqn:L.
-    + rewrite exprFreeVars_Var; auto.
-      unfold WellScopedVar in H. rewrite L in H.
-      destruct (lookupVarSet vs v) eqn: K; try done.
-      move: (lookupVarSet_elemVarSet K) => K2.
-      set_b_iff.
-      rewrite singleton_equal_add.
-      eapply subset_add_3; auto.
-      fsetdec.
-    + rewrite exprFreeVars_global_Var; auto.
-      fsetdec.
-  - hs_simpl. fsetdec.
-  - fold WellScoped in H. simpl in H1.
-    move: H1 => [he1 he2]. 
-    rewrite exprFreeVars_App.
-    rewrite H; eauto. rewrite H0; eauto. fsetdec.
-  - fold WellScoped in H. simpl in H0.
-    move: H0 => [GV WS].
-    rewrite exprFreeVars_Lam.
-    apply H in WS. 
-    set_b_iff.
-    rewrite WS.
-    fsetdec.
-  - fold WellScoped in H. simpl in H1.
-    move: H1 => [WSbi WSbo].
-    destruct binds; simpl in WSbi.
-    + rewrite exprFreeVars_Let_NonRec.
-      move: WSbi => [Gc WSe0].
-      apply H in WSe0.
-      apply H0 in WSbo.
-      simpl in WSbo.
-      autorewrite with hs_simpl in WSbo.
-      eapply union_subset_3; auto.
-      set_b_iff.
-      fsetdec.
-    + rewrite exprFreeVars_Let_Rec.
-      move: WSbi => [Gc[ nd FWSe0]].
-      apply H0 in WSbo. 
-      unfold bindersOf in WSbo.
-      rewrite Core.bindersOf_Rec_cleanup in WSbo.
-      rewrite <- SubsetE.
-      apply subVarSet_delVarSetList_extendVarSetList_dual.
-      unfold is_true.
-      rewrite -> subVarSet_unionVarSet, andb_true_iff; split.
-      * apply subVarSet_exprsFreeVars.
-        rewrite -> Forall_map, Forall_forall in *.
-        intros [v rhs] HIn. simpl in *.
-        specialize (H _ _ HIn (extendVarSetList vs (map fst l))).
-        rewrite <- SubsetE in H. eapply H.
-        rewrite -> Forall'_Forall in FWSe0.
-        rewrite -> Forall_forall in FWSe0.
-        apply (FWSe0 _ HIn).
-      * rewrite <- SubsetE in WSbo.
-        auto.
-  - fold WellScoped in H. simpl in H1.
-    move: H1 => [WSs [GVb FF]].
-    rewrite exprFreeVars_Case.
-    apply H in WSs.
-    eapply union_subset_3; auto.
-    rewrite -> Forall'_Forall in FF. rewrite -> Forall_forall in FF.
-    rewrite <- SubsetE.
-    eapply subVarSet_mapUnionVarSet.
-    rewrite -> Forall_forall.
-    move=> x In.
-    destruct x as [dc pats rhs].
-    move: (FF _ In) => [h0 h1].
-    specialize (H0 dc pats rhs In).
-    rewrite <- delVarSetList_rev.
-    (* smelly reverse *)
-    rewrite rev_app_distr.
-    rewrite delVarSetList_app.
-    rewrite !delVarSetList_rev.
-    rewrite <- delVarSetList_app.
-
-    eapply subVarSet_delVarSetList_extendVarSetList_dual.
-    rewrite -> SubsetE.
-    eapply H0.
-    eapply h1.
-  - fold WellScoped in H. simpl in H0.
-    rewrite exprFreeVars_Cast.
-    eauto.
-  - setoid_rewrite exprFreeVars_Type. fsetdec.
-  - setoid_rewrite exprFreeVars_Coercion. fsetdec.
+  intros e vs S W V.
+  apply (proj1 (SubsetE _ _ (exprFreeVars_WF e) W (exprFreeVars_valid e))).
+  apply WellScoped_subset; assumption.
 Qed.
+
+Print Assumptions WellScoped_subset.
+Print Assumptions WellScoped_extendVarSetList_fresh_between.
+Print Assumptions WellScoped_StrongSubset.

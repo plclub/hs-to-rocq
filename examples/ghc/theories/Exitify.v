@@ -544,6 +544,40 @@ Section in_exitifyRec.
   Definition jps' := updJPSs jps (map fst exits).
   Definition jpsp' := updJPSs jps' fs.
 
+  (* Generic scopes are raw VarSets.  Carry both certificates explicitly;
+     membership equality alone does not preserve the IntMap invariant. *)
+  Hypothesis isvs_WF : WF isvs.
+  Hypothesis isvs_valid : ValidVarSet isvs.
+  Hypothesis jps_WF : WF jps.
+  Hypothesis jps_valid : ValidVarSet jps.
+
+  Set Default Proof Using "Type isvs_WF isvs_valid jps_WF jps_valid".
+
+  #[local] Hint Resolve updJPS_WF updJPS_valid updJPSs_WF updJPSs_valid : varset_inv.
+
+  Local Ltac exit_inv :=
+    rewrite ?getInScopeVars_extendInScopeSet, ?getInScopeVars_extendInScopeSetList;
+    unfold in_scope2;
+    rewrite ?getInScopeVars_extendInScopeSetList;
+    change (getInScopeVars in_scope) with isvs;
+    unfold isvsp', isvs', isvsp, jpsp', jps', jpsp;
+    repeat first [apply updJPSs_WF | apply updJPS_WF | apply updJPSs_valid | apply updJPS_valid];
+    solve_varset_inv.
+
+  Lemma isvsp_extended_WF vs : WF (extendVarSetList isvsp vs).
+  Proof. exit_inv. Qed.
+  Lemma isvsp'_extended_WF vs : WF (extendVarSetList isvsp' vs).
+  Proof. exit_inv. Qed.
+
+  Local Lemma exit_weaken {P : VarSet -> Prop} `{Respects_StrongSubset P}
+    {s t} (S : StrongSubset s t) : WF s -> WF t -> P s -> P t.
+  Proof. intros W T Hs. exact (weaken W T S Hs). Qed.
+
+  Local Lemma exit_weakenb {P : VarSet -> bool}
+    `{Respects_StrongSubset (fun s => P s = true)}
+    {s t} (S : StrongSubset s t) : WF s -> WF t -> P s = true -> P t = true.
+  Proof. intros W T Hs. exact (weaken W T S Hs). Qed.
+
   Definition WellScopedFloats (floats : list (Var * CoreExpr)) :=
     Forall (fun p => elemVarSet (fst p) isvs = false) floats /\
     NoDup (map (fun p => varUnique (fst p)) floats) /\
@@ -556,8 +590,9 @@ Section in_exitifyRec.
     WellScoped (mkLets (map (fun '(v,rhs) => NonRec v rhs) exits') e) isvs.
   Proof.
     intros exits'. unfold WellScopedFloats.
+    generalize isvs_WF, isvs_valid.
     generalize isvs as outer.
-    induction exits' as [|[v rhs] rest IH]; intros outer e Hbase Hfloats.
+    induction exits' as [|[v rhs] rest IH]; intros outer W V e Hbase Hfloats.
     * simpl. unfold Base.id. assumption.
     * simpl in *.
       rewrite extendVarSetList_cons, extendVarSetList_nil.
@@ -570,10 +605,10 @@ Section in_exitifyRec.
       simpl in *.
       rewrite extendVarSetList_cons in Hbase.
       split; [split; [apply HGLVv|apply Hrhs]|].
-      apply IH; [assumption|]. repeat split.
+      apply IH; try solve [solve_varset_inv]; [assumption|]. repeat split.
       - rewrite Forall_forall. rewrite Forall_forall in Hfreshs.
         rewrite in_map_iff in Hfresh.
-        intros [v' rhs'] HIn. rewrite elemVarSet_extendVarSet.
+        intros [v' rhs'] HIn. rewrite elemVarSet_extendVarSet by assumption.
         simpl_bool. split.
         + simpl.
           unfold GHC.Base.op_zeze__, Core.Eq___Var, op_zeze____,
@@ -586,10 +621,11 @@ Section in_exitifyRec.
       - assumption.
       - rewrite Forall_forall. rewrite Forall_forall in Hrhss.
         intros p HIn. simpl.
-        rewrite WellScoped_extendVarSet_fresh.
+        rewrite WellScoped_extendVarSet_fresh; try exact W.
         + apply Hrhss. assumption.
-        + eapply subVarSet_elemVarSet_false; only 2: eassumption.
-          apply WellScoped_subset. apply Hrhss. assumption.
+        + eapply subVarSet_elemVarSet_false; try solve [solve_varset_inv].
+          -- apply WellScoped_subset; [apply Hrhss; assumption|exact W|exact V].
+          -- eassumption.
       - assumption.
   Qed.
 
@@ -609,20 +645,21 @@ Section in_exitifyRec.
     repeat split.
     * constructor; [|assumption]. simpl. subst v.
       unfold isvs, in_scope2 in *.
-      apply elemVarSet_uniqAway.
+      apply elemVarSet_uniqAway; try solve [exit_inv].
       rewrite getInScopeVars_extendInScopeSet, !getInScopeVars_extendInScopeSetList.
-      apply subVarSet_extendVarSet.
-      repeat apply subVarSet_extendVarSetList_l. apply subVarSet_refl.
+      apply subVarSet_extendVarSet; try solve [exit_inv].
+      repeat (apply subVarSet_extendVarSetList_l; try solve [exit_inv]). apply subVarSet_refl; exit_inv.
     * constructor; [|assumption].
-      change (~ In (varUnique v) (map (fun p => varUnique (fst p)) floats)).
+      change (~ List.In (varUnique v) (map (fun p => varUnique (fst p)) floats)).
       rewrite <- (map_map fst varUnique floats).
       rewrite <- hs_coq_map.
       rewrite <- elemVarSet_mkVarset_iff_In. subst v.
       unfold is_true. rewrite not_true_iff_false.
-      apply elemVarSet_uniqAway.
+      apply elemVarSet_uniqAway; try solve [exit_inv].
       rewrite getInScopeVars_extendInScopeSet, !getInScopeVars_extendInScopeSetList.
-      apply subVarSet_extendVarSet. apply subVarSet_extendVarSetList_r.
-      apply subVarSet_refl.
+      apply subVarSet_extendVarSet; try solve [exit_inv].
+      apply subVarSet_extendVarSetList_r; try solve [exit_inv].
+      apply subVarSet_refl; exit_inv.
     * constructor; assumption.
     * constructor; [|assumption]. simpl. subst v.
       apply GoodLocalVar_uniqAway. apply GoodLocalVar_asJoinId_mkSysLocal.
@@ -675,19 +712,27 @@ Section in_exitifyRec.
       (Morphisms.respectful Logic.eq varset_pair_eq)) pair.
   Proof. intros v1 v2 Heq1 x y E. subst y. split; auto. Qed.
 
-  #[local] Instance fold_right_m :
-    Morphisms.Proper (Morphisms.respectful varset_pair_eq
-      (Morphisms.respectful Logic.eq varset_pair_eq)) (fold_right pick).
+  Lemma fold_right_pick_WF fvs vs xs : WF fvs ->
+    WF (fst (fold_right pick (fvs,vs) xs)).
   Proof.
-    intros [v1 l] [v2 l0] Heq x y E. subst x.
-    induction y; simpl; [apply Heq|].
-    remember (fold_right pick (v1,l) y) as p1.
-    remember (fold_right pick (v2,l0) y) as p2.
-    destruct p1; destruct p2. destruct IHy as [H E]. subst l1.
-    simpl. replace (elemVarSet a v) with (elemVarSet a v0).
-    * destruct (elemVarSet a v0); split; auto.
-      rewrite H. reflexivity.
-    * rewrite H. reflexivity.
+    intro W. induction xs; simpl; [exact W|].
+    unfold pick at 1. destruct (fold_right pick (fvs,vs) xs) as [s l].
+    simpl in *. destruct (elemVarSet a s); simpl; solve_varset_inv.
+  Qed.
+
+  Lemma fold_right_m v1 v2 l l0 xs : WF v1 -> WF v2 ->
+    varset_pair_eq (v1,l) (v2,l0) ->
+    varset_pair_eq (fold_right pick (v1,l) xs) (fold_right pick (v2,l0) xs).
+  Proof.
+    intros W T Heq. induction xs as [|a xs IH]; simpl; [exact Heq|].
+    pose proof (fold_right_pick_WF v1 l xs W) as W1.
+    pose proof (fold_right_pick_WF v2 l0 xs T) as W2.
+    unfold pick at 1 3. destruct (fold_right pick (v1,l) xs) as [s ls].
+    destruct (fold_right pick (v2,l0) xs) as [t lt].
+    destruct IH as [E L]. simpl in *. subst lt.
+    assert (M : elemVarSet a s = elemVarSet a t) by (apply eqE; exact (E a)).
+    rewrite M. destruct (elemVarSet a t); split; auto.
+    apply delVarSet_m; auto. apply Eq_refl.
   Qed.
 
   #[local] Instance snd_m :
@@ -696,33 +741,40 @@ Section in_exitifyRec.
   Proof. intros [v1 l1] [v2 l2] [H E]. exact E. Qed.
 
   Lemma WellScoped_picked_aux : forall fvs captured e vs,
+    WF fvs ->
     WellScoped e (extendVarSetList fvs (captured ++ vs)) ->
     WellScoped e (extendVarSetList fvs
       (snd (fold_right pick (delVarSetList (exprFreeVars e) vs,[]) captured) ++ vs)).
   Proof.
-    intros fvs captured e. induction captured using rev_ind; intros vs HWS; simpl.
+    intros fvs captured e. induction captured using rev_ind; intros vs W HWS; simpl.
     * assumption.
     * rewrite fold_right_app. simpl. destruct_match; simpl.
       + rewrite snd_pick_list, <- app_assoc.
         erewrite delVarSet_ae by apply zap_ae.
-        rewrite <- delVarSetList_cons2. apply IHcaptured.
+        assert (E : snd (fold_right pick (delVarSet (delVarSetList (exprFreeVars e) vs) (zap x),[]) captured) =
+          snd (fold_right pick (delVarSetList (exprFreeVars e) (zap x :: vs),[]) captured)).
+        { apply snd_m. apply fold_right_m; try solve [solve_varset_inv].
+          split; [symmetry; apply delVarSetList_cons2; solve_varset_inv|reflexivity]. }
+        rewrite E. apply IHcaptured; [exact W|].
         rewrite app_assoc.
         erewrite Respects_StrongSubset_extendVarSetList_ae; only 1: apply HWS.
+        all: try exact W.
         repeat apply Forall2_app.
         - apply Forall2_symmetric. intro. apply almostEqual_refl.
         - constructor; [apply almostEqual_sym; apply zap_ae|constructor].
         - apply Forall2_symmetric. intro. apply almostEqual_refl.
-      + apply IHcaptured.
-        rewrite <- WellScoped_extendVarSetList_fresh_between; [apply HWS|].
-        apply disjointVarSet_mkVarSet. constructor; [assumption|constructor].
+      + apply IHcaptured; [exact W|].
+        rewrite <- WellScoped_extendVarSetList_fresh_between; [apply HWS| |exact W].
+        apply disjointVarSet_mkVarSet; try solve [solve_varset_inv]. constructor; [assumption|constructor].
   Qed.
 
   Lemma WellScoped_picked : forall fvs captured e,
+    WF fvs ->
     WellScoped e (extendVarSetList fvs captured) ->
     WellScoped e (extendVarSetList fvs
       (snd (fold_right pick (exprFreeVars e,[]) captured))).
   Proof.
-    intros fvs captured e HWS.
+    intros fvs captured e W HWS.
     pose proof (WellScoped_picked_aux fvs captured e []).
     rewrite !app_nil_r, delVarSetList_nil in *. auto.
   Qed.
@@ -770,13 +822,13 @@ Section in_exitifyRec.
     * apply Forall_picked.
       eapply Forall_impl; only 2: apply HGLV.
       intros v Hv. eapply GoodLocalVar_almostEqual; [exact Hv|apply zap_ae].
-    * apply WellScoped_picked.
+    * apply WellScoped_picked; [exit_inv|].
       rewrite hs_coq_map in Hdisjoint.
       replace (map _ pairs) with fs in Hdisjoint by reflexivity.
       unfold isvsp in HWS.
-      rewrite WellScoped_extendVarSetList_fresh_under in HWS; only 1: assumption.
-      eapply disjointVarSet_subVarSet_l; only 1: eassumption.
-      apply subVarSet_delVarSetList.
+      rewrite WellScoped_extendVarSetList_fresh_under in HWS; try exact isvs_WF; only 1: assumption.
+      eapply disjointVarSet_subVarSet_l with (t := exprFreeVars e); try solve [exit_inv]; only 1: eassumption.
+      apply subVarSet_delVarSetList; exit_inv.
   Qed.
 
   Lemma go_all_WellScopedFloats_on : forall captured ann_e,
@@ -934,7 +986,7 @@ Section in_exitifyRec.
     subVarSet jps (isvs) = true.
 
   Lemma all_exits_WellScoped : WellScopedFloats exits.
-  Proof using Type pairs_WS pairs_VJPP.
+  Proof using Type pairs_WS pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
     unfold exits, pairs'_exits, ann_pairs, GHC.Prim.rightSection.
     rewrite hs_coq_map, forM_map.
     eapply SP_snd_runState.
@@ -958,29 +1010,30 @@ Section in_exitifyRec.
   Qed.
 
   Lemma disjoint_isvs_exits : disjointVarSet isvs (mkVarSet (map fst exits)) = true.
-  Proof using Type pairs_WS pairs_VJPP.
-    rewrite <- hs_coq_map. apply disjointVarSet_mkVarSet.
+  Proof using Type pairs_WS pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
+    rewrite <- hs_coq_map. apply disjointVarSet_mkVarSet; try solve [exit_inv].
     rewrite hs_coq_map, Forall_map.
     exact (proj1 all_exits_WellScoped).
   Qed.
 
   Lemma isvs_to_isvs' : StrongSubset isvs isvs'.
-  Proof using Type pairs_WS pairs_VJPP.
-    apply StrongSubset_extendList_fresh. exact disjoint_isvs_exits.
+  Proof using Type pairs_WS pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
+    apply StrongSubset_extendList_fresh; try solve [exit_inv]. exact disjoint_isvs_exits.
   Qed.
 
   Lemma isvsp_to_isvsp' : StrongSubset isvsp isvsp'.
-  Proof using Type pairs_WS pairs_VJPP.
-    apply StrongSubset_extendVarSetList. exact isvs_to_isvs'.
+  Proof using Type pairs_WS pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
+    apply StrongSubset_extendVarSetList; try solve [exit_inv]. exact isvs_to_isvs'.
   Qed.
 
   Lemma isvsp_to_isvsp'_extended : forall vs,
     StrongSubset (extendVarSetList isvsp vs) (extendVarSetList isvsp' vs).
-  Proof using Type pairs_WS pairs_VJPP.
-    intro vs. apply StrongSubset_extendVarSetList. exact isvsp_to_isvsp'.
+  Proof using Type pairs_WS pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
+    intro vs. apply StrongSubset_extendVarSetList; try solve [exit_inv]. exact isvsp_to_isvsp'.
   Qed.
 
   Lemma WellScopedVar_picked_aux : forall vsis captured fvs,
+    WF vsis -> WF fvs ->
     Forall GoodVar captured ->
     Forall (fun v => WellScopedVar v (extendVarSetList vsis captured))
       (snd (fold_right pick (fvs,[]) captured)) /\
@@ -988,21 +1041,21 @@ Section in_exitifyRec.
       (snd (fold_right pick (fvs,[]) captured)).
   Proof.
     clear pairs_WS pairs_VJPP pairs_NoDup jps_subset_isvs.
-    intros vsis captured. induction captured using rev_ind; intros fvs Hgood.
+    intros vsis captured. induction captured using rev_ind; intros fvs W T Hgood.
     * split; constructor.
     * rewrite fold_right_app. simpl.
       rewrite extendVarSetList_append, extendVarSetList_cons, extendVarSetList_nil.
       destruct_match.
       + rewrite snd_pick_list.
         assert (Hg : Forall GoodVar captured) by (rewrite Forall_app in Hgood; tauto).
-        destruct (IHcaptured (delVarSet fvs x) Hg) as [IH1 IH2].
+        destruct (IHcaptured (delVarSet fvs x) W (delVarSet_WF _ _ T) Hg) as [IH1 IH2].
         split; apply Forall_app; split.
         - rewrite Forall_forall in *. intros v HIn.
           specialize (IH1 _ HIn). specialize (IH2 _ HIn).
           change (WellScoped (Mk_Var v) (extendVarSet (extendVarSetList vsis captured) x)).
-          apply WellScoped_extendVarSet_fresh; only 2: exact IH1.
+          apply WellScoped_extendVarSet_fresh; try solve [solve_varset_inv]; only 2: exact IH1.
           apply elemVarSet_exprFreeVars_Var_false.
-          rewrite elemVarSet_delVarSet in IH2.
+          rewrite elemVarSet_delVarSet in IH2 by exact T.
           rewrite andb_true_iff in IH2. destruct IH2 as [Hneq _].
           rewrite negb_true_iff in Hneq.
           rewrite var_eq_realUnique in Hneq.
@@ -1012,38 +1065,39 @@ Section in_exitifyRec.
           exact (Hneq E).
         - constructor; [|constructor].
           change (WellScoped (Mk_Var (zap x)) (extendVarSet (extendVarSetList vsis captured) x)).
-          rewrite Respects_StrongSubset_extendVarSet_ae by apply zap_ae.
-          apply WellScopedVar_extendVarSet.
+          rewrite Respects_StrongSubset_extendVarSet_ae by (solve_varset_inv || apply zap_ae).
+          apply WellScopedVar_extendVarSet; try solve [solve_varset_inv].
           rewrite Forall_app in Hgood. destruct Hgood as [_ Hx]. inversion Hx.
           eauto using GoodVar_zap.
         - rewrite Forall_forall in *. intros v HIn.
-          specialize (IH2 _ HIn). rewrite elemVarSet_delVarSet in IH2.
+          specialize (IH2 _ HIn). rewrite elemVarSet_delVarSet in IH2 by exact T.
           rewrite andb_true_iff in IH2. tauto.
         - constructor; [|constructor].
           erewrite <- elemVarSet_ae by apply zap_ae. assumption.
       + assert (Hg : Forall GoodVar captured) by (rewrite Forall_app in Hgood; tauto).
-        destruct (IHcaptured fvs Hg) as [IH1 IH2]. split.
+        destruct (IHcaptured fvs W T Hg) as [IH1 IH2]. split.
         - rewrite Forall_forall in *. intros v HIn.
           specialize (IH1 _ HIn). specialize (IH2 _ HIn).
           change (WellScoped (Mk_Var v) (extendVarSet (extendVarSetList vsis captured) x)).
-          apply WellScoped_extendVarSet_fresh; only 2: exact IH1.
+          apply WellScoped_extendVarSet_fresh; try solve [solve_varset_inv]; only 2: exact IH1.
           apply elemVarSet_exprFreeVars_Var_false.
           eapply elemVarSet_false_true; eassumption.
         - exact IH2.
   Qed.
 
   Lemma WellScopedVar_picked : forall vsis captured fvs,
+    WF vsis -> WF fvs ->
     Forall GoodVar captured ->
     Forall (fun v => WellScopedVar v (extendVarSetList vsis captured))
       (snd (fold_right pick (fvs,[]) captured)).
-  Proof. intros. apply WellScopedVar_picked_aux. assumption. Qed.
+  Proof. intros. apply WellScopedVar_picked_aux; assumption. Qed.
 
   Lemma addExit_all_WellScopedVar : forall captured ja e,
     Forall GoodVar captured ->
     RevStateInvariant (sublistOf exits)
       (addExit (extendInScopeSetList in_scope2 captured) ja e)
       (fun v => WellScopedVar v (extendVarSetList isvsp' captured)).
-  Proof using Type pairs_WS pairs_VJPP.
+  Proof using Type pairs_WS pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
     intros captured ja e Hcapt.
     unfold addExit, mkExitJoinId, RevStateInvariant, SP, State.runState.
     cbn. intros floats Hfloats.
@@ -1051,23 +1105,23 @@ Section in_exitifyRec.
     apply sublistOf_cons in Hfloats. destruct Hfloats as [HIn Hsub].
     apply in_map with (f := fst) in HIn. simpl in HIn.
     split; [exact Hsub|].
-    apply WellScopedVar_extendVarSetList_l; only 1: apply WellScopedVar_extendVarSetList_l.
-    * apply WellScopedVar_extendVarSetList_r; only 2: exact HIn.
+    apply WellScopedVar_extendVarSetList_l; try solve [exit_inv]; only 1: (apply WellScopedVar_extendVarSetList_l; try solve [exit_inv]).
+    * apply WellScopedVar_extendVarSetList_r; try solve [exit_inv]; only 2: exact HIn.
       - destruct all_exits_WellScoped as [_ [_ [_ Hgood]]].
         rewrite Forall_map. eapply Forall_impl; only 2: exact Hgood.
         intros [x rhs] Hx. exact (proj1 Hx).
       - rewrite map_map. exact (proj1 (proj2 all_exits_WellScoped)).
-    * subst v. apply elemVarSet_uniqAway.
+    * subst v. apply elemVarSet_uniqAway; try solve [exit_inv].
       unfold in_scope2.
       rewrite getInScopeVars_extendInScopeSet, !getInScopeVars_extendInScopeSetList.
-      apply subVarSet_extendVarSet.
-      apply subVarSet_extendVarSetList_l. apply subVarSet_extendVarSetList_l.
-      apply subVarSet_extendVarSetList_r. apply subVarSet_refl.
-    * subst v. apply elemVarSet_uniqAway.
+      apply subVarSet_extendVarSet; try solve [exit_inv].
+      apply subVarSet_extendVarSetList_l; try solve [exit_inv]. apply subVarSet_extendVarSetList_l; try solve [exit_inv].
+      apply subVarSet_extendVarSetList_r; try solve [exit_inv]. apply subVarSet_refl; exit_inv.
+    * subst v. apply elemVarSet_uniqAway; try solve [exit_inv].
       unfold in_scope2.
       rewrite getInScopeVars_extendInScopeSet, !getInScopeVars_extendInScopeSetList.
-      apply subVarSet_extendVarSet. apply subVarSet_extendVarSetList_l.
-      apply subVarSet_extendVarSetList_r. apply subVarSet_refl.
+      apply subVarSet_extendVarSet; try solve [exit_inv]. apply subVarSet_extendVarSetList_l; try solve [exit_inv].
+      apply subVarSet_extendVarSetList_r; try solve [exit_inv]. apply subVarSet_refl; exit_inv.
   Qed.
 
   Lemma go_exit_res_WellScoped captured e :
@@ -1075,7 +1129,7 @@ Section in_exitifyRec.
     WellScoped e (extendVarSetList isvsp captured) ->
     RevStateInvariant (sublistOf exits) (go_exit captured e (exprFreeVars e))
       (fun e' => WellScoped e' (extendVarSetList isvsp' captured)).
-  Proof using Type pairs_WS pairs_VJPP.
+  Proof using Type pairs_WS pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
     intros Hcapt HWS.
     set (P := fun act => RevStateInvariant (sublistOf exits) act
       (fun e' => WellScoped e' (extendVarSetList isvsp' captured))).
@@ -1083,7 +1137,9 @@ Section in_exitifyRec.
     cbv beta delta [go_exit]. repeat float_let.
     assert (Hreturn : P (return_ e)).
     { apply RevStateInvariant_return.
-      apply (weaken (isvsp_to_isvsp'_extended _)). exact HWS. }
+      exact (weaken (vs1 := extendVarSetList isvsp captured)
+        (vs2 := extendVarSetList isvsp' captured)
+        ltac:(exit_inv) ltac:(exit_inv) (isvsp_to_isvsp'_extended captured) HWS). }
     enough (Hnext : P j_16__).
     { clearbody j_16__; cleardefs. subst _go3.
       destruct (collectArgs _) as [rhs args]. destruct rhs; try exact Hnext.
@@ -1100,9 +1156,9 @@ Section in_exitifyRec.
     apply WellScoped_mkVarApps; only 1: exact Hv.
     subst abs_vars.
     eapply Forall_impl.
-    * intros v' Hv'. apply (weaken (isvsp_to_isvsp'_extended _)). exact Hv'.
+    * intros v' Hv'. apply (weaken (isvsp_extended_WF _) (isvsp'_extended_WF _) (isvsp_to_isvsp'_extended _)). exact Hv'.
     * subst _go0 zap0. fold zap. fold pick. simpl.
-      rewrite Foldable.hs_coq_foldr_list. apply WellScopedVar_picked. exact Hcapt.
+      rewrite Foldable.hs_coq_foldr_list. apply WellScopedVar_picked; try solve [exit_inv]. exact Hcapt.
   Qed.
 
   Lemma go_res_WellScoped_on : forall captured ann_e,
@@ -1111,7 +1167,7 @@ Section in_exitifyRec.
     WellScoped (deAnnotate ann_e) (extendVarSetList isvsp captured) ->
     RevStateInvariant (sublistOf exits) (go captured ann_e)
       (fun e' => WellScoped e' (extendVarSetList isvsp' captured)).
-  Proof using Type pairs_WS pairs_VJPP.
+  Proof using Type pairs_WS pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
     refine (go_ind_on (fun captured ann_e r =>
       Forall GoodLocalVar captured ->
       WellScoped (deAnnotate ann_e) (extendVarSetList isvsp captured) ->
@@ -1125,7 +1181,7 @@ Section in_exitifyRec.
       eapply Forall_impl; only 2: exact Hcapt. intros v Hv. exact (proj1 Hv). }
     destruct ann_e as [f a]. destruct a; simpl in *;
       try solve [apply RevStateInvariant_return;
-        apply (weaken (isvsp_to_isvsp'_extended _)); exact HWS].
+        apply (weaken (isvsp_extended_WF _) (isvsp'_extended_WF _) (isvsp_to_isvsp'_extended _)); exact HWS].
     - destruct HWS as [Hscrut [Hgood Halts]].
       inversion Hdom; subst.
       rewrite Forall'_Forall, hs_coq_map, Forall_map, Forall_forall in Halts.
@@ -1149,7 +1205,7 @@ Section in_exitifyRec.
           rewrite extendVarSetList_append in Hrhs'. exact Hrhs'.
       + intros alts'. apply RevStateInvariant_return. intros Halts'.
         simpl. split; [|split].
-        * apply (weaken (isvsp_to_isvsp'_extended _)). exact Hscrut.
+        * apply (weaken (isvsp_extended_WF _) (isvsp'_extended_WF _) (isvsp_to_isvsp'_extended _)). exact Hscrut.
         * exact Hgood.
         * rewrite Forall'_Forall. exact Halts'.
     - destruct a as [j rhs|aps]; simpl in *.
@@ -1196,7 +1252,7 @@ Section in_exitifyRec.
           -- intros body'. apply RevStateInvariant_return. intro Hb.
              simpl. split; [split|].
              ++ exact Hgood.
-             ++ apply (weaken (isvsp_to_isvsp'_extended _)). exact Hrhs.
+             ++ apply (weaken (isvsp_extended_WF _) (isvsp'_extended_WF _) (isvsp_to_isvsp'_extended _)). exact Hrhs.
              ++ rewrite extendVarSetList_append, extendVarSetList_cons,
                   extendVarSetList_nil in Hb. exact Hb.
       + repeat rewrite flat_map_unpack_cons_f in *.
@@ -1312,15 +1368,15 @@ Section in_exitifyRec.
                 assert (Hscope : StrongSubset
                   (extendVarSetList (extendVarSetList isvsp captured) (map fst aps))
                   (extendVarSetList (extendVarSetList isvsp' captured) (map fst aps))).
-                { apply StrongSubset_extendVarSetList.
+                { apply StrongSubset_extendVarSetList; try solve [exit_inv].
                   apply isvsp_to_isvsp'_extended. }
-                apply (weaken Hscope).
+                apply (exit_weaken Hscope); try solve [exit_inv].
                 exact (Hrhss _ Hin).
              ++ rewrite extendVarSetList_append in Hb. exact Hb.
   Qed.
 
   Lemma pairs'_WS : Forall (fun p => WellScoped (snd p) isvsp') pairs'.
-  Proof using Type pairs_WS pairs_VJPP.
+  Proof using Type pairs_WS pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
     unfold pairs', pairs'_exits, ann_pairs, GHC.Prim.rightSection.
     eapply RevStateInvariant_runState with (P := sublistOf exits).
     * rewrite hs_coq_map, forM_map. apply RevStateInvariant_forM.
@@ -1371,7 +1427,7 @@ Section in_exitifyRec.
     forall body,
     WellScoped body (extendVarSetList (isvs) fs) ->
     WellScoped (mkLets (exitifyRec (extendInScopeSetList in_scope fs) pairs) body) (isvs).
-  Proof using Type pairs_WS pairs_VJPP pairs_NoDup.
+  Proof using Type pairs_WS pairs_VJPP pairs_NoDup isvs_WF isvs_valid jps_WF jps_valid.
     intros body Hbody.
     cbv beta delta [exitifyRec].
     zeta_with go_exit. zeta_with recursive_calls. zeta_with go. zeta_with ann_pairs.
@@ -1391,7 +1447,7 @@ Section in_exitifyRec.
         intros [v rhs] H. exact (proj1 H).
       - exact pairs_NoDup.
       - rewrite Forall'_Forall. exact pairs'_WS.
-      - apply (weaken isvsp_to_isvsp'). exact Hbody.
+      - apply (exit_weaken isvsp_to_isvsp'); try solve [exit_inv]. exact Hbody.
     * exact all_exits_WellScoped.
   Qed.
 
@@ -1423,6 +1479,7 @@ Section in_exitifyRec.
   Qed.
 
   Lemma isJoinPointsValid_picked_aux : forall jps0 captured e vs,
+    WF jps0 ->
     isJoinPointsValid e 0 (updJPSs jps0 (captured ++ vs)) = true ->
     let abs_vars := snd (fold_right pick (delVarSetList (exprFreeVars e) vs,[]) captured) in
     forallb (fun x => negb (isJoinId x)) abs_vars = true ->
@@ -1430,7 +1487,7 @@ Section in_exitifyRec.
   Proof.
     clear pairs_WS pairs_VJPP pairs_NoDup jps_subset_isvs.
     intros jps0 captured e. induction captured using rev_ind;
-      intros vs Hvalid abs_vars Hnot.
+      intros vs W Hvalid abs_vars Hnot.
     * subst abs_vars. simpl. rewrite delVarSetList_nil. exact Hvalid.
     * subst abs_vars. rewrite fold_right_app in *. simpl in *.
       destruct_match; simpl.
@@ -1441,27 +1498,31 @@ Section in_exitifyRec.
         erewrite delVarSet_ae by (apply almostEqual_sym; apply zap_ae).
         erewrite isJoinId_ae in Hnotx by (apply almostEqual_sym; apply zap_ae).
         rewrite <- updJPS_not_joinId by exact Hnotx.
-        rewrite <- updJPSs_cons, <- delVarSetList_cons2.
-        rewrite <- delVarSetList_cons2 in Hnot.
-        apply IHcaptured.
+        rewrite <- updJPSs_cons.
+        assert (E : snd (fold_right pick (delVarSet (delVarSetList (exprFreeVars e) vs) x,[]) captured) =
+          snd (fold_right pick (delVarSetList (exprFreeVars e) (x :: vs),[]) captured)).
+        { apply snd_m. apply fold_right_m; try solve [solve_varset_inv].
+          split; [symmetry; apply delVarSetList_cons2; solve_varset_inv|reflexivity]. }
+        rewrite E in *. apply IHcaptured; [exact W| |].
         - rewrite <- app_assoc in Hvalid. exact Hvalid.
         - exact Hnot.
-      + apply IHcaptured.
-        - rewrite isJoinPointsValid_fresh_between in Hvalid; [exact Hvalid|].
-          apply disjointVarSet_mkVarSet. constructor; [assumption|constructor].
+      + apply IHcaptured; [exact W| |].
+        - rewrite isJoinPointsValid_fresh_between in Hvalid; try exact W; [exact Hvalid|].
+          apply disjointVarSet_mkVarSet; try solve [solve_varset_inv]. constructor; [assumption|constructor].
         - exact Hnot.
   Qed.
 
   Lemma isJoinPointsValid_picked : forall jps0 captured e,
+    WF jps0 ->
     isJoinPointsValid e 0 (updJPSs jps0 captured) = true ->
     let abs_vars := snd (fold_right pick (exprFreeVars e,[]) captured) in
     forallb (fun x => negb (isJoinId x)) abs_vars = true ->
     isJoinPointsValid e 0 (delVarSetList jps0 abs_vars) = true.
   Proof.
-    intros jps0 captured e Hvalid abs_vars Hnot.
+    intros jps0 captured e W Hvalid abs_vars Hnot.
     pose proof (isJoinPointsValid_picked_aux jps0 captured e []) as H.
     rewrite app_nil_r, delVarSetList_nil in H.
-    specialize (H Hvalid Hnot). rewrite updJPSs_nil in H. exact H.
+    specialize (H W Hvalid Hnot). rewrite updJPSs_nil in H. exact H.
   Qed.
 
   Lemma go_exit_all_ValidJoinPairs captured e :
@@ -1492,11 +1553,11 @@ Section in_exitifyRec.
     apply isJoinRHS_mkLams.
     * rewrite Forall_forall. rewrite forallb_forall in Hnot.
       intros v Hin. specialize (Hnot _ Hin). rewrite negb_true_iff in Hnot. exact Hnot.
-    * apply isJoinPointsValid_picked.
+    * apply isJoinPointsValid_picked; [exit_inv| |].
       - unfold jpsp in Hvalid. rewrite <- updJPSs_append in Hvalid.
-        erewrite <- isJoinPointsValid_fresh_updJPSs; only 1: exact Hvalid.
-        eapply disjointVarSet_subVarSet_l; only 1: exact Hdisjoint.
-        apply subVarSet_delVarSetList.
+        erewrite <- isJoinPointsValid_fresh_updJPSs; try solve [exit_inv]; only 1: exact Hvalid.
+        eapply disjointVarSet_subVarSet_l with (t := exprFreeVars e); try solve [exit_inv]; only 1: exact Hdisjoint.
+        apply subVarSet_delVarSetList; exit_inv.
       - exact Hnot.
   Qed.
 
@@ -1623,7 +1684,7 @@ Section in_exitifyRec.
 
   Lemma all_exits_ValidJoinPairs :
     forallb (fun '(v,rhs) => isValidJoinPointsPair v rhs jps) exits = true.
-  Proof using Type pairs_VJPP.
+  Proof using Type pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
     unfold exits, pairs'_exits, ann_pairs, GHC.Prim.rightSection.
     rewrite hs_coq_map, forM_map. eapply SP_snd_runState.
     * apply StateInvariant_forM. intros [v e] HIn.
@@ -1642,7 +1703,7 @@ Section in_exitifyRec.
   Qed.
 
   Lemma all_exits_isJoinId : forallb isJoinId (map fst exits) = true.
-  Proof using Type pairs_VJPP.
+  Proof using Type pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
     rewrite forallb_forall, <- Forall_forall, Forall_map, Forall_forall.
     intros [v rhs] Hin. pose proof all_exits_ValidJoinPairs as H.
     rewrite forallb_forall in H. specialize (H _ Hin).
@@ -1650,27 +1711,27 @@ Section in_exitifyRec.
   Qed.
 
   Lemma jps_to_jps' : StrongSubset jps jps'.
-  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs.
-    apply StrongSubset_updJPSs_fresh.
-    eapply disjointVarSet_subVarSet_l; [exact disjoint_isvs_exits|exact jps_subset_isvs].
+  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs isvs_WF isvs_valid jps_WF jps_valid.
+    apply StrongSubset_updJPSs_fresh; try solve [exit_inv].
+    eapply disjointVarSet_subVarSet_l with (t := isvs); try solve [exit_inv]; [exact disjoint_isvs_exits|exact jps_subset_isvs].
   Qed.
 
   Lemma jpsp_to_jpsp' : StrongSubset jpsp jpsp'.
-  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs.
-    apply StrongSubset_updJPSs. exact jps_to_jps'.
+  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs isvs_WF isvs_valid jps_WF jps_valid.
+    apply StrongSubset_updJPSs; try solve [exit_inv]. exact jps_to_jps'.
   Qed.
 
   Lemma jpsp_to_jpsp'_extended : forall vs,
     StrongSubset (updJPSs jpsp vs) (updJPSs jpsp' vs).
-  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs.
-    intros vs. apply StrongSubset_updJPSs. exact jpsp_to_jpsp'.
+  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs isvs_WF isvs_valid jps_WF jps_valid.
+    intros vs. apply StrongSubset_updJPSs; try solve [exit_inv]. exact jpsp_to_jpsp'.
   Qed.
 
   Lemma addExit_isJoinPointsValid : forall captured ja e,
     RevStateInvariant (sublistOf exits)
       (addExit (extendInScopeSetList in_scope2 captured) ja e)
       (fun v => isJoinPointsValid (Mk_Var v) ja (updJPSs jpsp' captured) = true).
-  Proof using Type pairs_VJPP.
+  Proof using Type pairs_VJPP isvs_WF isvs_valid jps_WF jps_valid.
     intros captured ja e.
     unfold addExit, mkExitJoinId, RevStateInvariant, State.runState.
     cbn -[asJoinId mkSysLocal uniqAway isJoinPointsValid].
@@ -1688,26 +1749,26 @@ Section in_exitifyRec.
       apply (proj2 (GoodLocalVar_asJoinId_mkSysLocal _ _ _ _ _
         isLocalUnique_initExitJoinUnique)).
     * unfold jpsp', jps'.
-      apply elemVarSet_updJPSs_l; only 1: apply elemVarSet_updJPSs_l.
+      apply elemVarSet_updJPSs_l; try solve [exit_inv]; only 1: (apply elemVarSet_updJPSs_l; try solve [exit_inv]).
       - rewrite updJPSs_joinId by exact all_exits_isJoinId.
-        apply elemVarSet_extendVarSetList_r.
+        apply elemVarSet_extendVarSetList_r; try solve [exit_inv].
         apply elemVarSet_mkVarset_iff_In. rewrite hs_coq_map. apply in_map. exact Hin.
-      - subst v. apply elemVarSet_uniqAway. unfold in_scope2.
+      - subst v. apply elemVarSet_uniqAway; try solve [exit_inv]. unfold in_scope2.
         rewrite getInScopeVars_extendInScopeSet, !getInScopeVars_extendInScopeSetList.
-        apply subVarSet_extendVarSet. apply subVarSet_extendVarSetList_l.
-        apply subVarSet_extendVarSetList_l. apply subVarSet_extendVarSetList_r.
-        apply subVarSet_refl.
-      - subst v. apply elemVarSet_uniqAway. unfold in_scope2.
+        apply subVarSet_extendVarSet; try solve [exit_inv]. apply subVarSet_extendVarSetList_l; try solve [exit_inv].
+        apply subVarSet_extendVarSetList_l; try solve [exit_inv]. apply subVarSet_extendVarSetList_r; try solve [exit_inv].
+        apply subVarSet_refl; exit_inv.
+      - subst v. apply elemVarSet_uniqAway; try solve [exit_inv]. unfold in_scope2.
         rewrite getInScopeVars_extendInScopeSet, !getInScopeVars_extendInScopeSetList.
-        apply subVarSet_extendVarSet. apply subVarSet_extendVarSetList_l.
-        apply subVarSet_extendVarSetList_r. apply subVarSet_refl.
+        apply subVarSet_extendVarSet; try solve [exit_inv]. apply subVarSet_extendVarSetList_l; try solve [exit_inv].
+        apply subVarSet_extendVarSetList_r; try solve [exit_inv]. apply subVarSet_refl; exit_inv.
   Qed.
 
   Lemma go_exit_res_isJoinPointsValid captured e :
     isJoinPointsValid e 0 (updJPSs jpsp captured) = true ->
     RevStateInvariant (sublistOf exits) (go_exit captured e (exprFreeVars e))
       (fun e' => isJoinPointsValid e' 0 (updJPSs jpsp' captured) = true).
-  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs.
+  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs isvs_WF isvs_valid jps_WF jps_valid.
     intros Hvalid.
     set (P := fun act => RevStateInvariant (sublistOf exits) act
       (fun e' => isJoinPointsValid e' 0 (updJPSs jpsp' captured) = true)).
@@ -1715,7 +1776,7 @@ Section in_exitifyRec.
     cbv beta delta [go_exit]. repeat float_let.
     assert (Hreturn : P (return_ e)).
     { apply RevStateInvariant_return.
-      apply (weakenb (jpsp_to_jpsp'_extended _)). exact Hvalid. }
+      apply (exit_weakenb (jpsp_to_jpsp'_extended _)); try solve [exit_inv]. exact Hvalid. }
     enough (Hnext : P j_16__).
     { clearbody j_16__; cleardefs. subst _go3.
       destruct (collectArgs _) as [rhs args]. destruct rhs; try exact Hnext.
@@ -1742,7 +1803,7 @@ Section in_exitifyRec.
     isJoinPointsValid (deAnnotate ann_e) 0 (updJPSs jpsp captured) = true ->
     RevStateInvariant (sublistOf exits) (go captured ann_e)
       (fun e' => isJoinPointsValid e' 0 (updJPSs jpsp' captured) = true).
-  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs.
+  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs isvs_WF isvs_valid jps_WF jps_valid.
     refine (go_ind_on (fun captured ann_e r =>
       isJoinPointsValid (deAnnotate ann_e) 0 (updJPSs jpsp captured) = true ->
       RevStateInvariant (sublistOf exits) r
@@ -1754,7 +1815,7 @@ Section in_exitifyRec.
     { apply go_exit_res_isJoinPointsValid. exact Hvalid. }
     destruct ann_e as [f a]. destruct a; simpl in *;
       try solve [apply RevStateInvariant_return;
-        apply (weakenb (jpsp_to_jpsp'_extended _)); exact Hvalid].
+        apply (exit_weakenb (jpsp_to_jpsp'_extended _)); try solve [exit_inv]; exact Hvalid].
     - simpl_bool. destruct Hvalid as [[Hnot Hscrut] Halts].
       inversion Hdom; subst.
       rewrite hs_coq_map, forallb_forall, <- Forall_forall, Forall_map,
@@ -1966,7 +2027,7 @@ Section in_exitifyRec.
 
   Lemma pairs'_JPV :
     Forall (fun '(v,rhs) => isValidJoinPointsPair v rhs jpsp' = true) pairs'.
-  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs.
+  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs isvs_WF isvs_valid jps_WF jps_valid.
     unfold pairs', pairs'_exits, ann_pairs, GHC.Prim.rightSection.
     eapply RevStateInvariant_runState with (P := sublistOf exits).
     * rewrite hs_coq_map, forM_map. apply RevStateInvariant_forM.
@@ -1997,6 +2058,7 @@ Section in_exitifyRec.
   Qed.
 
   Lemma mkLets_JPI : forall floats e jps0,
+    WF jps0 -> ValidVarSet jps0 ->
     disjointVarSet jps0 (mkVarSet (map fst floats)) = true ->
     isJoinPointsValid e 0 (updJPSs jps0 (map fst floats)) = true ->
     forallb (fun '(v,rhs) => isValidJoinPointsPair v rhs jps0) floats = true ->
@@ -2004,21 +2066,21 @@ Section in_exitifyRec.
   Proof.
     clear pairs_WS pairs_VJPP pairs_NoDup jps_subset_isvs.
     intros floats. induction floats as [|[v rhs] floats IH] using rev_ind;
-      intros e jps0 Hdisjoint Hbase Hpairs.
+      intros e jps0 W V Hdisjoint Hbase Hpairs.
     * simpl. unfold Base.id. exact Hbase.
     * rewrite forallb_app in Hpairs. simpl in Hpairs.
       rewrite andb_true_r, andb_true_iff in Hpairs. destruct Hpairs as [Hpairs Hpair].
       rewrite map_app in Hdisjoint.
       rewrite fold_is_true in Hdisjoint.
-      rewrite disjointVarSet_mkVarSet_append in Hdisjoint.
+      rewrite disjointVarSet_mkVarSet_append in Hdisjoint by assumption.
       unfold is_true in Hdisjoint.
       destruct Hdisjoint as [Hdisjoint _].
       rewrite map_app, mkLets_append. simpl.
-      rewrite mkLets_cons, mkLets_nil. apply IH.
+      rewrite mkLets_cons, mkLets_nil. apply IH; [exact W|exact V| | |].
       - exact Hdisjoint.
       - simpl. fold isJoinPointsValidPair. rewrite andb_true_iff. split.
         + apply isValidJoinPointsPair_isJoinPointsValidPair.
-          apply (weakenb (StrongSubset_updJPSs_fresh _ _ Hdisjoint)). exact Hpair.
+          apply (exit_weakenb (StrongSubset_updJPSs_fresh _ _ W V Hdisjoint)); try solve [exit_inv]. exact Hpair.
         + rewrite map_app in Hbase. simpl in Hbase.
           rewrite updJPSs_append, updJPSs_cons, updJPSs_nil in Hbase. exact Hbase.
       - exact Hpairs.
@@ -2030,7 +2092,7 @@ Section in_exitifyRec.
     let jps' := updJPSs jps fs in
     isJoinPointsValid body 0 jps' = true ->
     isJoinPointsValid (mkLets (exitifyRec (extendInScopeSetList in_scope fs) pairs) body) n jps = true.
-  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs.
+  Proof using Type pairs_WS pairs_VJPP jps_subset_isvs isvs_WF isvs_valid jps_WF jps_valid.
     intros body n Hne jps0 Hbody.
     cbv beta delta [exitifyRec].
     zeta_with go_exit. zeta_with recursive_calls. zeta_with go. zeta_with ann_pairs.
@@ -2040,8 +2102,8 @@ Section in_exitifyRec.
       (map (fun '(v,rhs) => NonRec v rhs) exits ++ [Rec pairs']) body) n jps = true).
     rewrite mkLets_append, mkLets_cons, mkLets_nil.
     apply isJoinPointsValid_more_args with (n := 0); only 1: lia.
-    apply mkLets_JPI.
-    * eapply disjointVarSet_subVarSet_l; [exact disjoint_isvs_exits|exact jps_subset_isvs].
+    apply mkLets_JPI; try solve [exit_inv].
+    * eapply disjointVarSet_subVarSet_l with (t := isvs); try solve [exit_inv]; [exact disjoint_isvs_exits|exact jps_subset_isvs].
     * rewrite isJoinPointsValid_MkLet_Rec.
       subst jps0. float_let. subst _go jps'0.
       pose proof map_fst_pairs' as Hfst.
@@ -2054,11 +2116,13 @@ Section in_exitifyRec.
       - rewrite forallb_forall. intros [v rhs] Hin.
         pose proof pairs'_JPV as HP. rewrite Forall_forall in HP.
         specialize (HP _ Hin). apply isValidJoinPointsPair_isJoinPointsValidPair. exact HP.
-      - apply (weakenb jpsp_to_jpsp'). exact Hbody.
+      - apply (exit_weakenb jpsp_to_jpsp'); try solve [exit_inv]. exact Hbody.
     * exact all_exits_ValidJoinPairs.
   Qed.
 
 End in_exitifyRec.
+
+Set Default Proof Using "Type".
 
 (** This concludes the proofs about [exitifyRec]. We can sum up all the above 
     in a single lemma.
@@ -2067,6 +2131,8 @@ End in_exitifyRec.
 *)
 Lemma exitifyRec_WellScoped_JPI:
   forall (in_scope : InScopeSet) (pairs : list (CoreBndr * CoreExpr)) fst_pairs n jps,
+  WF (isvs in_scope) -> ValidVarSet (isvs in_scope) ->
+  WF jps -> ValidVarSet jps ->
   fst_pairs = map fst pairs ->
   subVarSet jps (isvs in_scope) = true ->
   NoDup (map varUnique fst_pairs) ->
@@ -2085,7 +2151,7 @@ Lemma exitifyRec_WellScoped_JPI:
   isJoinPointsValid
     (mkLets (exitifyRec (extendInScopeSetList in_scope fst_pairs) pairs) body) n jps = true.
 Proof.
-  intros in_scope0 pairs0 fst_pairs0 n0 jps0 Hfst Hjps_sub Hnodup Hne Hpairs body Hbody_WS Hbody_JPI.
+  intros in_scope0 pairs0 fst_pairs0 n0 jps0 W V T U Hfst Hjps_sub Hnodup Hne Hpairs body Hbody_WS Hbody_JPI.
   subst fst_pairs0.
   split.
   - eapply (exitifyRec_WellScoped in_scope0 pairs0 jps0); auto.
@@ -2139,6 +2205,12 @@ Proof.
     apply IH.
 Qed.
 
+Ltac top_inv :=
+  unfold isvs in *;
+  rewrite ?getInScopeVars_extendInScopeSet, ?getInScopeVars_extendInScopeSetList;
+  repeat first [apply updJPSs_WF | apply updJPS_WF | apply updJPSs_valid | apply updJPS_valid];
+  solve_varset_inv.
+
 Ltac solve_subVarSet :=
   unfold isvs;
   rewrite ?getInScopeVars_extendInScopeSet;
@@ -2149,7 +2221,8 @@ Ltac solve_subVarSet :=
   rewrite ?updJPSs_append;
   rewrite ?updJPSs_cons;
   rewrite ?updJPSs_nil;
-  repeat first [ apply subVarSet_updJPSs_extendVarSetList
+  repeat first [ solve [top_inv]
+               | apply subVarSet_updJPSs_extendVarSetList
                | apply subVarSet_updJPS_extendVarSet
                | apply subVarSet_delVarSetList_extendVarSetList
                | apply subVarSet_delVarSet_extendVarSet
@@ -2170,24 +2243,33 @@ Program Fixpoint top_go_WellScoped_JPI
   WellScoped e (getInScopeVars in_scope)->
   isJoinPointsValid e n jps = true ->
   subVarSet jps (isvs in_scope) = true ->
+  WF (getInScopeVars in_scope) -> ValidVarSet (getInScopeVars in_scope) ->
+  WF jps -> ValidVarSet jps ->
   WellScoped (top_go in_scope e) (getInScopeVars in_scope) /\
   isJoinPointsValid (top_go in_scope e) n jps = true
   := _.
 Next Obligation.
   rename top_go_WellScoped_JPI into IH.
   rename H into HWS. rename H0 into HJPV. rename H1 into Hsubset.
+  rename H2 into Wscope. rename H3 into Vscope.
+  rename H4 into Wjps. rename H5 into Vjps.
+  Ltac step WS JP :=
+    lazymatch goal with IH : forall e', _ |- _ =>
+    refine (IH _ _ _ _ _ WS JP _ _ _ _ _);
+      [Core_termination || (unfold CoreLT; simpl; lia)
+      |solve_subVarSet|top_inv|top_inv|top_inv|top_inv] end.
   destruct e; simpl in HJPV; simpl_bool; simpl.
   * split; assumption.
   * split; trivial.
   * inversion HWS as [HWSe1 HWSe2].
     inversion HJPV as [HJPVe1 HJPVe2].
-    epose proof (IH _ _ _ _ _ HWSe1 HJPVe1 ltac:(solve_subVarSet)).
-    epose proof (IH _ _ _ _ _ HWSe2 HJPVe2 ltac:(solve_subVarSet)). intuition.
+    epose proof ltac:(step HWSe1 HJPVe1).
+    epose proof ltac:(step HWSe2 HJPVe2). intuition.
   * inversion HWS as [HGoodVar HWSe].
     simpl in HJPV. simpl_bool. destruct HJPV as [Hnot_join HJPVe].
     rewrite <- getInScopeVars_extendInScopeSet.
     rewrite <- getInScopeVars_extendInScopeSet in HWSe.
-    epose proof (IH _ _ _ _ _ HWSe HJPVe ltac:(solve_subVarSet)) as IHe.
+    epose proof ltac:(step HWSe HJPVe) as IHe.
     split; (split; [assumption|apply IHe]).
   * destruct HWS as [HBind HWSe].
     destruct b as [v rhs|pairs]; simpl in *.
@@ -2204,9 +2286,9 @@ Next Obligation.
          destruct Hrhs as [HGoodVars HWSbody].
          rewrite <- getInScopeVars_extendInScopeSetList.
          rewrite <- getInScopeVars_extendInScopeSetList in HWSbody.
-         epose proof (IH _ _ _ _ _ HWSbody HJPVbody ltac:(solve_subVarSet)) as IHbody.
+         epose proof ltac:(step HWSbody HJPVbody) as IHbody.
          rewrite <- getInScopeVars_extendInScopeSetList in HWSe.
-         epose proof (IH _ _ _ _ _ HWSe HJPVe ltac:(solve_subVarSet)) as IHe.
+         epose proof ltac:(step HWSe HJPVe) as IHe.
          rewrite top_go_mkLams. split.
          -- split; only 1: split.
             - assumption.
@@ -2225,12 +2307,12 @@ Next Obligation.
             - apply IHe.
       ** eapply isJoinPointsValidPair_isJoinPointsValid in HJPV_pair;
            only 2: apply HiJI.
-         epose proof (IH _ _ _ _ _ Hrhs HJPV_pair ltac:(solve_subVarSet)) as IHrhs.
+         epose proof ltac:(step Hrhs HJPV_pair) as IHrhs.
          rewrite <- getInScopeVars_extendInScopeSetList,
            extendInScopeSetList_cons, extendInScopeSetList_nil in HWSe.
          rewrite <- getInScopeVars_extendInScopeSetList,
            extendInScopeSetList_cons, extendInScopeSetList_nil.
-         epose proof (IH _ _ _ _ _ HWSe HJPVe ltac:(solve_subVarSet)) as IHe.
+         epose proof ltac:(step HWSe HJPVe) as IHe.
          split.
          -- split; only 1: split; [assumption|apply IHrhs|apply IHe].
          -- split; [rewrite isJoinPointsValidPair_isJoinPointsValid by assumption;
@@ -2245,7 +2327,7 @@ Next Obligation.
         destruct Hall_or_none as [Hnone|Hall].
         1: { exfalso. apply (eq_true_false_abs _ Hnone Heq). }
         rewrite bindersOf_Rec_cleanup in *.
-        eapply exitifyRec_WellScoped_JPI.
+        eapply exitifyRec_WellScoped_JPI; try solve [top_inv].
         ** rewrite mapSnd_map, map_map. apply map_ext. intros. reflexivity.
         ** assumption.
         ** assumption.
@@ -2268,7 +2350,7 @@ Next Obligation.
            clear HGoodVars. destruct Hpairs as [HGoodVars HWSbody].
            rewrite <- !getInScopeVars_extendInScopeSetList in HWSbody.
            rewrite <- !getInScopeVars_extendInScopeSetList.
-           epose proof (IH _ _ _ _ _ HWSbody HJPVbody ltac:(solve_subVarSet)).
+           epose proof ltac:(step HWSbody HJPVbody).
            rewrite top_go_mkLams. split.
            -- rewrite WellScoped_mkLams. split; [assumption|].
               rewrite <- getInScopeVars_extendInScopeSetList. apply H.
@@ -2279,9 +2361,9 @@ Next Obligation.
               apply H.
         ** rewrite <- getInScopeVars_extendInScopeSetList in HWSe.
            rewrite <- getInScopeVars_extendInScopeSetList.
-           epose proof (IH _ _ _ _ _ HWSe HJPVe ltac:(solve_subVarSet)). apply H.
+           epose proof ltac:(step HWSe HJPVe). apply H.
         ** rewrite <- getInScopeVars_extendInScopeSetList in HWSe.
-           epose proof (IH _ _ _ _ _ HWSe HJPVe ltac:(solve_subVarSet)). apply H.
+           epose proof ltac:(step HWSe HJPVe). apply H.
       - rewrite HSUtil.Foldable_any_existsb in Heq.
         rewrite existsb_morgan in Heq. rewrite negb_false_iff in Heq.
         simpl. simpl_bool.
@@ -2297,7 +2379,7 @@ Next Obligation.
            rewrite mapSnd_map, map_map. simpl.
            rewrite <- getInScopeVars_extendInScopeSetList.
            rewrite <- getInScopeVars_extendInScopeSetList in *.
-           epose proof (IH _ _ _ _ _ HWSe HJPVe ltac:(solve_subVarSet)). apply H.
+           epose proof ltac:(step HWSe HJPVe). apply H.
         ** destruct pairs; simpl in *; congruence.
         ** simpl_bool. left. rewrite bindersOf_Rec_cleanup in *.
            rewrite mapSnd_map.
@@ -2308,7 +2390,7 @@ Next Obligation.
         ** rewrite !bindersOf_Rec_cleanup in *.
            rewrite mapSnd_map, map_map. simpl.
            rewrite <- getInScopeVars_extendInScopeSetList in *.
-           epose proof (IH _ _ _ _ _ HWSe HJPVe ltac:(solve_subVarSet)). apply H.
+           epose proof ltac:(step HWSe HJPVe). apply H.
         ** rewrite Forall'_Forall, forallb_forall, <- Forall_forall, Forall_and.
            clear HWSe HJPVe. rewrite ?bindersOf_Rec_cleanup in *.
            rewrite mapSnd_map, !Forall_map, Forall_forall.
@@ -2322,11 +2404,11 @@ Next Obligation.
            1: { exfalso. rewrite forallb_forall in Heq. specialize (Heq _ HIn).
                 simpl in Heq. rewrite isJoinId_eq, HiJI in Heq. simpl in Heq. congruence. }
            rewrite isJoinPointsValidPair_isJoinPointsValid in * by apply HiJI.
-           epose proof (IH _ _ _ _ _ Hpairs HJPVpairs ltac:(solve_subVarSet)). apply H.
+           epose proof ltac:(step Hpairs HJPVpairs). apply H.
   * destruct HWS as [HWSscrut [HGoodVar HWSalts]].
     rewrite Forall'_Forall in *.
     destruct HJPV as [[Hnot_join HJPVscrut] HJPValts].
-    epose proof (IH _ _ _ _ _ HWSscrut HJPVscrut ltac:(solve_subVarSet)) as IHe.
+    epose proof ltac:(step HWSscrut HJPVscrut) as IHe.
     eassert (_ /\ _) as HWS_JPI; swap 1 2.
     simpl_bool.
     split; [split; only 2: split|split; only 1: split].
@@ -2348,14 +2430,14 @@ Next Obligation.
       rewrite <- getInScopeVars_extendInScopeSet, <- getInScopeVars_extendInScopeSetList.
       rewrite <- !extendInScopeSetList_cons.
       rewrite <- getInScopeVars_extendInScopeSetList in HWSrhs.
-      epose proof (IH _ _ _ _ _ HWSrhs HJPVrhs ltac:(solve_subVarSet)) as IHrhs.
+      epose proof ltac:(step HWSrhs HJPVrhs) as IHrhs.
       split; split; [apply HGoodVars|apply IHrhs|apply Hnot_joins|apply IHrhs].
   * simpl in *.
-    epose proof (IH _ _ _ _ _ HWS HJPV ltac:(solve_subVarSet)). assumption.
+    epose proof ltac:(step HWS HJPV). assumption.
   * intuition.
   * intuition.
 Unshelve.
-  all: Core_termination || (unfold CoreLT; simpl; lia).
+  all: top_inv || Core_termination || (unfold CoreLT; simpl; lia).
 Qed.
 
 Lemma Forall_flattenBinds:
@@ -2481,6 +2563,12 @@ Proof.
   reflexivity.
 Qed.
 
+  Lemma ep_in_scope_WF pgm : WF (getInScopeVars (ep_in_scope pgm)).
+Proof. rewrite getInScopeVars_ep_in_scope. apply mkVarSet_WF. Qed.
+
+Lemma ep_in_scope_valid pgm : ValidVarSet (getInScopeVars (ep_in_scope pgm)).
+Proof. rewrite getInScopeVars_ep_in_scope. apply mkVarSet_valid. Qed.
+
 (** At last, the final result. *)
 
 Theorem exitifyProgram_WellScoped_JPV:
@@ -2518,7 +2606,11 @@ Proof.
       pose proof (top_go_WellScoped_JPI rhs (ep_in_scope pgm) 0 emptyVarSet) as [HtgWS HtgJPV].
       { rewrite getInScopeVars_ep_in_scope. exact Hws. }
       { exact Hjpv_rhs. }
-      { apply subVarSet_emptyVarSet. }
+      { apply subVarSet_emptyVarSet. apply ep_in_scope_WF. }
+      { apply ep_in_scope_WF. }
+      { apply ep_in_scope_valid. }
+      { apply emptyVarSet_WF. }
+      { apply emptyVarSet_valid. }
       split; (constructor; [|constructor]).
       + simpl. rewrite <- getInScopeVars_ep_in_scope. exact HtgWS.
       + simpl. exact (conj HisJoinId HtgJPV).
@@ -2534,7 +2626,11 @@ Proof.
         pose proof (top_go_WellScoped_JPI e' (ep_in_scope pgm) 0 emptyVarSet) as [HtgWS HtgJPV].
         { rewrite getInScopeVars_ep_in_scope. exact HbWS. }
         { exact H0. }
-        { apply subVarSet_emptyVarSet. }
+        { apply subVarSet_emptyVarSet. apply ep_in_scope_WF. }
+        { apply ep_in_scope_WF. }
+        { apply ep_in_scope_valid. }
+        { apply emptyVarSet_WF. }
+        { apply emptyVarSet_valid. }
         simpl. rewrite <- getInScopeVars_ep_in_scope. exact HtgWS.
       + rewrite hs_coq_map. rewrite Forall_map.
         rewrite Forall_forall. intros [v' e'] HIn'.
@@ -2544,7 +2640,11 @@ Proof.
         pose proof (top_go_WellScoped_JPI e' (ep_in_scope pgm) 0 emptyVarSet) as [_ HtgJPV].
         { rewrite getInScopeVars_ep_in_scope. exact HbWS. }
         { exact H0. }
-        { apply subVarSet_emptyVarSet. }
+        { apply subVarSet_emptyVarSet. apply ep_in_scope_WF. }
+        { apply ep_in_scope_WF. }
+        { apply ep_in_scope_valid. }
+        { apply emptyVarSet_WF. }
+        { apply emptyVarSet_valid. }
         split; [exact H | exact HtgJPV].
   }
 
