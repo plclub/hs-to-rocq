@@ -1,6 +1,50 @@
-# GHC 9.10: axiomatize entire module — too many dependencies on missing types
-# (Outputable.JoinPointHood, BasicTypes.activateAfterInitial, etc.)
-axiomatize module CSE
+inline mutual CSE.cse_bind
+inline mutual CSE.tryForCSE
+inline mutual CSE.try_for_cse
+inline mutual CSE.cseCase
+
+# GHC derives Traversable Identity, but the shared base translation omits it.
+# Keep its dictionary local and pass it explicitly at the singleton Rec call.
+add CSE Local Definition CSE.cse_identity_traverse
+  {f} `{GHC.Base.Applicative f} {a b}
+  (g : a -> f b) (x : Data.Functor.Identity.Identity a)
+  : f (Data.Functor.Identity.Identity b) :=
+  GHC.Base.fmap Data.Functor.Identity.Mk_Identity
+    (g (Data.Functor.Identity.runIdentity x)).
+
+add CSE Local Definition CSE.cse_identity_traversable
+  : Data.Traversable.Traversable Data.Functor.Identity.Identity :=
+  fun _ k => k
+    (Data.Traversable.Traversable__Dict_Build Data.Functor.Identity.Identity
+      (fun m a b HF HA HM => @CSE.cse_identity_traverse m HF HA a b)
+      (fun m a HF HA HM => @CSE.cse_identity_traverse m HF HA (m a) a (fun x => x))
+      (fun f a HF HA => @CSE.cse_identity_traverse f HF HA (f a) a (fun x => x))
+      (fun f a b HF HA => @CSE.cse_identity_traverse f HF HA a b)).
+
+in CSE.cseBind rewrite forall env b, CSE.addRecBinders env (Data.Functor.Identity.Mk_Identity b) = @CSE.addRecBinders Data.Functor.Identity.Identity Data.Functor.Identity.Functor__Identity Data.Functor.Identity.Foldable__Identity CSE.cse_identity_traversable env (Data.Functor.Identity.Mk_Identity b)
+
+add CSE Lemma CSE.cse_identity_mapAccumL {s a b}
+  (step : s -> a -> prod s b) st x :
+  @Data.Traversable.mapAccumL Data.Functor.Identity.Identity s a b
+    Data.Functor.Identity.Functor__Identity
+    Data.Functor.Identity.Foldable__Identity CSE.cse_identity_traversable
+    step st (Data.Functor.Identity.Mk_Identity x) =
+  match step st x with
+  | pair st' y => pair st' (Data.Functor.Identity.Mk_Identity y)
+  end.
+Proof.
+  cbv. destruct (step st x). reflexivity.
+Qed.
+
+# These local ticks bindings are stripTicksT results, hence nil in this model.
+in CSE.cseBind rewrite forall e, CoreUtils.mkTicks ticks e = e
+in CSE.try_for_cse rewrite forall e, CoreUtils.mkTicks ticks e = e
+in CSE.cseCase rename value GHC.Core.TyCo.Subst.substTyUnchecked = CoreSubst.substTyUnchecked
+
+# Justified by NestedRecursionHelpers.zipMapAccumL_is_mapAccumL_zip.
+in CSE.cseBind rewrite forall f s xs1 xs2, Data.Traversable.mapAccumL f s (GHC.List.zip xs1 xs2) = NestedRecursionHelpers.zipMapAccumL f s xs1 xs2
+
+# Preserve the helper's equality-or-both-panic contract.
+in CSE.cse_bind rewrite forall arity in_rhs params in_body k, match Core.collectNBinders arity in_rhs with | pair params in_body => k end = NestedRecursionHelpers.collectNBinders_k arity in_rhs (fun params in_body => k)
 
 skip CSE.Default__CSEnv
-

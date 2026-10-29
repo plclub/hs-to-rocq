@@ -30,7 +30,7 @@ What's here
  * `ghc`: A pristine check-out of GHC (submodule, currently at 9.10.3)
  * `lib`: Generated Coq output — symlinks to `manual/` for hand-written
    modules, generated `.v` files for translated modules
- * `theories`: Hand-written proofs about the generated code (29 files)
+ * `theories`: Hand-written proofs about the generated code
  * `Makefile`: Lists the modules to translate and their GHC 9.10 source paths
  * `edits`: Top level edit file (includes `rename module` directives)
  * `axiomatize-types.edits`: Axiomatization of mutual type ball
@@ -75,8 +75,9 @@ The translation has several levels of faithfulness to GHC 9.10 source:
 |----------|-------------|
 | Faithful auto-translated | Core AST (Var, Expr, Alt, Bind), utilities (Unique, VarSet, VarEnv, UniqFM, UniqSet), substitution (CoreSubst), exitification (Exitify), containers (IntMap, Map) |
 | Faithful manual | Subst type (matches GHC structure), State monad (bare function type matching GHC 9.10), JoinPointHood, idJoinPointHood, ConLike |
+| Concrete with model abstractions | CSE traversal; Core-map operations remain opaque, and the existing type/coercion and Tick abstractions still apply |
 | Soundly abstracted | Type/Coercion substitution (identity — types don't change structurally), TvSubstEnv/CvSubstEnv := unit |
-| Axiomatized (no GHC source) | Type system (Type_, Coercion, TyCon, DataCon), I/O (CoreMonad, DynFlags, Panic), optimizations (OccurAnal, CSE, FloatIn, FloatOut, CallArity, CoreArity, SetLevels) |
+| Axiomatized (no GHC source) | Type system (Type_, Coercion, TyCon, DataCon), I/O (CoreMonad, DynFlags, Panic), optimizations (OccurAnal, FloatIn, FloatOut, CallArity, CoreArity, SetLevels) |
 
 ### Concrete (un-axiomatized) definitions
 
@@ -86,8 +87,12 @@ These functions were previously axiomatized but are now concrete Coq definitions
    in midamble. Capture-avoiding substitution for Id variables; type/coercion
    substitution is identity (soundly abstracted since Type_ is abstract).
  * **`exitifyRec`** (Exitify): Concrete with `deferredFix2` for general
-   recursion. The exit-join-id creation (`mkExitJoinId`) remains axiomatized
-   (requires `Mult` type).
+   recursion. `mkExitJoinId` is now translated from source with the `ManyTy`
+   builder recovered through edits.
+ * **CSE traversal**: `cseExpr`, `cseBind`, `cse_bind`, `tryForCSE`,
+   `try_for_cse`, and `cseCase` are generated definitions rather than axioms.
+   See [Exitify and CSE proof recovery](#exitify-and-cse-proof-recovery) for
+   the supporting edits and remaining assumptions.
  * **`Subst` type** (Core.v): Concrete inductive `Mk_Subst InScopeSet
    IdSubstEnv TvSubstEnv CvSubstEnv`, merged into Core.v via the CORESYN
    group. Matches GHC's `GHC.Core.TyCo.Subst.Subst` exactly.
@@ -98,11 +103,9 @@ These functions were previously axiomatized but are now concrete Coq definitions
 
 These functions remain `Axiom` in lib/ and cannot be unfolded in proofs:
 
- * **CSE**: `cseExpr`, `cseBind`, `try_for_cse`, `cse_bind` (axiomatized module)
  * **FloatOut**: `floatExpr`, `floatBind`, `floatRhs` (axiomatized module)
  * **FloatIn**: `fiExpr`, `fiBinds`, `fiRhs`, `floatIsCase` (axiomatized module)
  * **OccurAnal**: Entire module axiomatized (view patterns + mutual recursion)
- * **Exitify**: `mkExitJoinId` (requires `Mult`/`ManyTy`)
 
 ### Edit-induced semantic changes
 
@@ -135,11 +138,106 @@ Proved theorems
 ### Main results (from Spector-Zabusky et al., arxiv 1910.11724)
 
  * **`exitifyProgram_WellScoped_JPV`** (Exitify.v, Qed): Exitification
-   preserves well-scopedness and join point validity
+   preserves well-scopedness and join point validity under the model
+   assumptions described below
  * **`WellScoped_substExpr`** (CoreSubst.v, Qed): Substitution preserves
    well-scopedness
 
-### Additional mechanized results
+### Exitify and CSE proof recovery
+
+The recovery checked on **2026-10-28**, relative to `1e4483ca` on
+`proof-recovery`, closes the three Exitify admissions and four CSE equations.
+It does not remove the development's remaining model assumptions.
+
+#### Exitify
+
+`exitifyRec_WellScoped`, `exitifyRec_JPI`, and `top_go_WellScoped_JPI` now end
+in `Qed`. The final `exitifyProgram_WellScoped_JPV` keeps its statement and
+has no remaining admitted dependency from these three targets. At the starting
+commit it was already `Qed`, but directly called the admitted
+`top_go_WellScoped_JPI`; the earlier paper audit's independence claim was false.
+
+The proof extracts the local functions from the generated `exitifyRec` and
+unfolds its deferred recursion with `DeferredFix.deferredFix_eq_on`.
+`GoDom (deAnnotate ann_e)` restricts the equation to its valid domain, and
+`CoreLT` supplies the well-founded relation. Exitify's unfolding does not use
+an unconditional fixpoint equation.
+
+`mkExitJoinId` now follows the GHC source. Its module edits map `ManyTy` to
+`TysWiredIn.manyDataConTy`; `manyDataConTy` and `manyDataConTyCon` are generated
+from `mkTyConTy` and `promoteDataCon`, whose type APIs remain opaque.
+`manual/GHC/Builtin/Uniques.v` defines `initExitJoinUnique` as `mkUnique 's' 0`,
+matching GHC rather than assuming the unique itself.
+
+#### CSE
+
+`cseExpr_App`, `cseExpr_Let`, `cseBind_NonRec`, and `tryForCSE_simpl` now end
+in `Qed` against the native recursive translation. The five-argument
+`cse_bind` retains distinct RHS and body environments. `WS_cseExpr` remains
+admitted; that well-scopedness gap predates PR209 and is not one of the four
+recovered control-flow equations.
+
+The translation uses mutual inlining and the existing `zipMapAccumL` and
+`collectNBinders_k` helper contracts. Scoped edits retain the established
+type/coercion substitutions and remove only known-empty tick lists in the
+Tick-free model. `BasicTypes.activateAfterInitial` is generated from source
+with the exact scoped rewrite `nextPhase InitialPhase = Phase 2`; `nextPhase`
+itself remains skipped.
+
+All CSE-specific Identity support lives in `module-edits/CSE/edits`:
+
+* `add CSE Local Definition` supplies `cse_identity_traverse` and the
+  `cse_identity_traversable` dictionary.
+* A scoped rewrite passes that dictionary explicitly to `addRecBinders` at
+  singleton `Rec` calls, including their inlined copies.
+* `add CSE Lemma` supplies `cse_identity_mapAccumL`, which proves the singleton
+  traversal equation with the same explicit dictionary.
+
+All three support declarations are closed under the global context.
+The dictionary is a local definition, not a registered Identity instance.
+`module-edits/CSE/preamble.v` retains only its original two String import
+lines. Fixing the shared standalone-deriving pipeline is outside this recovery.
+
+The translator's `guardTerm` now uses the existing refutability analysis to
+omit redundant wildcard branches for irrefutable patterns. The shared
+`SoleCtorGuard` PASS fixture covers sole and nested constructors, refutable
+constructors, guarded case arms, and empty-list guards.
+
+#### Remaining assumptions and validation
+
+`Axioms.isLocalUnique_initExitJoinUnique` restores the pre-PR209 locality axiom
+from `5aa659c0` at the new `GHC.Builtin.Uniques.initExitJoinUnique` path.
+It is a **new axiom declaration relative to `1e4483ca`**, not a proved fact:
+`Unique.isLocalUnique` remains abstract.
+
+`Print Assumptions exitifyProgram_WellScoped_JPV` still includes
+`All_IntMaps_WF`, `ValidVarSet_Axiom`, the existing `uniqAway` and FV/type
+abstractions, and the inherited IntMap `deferredFix2_eq` axiom. The guarded
+Exitify equation does not remove those imported assumptions. The four CSE
+equations likewise retain existing opaque model APIs, including Core-map
+operations. Keep the explicit premises documented in
+[WF contract recovery](#wf-contract-recovery).
+
+Validation for this recovery:
+
+* Production `make vfiles` regenerated the library. The complete GHC library
+  and theory builds passed with Coq 8.20.1 after the final edits and proof
+  refactoring.
+* Both shared unit suites passed: 53 PASS cases and 3 expected compiler
+  failures each, with Coq 8.20.1 and Rocq 9.0.1. These are unit-suite results,
+  not a Rocq port of the GHC theories.
+* After the final change from preamble support to edits, CSE was freshly
+  generated and its library and theory compiled with Coq 8.20.1.
+  `coqchk -silent` passed for `Proofs.CSE` and `Proofs.Exitify`. Assumption
+  checks confirmed the three closed Identity declarations and the remaining
+  model dependencies. Both shared suites preceded this last edit-only
+  reshaping; the full GHC builds followed it.
+
+### Earlier mechanized results inventory
+
+The counts in this inventory predate the recovery above and have not been
+recounted. For current IntMap and VarSet premises, see
+[WF contract recovery](#wf-contract-recovery).
 
  * **CoreFVs.v** (0 Admitted, 42 Qed): `freeVarsOf_freeVars_revised`,
    `elemVarSet_exprFreeVars_Var_false`, all exprFreeVars lemmas
@@ -157,15 +255,17 @@ Proved theorems
  * **VarSetFSet.v** (31 Qed): FSet interface for VarSets including
    `equal_2`, `filter_1`/`filter_2`/`filter_3`
 
-Theory proofs (29 files)
-------------------------
+Theory proof inventory
+----------------------
 
-All 29 theory files compile. Files with zero Admitted are marked with a
-check mark.
+The Axioms, CSE, and Exitify rows were checked on 2026-10-28. Other rows retain
+earlier counts, including counts from before the WF contract recovery; this
+table is not a current census. `Qed` counts are source markers, not evidence
+that the results are independent of admitted lemmas or axioms.
 
 | File | Qed | Admitted | Notes |
 |------|-----|----------|-------|
-| Axioms.v | 7 | 0 | Behavioral axioms for `uniqAway`, `ValidVarSet` |
+| Axioms.v | 11 | 0 | Includes the restored unique-locality axiom; see recovery assumptions above |
 | Base.v | 4 | 0 | |
 | ContainerProofs.v | 94 | 0 | 0 Local Axioms; imports deferredFix2_eq + All_IntMaps_WF from IntMapProofs |
 | Core.v | 11 | 0 | `deAnnotate` lemmas |
@@ -174,8 +274,8 @@ check mark.
 | CoreSemantics.v | 2 | 0 | |
 | CoreStats.v | 1 | 0 | |
 | CoreSubst.v | 34 | 0 | Full substitution theory |
-| CSE.v | 3 | 5 | Blocked: cseExpr/cseBind axiomatized |
-| Exitify.v | 15 | 3 | Main theorem Qed; 3 deep inductive helpers Admitted |
+| CSE.v | 7 | 1 | Four equations recovered; inherited `WS_cseExpr` admission remains |
+| Exitify.v | 70 | 0 | Three target proofs recovered; final theorem statement unchanged; model assumptions remain |
 | Forall.v | 4 | 0 | |
 | FV.v | 25 | 0 | |
 | GhcTactics.v | 0 | 0 | Tactic library |
@@ -195,18 +295,22 @@ check mark.
 | VarSetFSet.v | 31 | 14 | equal_2, filter_1/2/3 proved; rest blocked by `elements`/`choose`/`partition` = default |
 | VarSetStrong.v | 30 | 0 | |
 
-**Totals**: 537 Qed, 26 Admitted (across 5 files)
-
 ### Remaining Admitted breakdown
+
+Only the CSE entry was refreshed for this recovery. Exitify no longer has
+admissions; the other entries below retain the earlier inventory.
 
 | File | Admitted | Reason |
 |------|----------|--------|
-| CSE.v | 5 | `cseExpr`/`cseBind` axiomatized — cannot unfold |
-| Exitify.v | 3 | Deep inductive proofs (`exitifyRec_WellScoped`, `exitifyRec_JPI`, `top_go_WellScoped_JPI`); theoretically provable since `exitifyRec` is concrete |
+| CSE.v | 1 | Inherited `WS_cseExpr` well-scopedness admission, outside the four recovered equations |
 | TrieMap.v | 4 | `TrieMapLaws__IntMap` and `TrieMapLaws__Map` need alter/fold specs; `TrieMapLaws__ListMap` and `TrieMapLaws__GenMap` blocked by axiomatized types |
 | VarSetFSet.v | 14 | `elements`/`choose`/`partition` defined as `HsToRocq.Err.default`; `for_all`/`exists_` need IntMap `foldr` spec; `equal_1`/`is_empty_1`/`subset_1` need key-surjectivity |
 
 ### ContainerProofs Axioms (0 Local Axioms)
+
+This earlier account predates the WF contract recovery below. It records the
+initial removal of local operation axioms, not the current contracts or a
+fresh count.
 
 All Local Axioms have been eliminated from `ContainerProofs.v`. The two
 foundational axioms are now imported from `IntMapProofs`:

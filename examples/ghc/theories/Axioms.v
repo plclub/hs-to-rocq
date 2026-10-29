@@ -19,6 +19,7 @@ Require Import PrelNames.
 Require Import Id.
 Require Import Core.
 Require Import Unique.
+Require GHC.Builtin.Uniques.
 Require Import CoreFVs.
 Require Proofs.ContainerProofs.
 
@@ -84,9 +85,10 @@ Definition isLocalUnique  (u : Unique.Unique) : bool :=
      negb (List.elem c &"B0123456789:kmnrz").
 *)
 
-(* GHC 9.10: initExitJoinUnique moved to GHC.Builtin.Uniques (not translated) *)
-(* Axiom isLocalUnique_initExitJoinUnique:
-  Unique.isLocalUnique Unique.initExitJoinUnique = true. *)
+(* The baseline locality assumption, at its GHC 9.10 module path.
+   initExitJoinUnique is concrete; isLocalUnique remains abstract. *)
+Axiom isLocalUnique_initExitJoinUnique:
+  Unique.isLocalUnique GHC.Builtin.Uniques.initExitJoinUnique = true.
 
 
 

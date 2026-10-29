@@ -112,7 +112,7 @@ Key lemmas: `bin_Desc0` (combine Desc0), `Desc_outside` (f=None outside range), 
 
 ## Test Structure
 
-- `examples/tests/` and `examples/rocq9.0/tests/` share `examples/tests/test-rules.mk` and the same fixtures, compiled with `coqc` and `rocq c -w +deprecated-dirpath-Coq` respectively. Each suite has 52 `PASS` cases and 3 expected compiler failures (`TODO_PASS`). The Rocq warning flag rejects unrewritten root `Coq.*` paths while permitting user-qualified and relative `Coq` components.
+- `examples/tests/` and `examples/rocq9.0/tests/` share `examples/tests/test-rules.mk` and the same fixtures, compiled with `coqc` and `rocq c -w +deprecated-dirpath-Coq` respectively. Each suite has 53 `PASS` cases and 3 expected compiler failures (`TODO_PASS`). The Rocq warning flag rejects unrewritten root `Coq.*` paths while permitting user-qualified and relative `Coq` components.
 - `examples/base-tests/` requires the `base/` Coq library to be built first; it has 18 `PASS` cases and 3 expected compiler failures.
 - Test-specific files go in `examples/tests/<TestName>/`: `edits`, `preamble.v`, and `midamble.v`.
 - `examples/tests/checks/` contains 805 direct Haskell assertions for CLI version parsing and rewrite definitions and 187 harness checks with fake tools. The harness invokes both production test wrappers, including nested helper dependency/compilation rules and clean rebuilds. It checks concurrent tool logging, dependency-directory creation, manual-file copying, fresh Coq builds with manual modules, and serial and parallel base-generation retries through the `base` and direct/top-level `vfiles` entry points. Forced and outdated regeneration must reject stale output, discard failed output even with unchanged timestamps, and preserve successful sources during retries. It supports macOS Bash 3.2 and Bash 5. See the README test commands. These fast checks do not replace compiler tests.
@@ -128,6 +128,7 @@ Both the shared rules and base-tests discard partial `.v` output when the transl
 
 The shared compiler fixtures cover:
 
+- `SoleCtorGuard`: pattern guards over sole and nested constructors, refutable constructors, guarded case arms, and empty lists.
 - `RocqNestedCorelib`: nested shim references in the AST.
 - `RocqMovedAst`: the moved theorem in a generated `Definition`, raw `Qed`/`Defined` proofs with whitespace/comment-separated path components, and an edits-supplied `Program` obligation tactic. The `Defined` proof also checks string-literal preservation. A local `Obligation Tactic := idtac` keeps the obligation pending, while `set type` makes `fixEqWitness` a dependent pair requiring `fixEqType`. The tactic supplies the moved theorem, and `Check (proj2_sig fixEqWitness) : fixEqType.` makes an incomplete obligation fail compilation.
 - `RocqMovedText`: preamble/midamble text with `From` syntax and extra whitespace, root `Coq.*` references (including after superscript/subscript notation, punctuation ending in dots, pattern apostrophes, and adjacent numerals), and user names that must remain unchanged: identifiers containing combining U+1DC0, non-breaking U+00A0, subscripts, apostrophes, or digits, `MyCoq.add`, and paths under `UserCoq` and `Other.Coq` that resemble shim or moved-module paths.
@@ -215,7 +216,7 @@ GHC's `load LoadAllTargets` processes standalone `deriving instance` declaration
 - **Adding Gallina AST constructors**: New `Sentence` variants need cases in `Pretty.hs`, `FreeVars.hs`, `Subst.hs`. Export `(..)` for record types used across modules.
 
 ### GHC example (examples/ghc/)
-Translated from GHC 9.10.3. All lib/*.v and 29 theories/*.v compile. `make clean && make` regenerates lib/ (removes dir, rebuilds via hs-to-rocq + lndir for ~48 manual files). Edit `manual/*.v` directly (not `lib/*.v` symlinks).
+Translated from GHC 9.10.3. The library and full theory build pass on Coq 8.20.1. `make clean && make` regenerates lib/ (removes dir, rebuilds via hs-to-rocq + lndir for ~48 manual files). Edit `manual/*.v` directly (not `lib/*.v` symlinks).
 
 Key GHC 9.10 type changes: `Alt` uses `Mk_Alt` constructor (not tuple); `Mk_Id` has 7 fields (`varMult : Mult` added 4th); `realUnique` is `Unique` not `N`; `Var` has single constructor `Mk_Id` (no `TyVar`); `cse_bind` has 5 args; `lookupIdSubst` dropped `String` doc param; State monad is bare function type; `mkVarApps` uses `foldl'`. GoDom: use `alt_rhs` projection (strict positivity).
 
@@ -223,14 +224,16 @@ Proof bridge lemmas: `GHC.Base.foldl'` is CPS-via-`fold_right` (not `fold_left`)
 
 **WF contract recovery**: When changing IntMap/VarSet proofs or their callers, follow the "WF contract recovery" section in `examples/ghc/README.md`. Keep WF and validity premises explicit and use operation-preservation proofs to discharge them. Remaining raw-interface uses of `All_IntMaps_WF` are migration debt.
 
+**Exitify/CSE recovery**: When changing their translation, proofs, or assumptions, read [Exitify and CSE proof recovery](examples/ghc/README.md#exitify-and-cse-proof-recovery). It covers guarded unfolding, edit-only Identity support, the restored locality axiom, remaining theorem assumptions, and validation scope.
+
 Un-axiomatized: `Subst` (concrete inductive in Core.v), `substExpr`/`substBind` (mutual Fixpoint in CoreSubst midamble), `exitifyRec` (concrete with `deferredFix2`), `Id.idJoinPointHood`. CoreSubst hybrid auto-generation: 4 auto-generated, 9 redefined (simplified for `TvSubstEnv=CvSubstEnv=unit`), core subst in midamble (ordering: midamble before generated code).
-Key axioms: `tyCoFVsOfType_is_emptyFV`/`tyCoFVsOfCo_is_emptyFV` (types axiomatized), `tyCoVarsOfTypeDSet_empty`. Still axiomatized: `cseExpr`/`cseBind`/`try_for_cse`, `floatExpr`/`floatBind`/`floatRhs`, `fiExpr`/`fiBinds`/`fiRhs`, `mkExitJoinId`. Check current state: `grep -c Admitted examples/ghc/theories/*.v`.
+Key axioms: `tyCoFVsOfType_is_emptyFV`/`tyCoFVsOfCo_is_emptyFV` (types axiomatized), `tyCoVarsOfTypeDSet_empty`. Still axiomatized: `floatExpr`/`floatBind`/`floatRhs`, `fiExpr`/`fiBinds`/`fiRhs`. Locate admission markers with `rg -n Admitted examples/ghc/theories/*.v` (comments can match); use `Print Assumptions` to check a theorem's dependencies.
 
 Build details: `manual/AxiomatizedTypes.v` instances must be `#[global]`. `axiomatize module OccurAnal` needs preamble.v + midamble.v. Midamble placed AFTER types+auto-Defaults, BEFORE values — use `skip` + midamble for custom Defaults. Makefile sed post-processing: BasicTypes/Literal (`#[global]`), UniqFM (phantom kinds), Core.v (mutual type fixes via `fix-files/`).
 Core.v post-processing uses `fix-files/` for multi-line insertions (portable across GNU/BSD sed). GHC and transformers regeneration on macOS requires GNU sed: `brew install gnu-sed && PATH="/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH" make -C examples/ghc vfiles`.
 
 ### Paper claims audit
-`paper-claims-audit.md` (project root) documents the status of formal verification claims from three publications (JFP 2021, arxiv:1910.11724, ICFP 2018) against the current codebase. Core verification theorems hold. See `paper-claims-audit.md` for current regression details.
+Before reporting publication claims, read `paper-claims-audit.md` (JFP 2021, arxiv:1910.11724, ICFP 2018). It separates the historical source-search audit from dated recovery checks; a `Qed` marker alone does not establish independence from admissions or axioms.
 
 ### Containers submodule
 Containers v0.7. `make clean` removes `lib/` and `hs-spec/`; `make` regenerates and builds everything. IntSet/Set/Map have native v0.7 split/fromAscList/fromDescList definitions. `hs-spec/IntSetProperties.v` auto-generated from v0.7 test sources. Full type class laws verified in TypeclassProofs.v. Check proof status: `grep -c Admitted examples/containers/theories/*.v`. IntMapProofs has formal counterexamples (Abort) for false theorems (mapKeys_Desc, isSubmapOfBy_Bin, Desc0_Desc, empty_no_elts). thm_MaskPow2 false for unbounded N; bounded version proved with `k < 2^63`.

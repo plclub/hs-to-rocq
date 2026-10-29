@@ -39,28 +39,24 @@ Opaque GHC.Base.hs_string__.
 (** * Evaluating CSE *)
 (* We really ought to be able to automate these things *)
 
-(* GHC 9.10: cseExpr, cseBind, try_for_cse are all axiomatized in the lib.
-   Computational unfolding lemmas cannot be proved; Admitted. *)
-
 Lemma cseExpr_App env f a :
   cseExpr env (App f a) = App (cseExpr env f) (tryForCSE env a).
-Proof. Admitted.
+Proof. reflexivity. Qed.
 #[export] Hint Rewrite cseExpr_App : hs_simpl.
 
 Lemma cseExpr_Let env bind e :
   cseExpr env (Let bind e) = let: (env', bind') := cseBind NotTopLevel env bind
                              in Let bind' (cseExpr env' e).
-Proof. Admitted.
+Proof. reflexivity. Qed.
 #[export] Hint Rewrite cseExpr_Let : hs_simpl.
 
-(* GHC 9.10: cse_bind signature changed (added env_rhs parameter).
-   cseBind is axiomatized so this lemma is not provable. *)
+(* The RHS and body environments are distinct in the five-argument cse_bind. *)
 Lemma cseBind_NonRec toplevel env b e :
   cseBind toplevel env (NonRec b e) =
     let: (env1, b1)       := addBinder env b in
     let: (env2, (b2, e2)) := cse_bind toplevel env env1 (b,e) b1 in
     (env2, NonRec b2 e2).
-Proof. Admitted.
+Proof. reflexivity. Qed.
 #[export] Hint Rewrite cseBind_NonRec : hs_simpl.
 
 (** * Stripping ticks *)
@@ -169,17 +165,17 @@ Record WellScopedCSEnv (env : CSEnv) (vars : VarSet) : Prop :=
    ; ws_map     : const True (cs_map env)
    ; ws_rec_map : const True (cs_rec_map env) }.
 
-(* GHC 9.10: tryForCSE wraps try_for_cse which is axiomatized.
-   Cannot unfold; Admitted. *)
 Lemma tryForCSE_simpl env expr :
   tryForCSE env expr = match lookupCSEnv env (cseExpr env expr) with
                        | Some e => e
                        | None   => cseExpr env expr
                        end.
-Proof. Admitted.
+Proof.
+  unfold tryForCSE, try_for_cse.
+  destruct (lookupCSEnv env (cseExpr env expr)); reflexivity.
+Qed.
 
-(* GHC 9.10: cseExpr, cseBind, try_for_cse are axiomatized.
-   The well-scopedness proof cannot proceed by computation. Admitted. *)
+(* Inherited well-scopedness admission, outside the control-flow equations. *)
 Definition WS_cseExpr vars env e :
   WellScopedCSEnv env             vars ->
   WellScoped      e               vars ->

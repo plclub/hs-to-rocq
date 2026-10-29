@@ -1,5 +1,9 @@
 axiomatize module TysWiredIn
 
+# Recover the ManyTy builder using the existing opaque type operations.
+unaxiomatize definition TysWiredIn.manyDataConTy
+unaxiomatize definition TysWiredIn.manyDataConTyCon
+
 # already axiomatized
 skip AxiomatizedTypes.liftedTypeKind
 skip AxiomatizedTypes.constraintKind
@@ -21,4 +25,3 @@ skip TysWiredIn.unboxedSumArr
 skip TysWiredIn.mk_sum
 skip TysWiredIn.cTupleArr
 skip TysWiredIn.mk_ctuple
-

@@ -59,7 +59,7 @@ skip BasicTypes.unboxedTupleOrSumExtension
 # CompilerPhase/Activation functions need Ord nat (PhaseNum=nat)
 skip BasicTypes.nextPhase
 skip BasicTypes.laterPhase
-skip BasicTypes.activateAfterInitial
+in BasicTypes.activateAfterInitial rewrite forall, BasicTypes.nextPhase BasicTypes.InitialPhase = BasicTypes.Phase 2%nat
 skip BasicTypes.activeInPhase
 skip BasicTypes.isActive
 skip BasicTypes.competesWith
@@ -77,4 +77,3 @@ skip BasicTypes.doExpansionOrigin
 # Coq 8.20: type/constructor name clashes
 rename value GHC.Types.Basic.DoPmc = BasicTypes.Mk_DoPmc
 rename value GHC.Types.Basic.Alignment = BasicTypes.Mk_Alignment
-

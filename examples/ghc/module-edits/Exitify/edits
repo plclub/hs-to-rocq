@@ -1,6 +1,6 @@
 
-# GHC 9.10: uses Core.ManyTy (Mult is axiomatized)
-axiomatize definition Exitify.mkExitJoinId
+# ManyTy is a pattern synonym whose builder is manyDataConTy.
+rename value GHC.Core.Type.ManyTy = TysWiredIn.manyDataConTy
 
 # GHC 9.10: exitifyRec uses idJoinPointHood which is now available in Id midamble
 in Exitify.exitifyRec termination go deferred

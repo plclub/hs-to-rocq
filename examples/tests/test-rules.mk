@@ -36,6 +36,7 @@ PASS = \
   Bits \
   BitsRewrite \
   PatternGuard \
+  SoleCtorGuard \
   Guard2 \
   Notations \
   Renamed \

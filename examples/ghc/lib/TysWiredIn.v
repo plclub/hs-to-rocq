@@ -355,11 +355,13 @@ Axiom manyDataCon : Core.DataCon.
 
 Axiom oneDataConTy : AxiomatizedTypes.Type_.
 
-Axiom manyDataConTy : AxiomatizedTypes.Type_.
+#[global] Definition manyDataConTyCon : Core.TyCon :=
+  Core.promoteDataCon manyDataCon.
+
+#[global] Definition manyDataConTy : AxiomatizedTypes.Type_ :=
+  Core.mkTyConTy manyDataConTyCon.
 
 Axiom oneDataConTyCon : Core.TyCon.
-
-Axiom manyDataConTyCon : Core.TyCon.
 
 Axiom multMulTyConName : Name.Name.
 
@@ -663,8 +665,8 @@ Axiom pretendNameIsInScope : Name.Name -> bool.
      AxiomatizedTypes.PredType AxiomatizedTypes.ThetaType AxiomatizedTypes.Type_
      BasicTypes.Arity BasicTypes.TupleSort Core.Class Core.DataCon Core.Expr Core.Id
      Core.PromDataConInfo Core.RuntimeRepType Core.Scaled Core.TyCoVar Core.TyCon
-     Core.TyVar FastString.FastString GHC.Base.String GHC.Core.Map.Type.TypeMap
-     HsSyn.Boxity HsSyn.ConTag Module.Module Name.BuiltInSyntax Name.Name
-     OccName.NameSpace OccName.OccName PrelNames.RdrName TcType.ConcreteTyVars
-     UniqSet.UniqSet Unique.Unique
+     Core.TyVar Core.mkTyConTy Core.promoteDataCon FastString.FastString
+     GHC.Base.String GHC.Core.Map.Type.TypeMap HsSyn.Boxity HsSyn.ConTag
+     Module.Module Name.BuiltInSyntax Name.Name OccName.NameSpace OccName.OccName
+     PrelNames.RdrName TcType.ConcreteTyVars UniqSet.UniqSet Unique.Unique
 *)

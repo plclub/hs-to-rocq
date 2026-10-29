@@ -1157,7 +1157,8 @@ Program Instance Ord__IntWithInf : GHC.Base.Ord IntWithInf :=
 
 (* Skipping definition `BasicTypes.laterPhase' *)
 
-(* Skipping definition `BasicTypes.activateAfterInitial' *)
+#[global] Definition activateAfterInitial : Activation :=
+  activeAfter (Phase 2 % nat).
 
 #[global] Definition activateDuringFinal : Activation :=
   FinalActive.

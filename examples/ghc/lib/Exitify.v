@@ -23,12 +23,15 @@ Require Data.Bifunctor.
 Require Data.Foldable.
 Require Data.Traversable.
 Require Data.Tuple.
+Require FastString.
 Require GHC.Base.
+Require GHC.Builtin.Uniques.
 Require GHC.Err.
 Require GHC.Prim.
 Require GHC.Utils.Monad.State.Strict.
 Require HsToRocq.DeferredFix.
 Require Id.
+Require TysWiredIn.
 Require Util.
 Import GHC.Base.Notations.
 
@@ -40,8 +43,20 @@ Import GHC.Base.Notations.
 
 (* Converted value declarations: *)
 
-Axiom mkExitJoinId : Core.InScopeSet ->
-                     AxiomatizedTypes.Type_ -> BasicTypes.JoinArity -> ExitifyM Core.JoinId.
+#[global] Definition mkExitJoinId
+   : Core.InScopeSet ->
+     AxiomatizedTypes.Type_ -> BasicTypes.JoinArity -> ExitifyM Core.JoinId :=
+  fun in_scope ty join_arity =>
+    let exit_id_tmpl :=
+      Id.asJoinId (Id.mkSysLocal (FastString.fsLit (GHC.Base.hs_string__ "exit"))
+                   GHC.Builtin.Uniques.initExitJoinUnique TysWiredIn.manyDataConTy ty)
+                  join_arity in
+    GHC.Utils.Monad.State.Strict.get GHC.Base.>>=
+    (fun fs =>
+       let avoid :=
+         Core.extendInScopeSet (Core.extendInScopeSetList in_scope (GHC.Base.map
+                                                           Data.Tuple.fst fs)) exit_id_tmpl in
+       GHC.Base.return_ (Core.uniqAway avoid exit_id_tmpl)).
 
 #[global] Definition addExit
    : Core.InScopeSet ->
@@ -277,15 +292,16 @@ Axiom mkExitJoinId : Core.InScopeSet ->
      Core.delVarSet Core.disjointVarSet Core.elemVarSet Core.emptyInScopeSet
      Core.extendInScopeSet Core.extendInScopeSetList Core.isId Core.isLocalId
      Core.minusVarSet Core.mkLams Core.mkLets Core.mkVarApps Core.mkVarSet
-     Core.vanillaIdInfo CoreFVs.CoreExprWithFVs CoreFVs.exprFreeVars CoreFVs.freeVars
-     CoreUtils.exprType CoreUtils.extendInScopeSetBind
+     Core.uniqAway Core.vanillaIdInfo CoreFVs.CoreExprWithFVs CoreFVs.exprFreeVars
+     CoreFVs.freeVars CoreUtils.exprType CoreUtils.extendInScopeSetBind
      CoreUtils.extendInScopeSetBndrs Data.Bifunctor.second Data.Foldable.all
      Data.Foldable.any Data.Foldable.elem Data.Foldable.foldr Data.Traversable.forM
-     Data.Tuple.fst Data.Tuple.snd GHC.Base.map GHC.Base.op_z2218U__
-     GHC.Base.op_zgzg__ GHC.Base.op_zgzgze__ GHC.Base.return_ GHC.Err.head
-     GHC.Prim.rightSection GHC.Utils.Monad.State.Strict.State
-     GHC.Utils.Monad.State.Strict.get GHC.Utils.Monad.State.Strict.put
-     GHC.Utils.Monad.State.Strict.runState HsToRocq.DeferredFix.deferredFix2
-     Id.idJoinArity Id.idJoinPointHood Id.isJoinId Id.setIdInfo Outputable.JoinPoint
-     Util.mapSnd
+     Data.Tuple.fst Data.Tuple.snd FastString.fsLit GHC.Base.map GHC.Base.op_z2218U__
+     GHC.Base.op_zgzg__ GHC.Base.op_zgzgze__ GHC.Base.return_
+     GHC.Builtin.Uniques.initExitJoinUnique GHC.Err.head GHC.Prim.rightSection
+     GHC.Utils.Monad.State.Strict.State GHC.Utils.Monad.State.Strict.get
+     GHC.Utils.Monad.State.Strict.put GHC.Utils.Monad.State.Strict.runState
+     HsToRocq.DeferredFix.deferredFix2 Id.asJoinId Id.idJoinArity Id.idJoinPointHood
+     Id.isJoinId Id.mkSysLocal Id.setIdInfo Outputable.JoinPoint
+     TysWiredIn.manyDataConTy Util.mapSnd
 *)

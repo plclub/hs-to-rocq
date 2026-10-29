@@ -312,8 +312,11 @@ in CoreFVs.expr_fvs rewrite forall t, CoreFVs.tickish_fvs t = FV.emptyFV
 # remove reasoning about ticks
 #
 rewrite forall xs e, CoreUtils.stripTicksE xs e = e
-rewrite forall xs e, CoreUtils.stripTicksT xs e = e
-rewrite forall ts e, CoreUtils.mkTicks ts e = e
+rewrite forall xs e, CoreUtils.stripTicksT xs e = (@nil GHC.Types.Tickish.CoreTickish)
+rewrite forall e, CoreUtils.mkTicks (@nil GHC.Types.Tickish.CoreTickish) e = e
+
+in CSE.cseExpr rename value GHC.Core.TyCo.Subst.substTyUnchecked = CoreSubst.substTyUnchecked
+in CSE.cseExpr rename value GHC.Core.TyCo.Subst.substCo = CoreSubst.substCo
 
 ############################################################################
 # pruning Rules

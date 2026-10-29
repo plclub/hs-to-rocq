@@ -915,15 +915,6 @@ convertListComprehension allStmts = case fmap unLoc <$> unsnoc allStmts of
 
 --------------------------------------------------------------------------------
 
--- Could this pattern be considered a 'catch all' or exhaustive pattern?
-isWildRocq :: Pattern -> Bool
-isWildRocq UnderscorePat     = True
-isWildRocq (QualidPat _)     = True
-isWildRocq (AsPat p _)       = isWildRocq p
-isWildRocq (ArgsPat qid nep) = qid == Bare "pair" && all isWildRocq nep
-isWildRocq _ = False
-
-
 {-
   = ArgsPat Qualid (NE.NonEmpty Pattern)
   | ExplicitArgsPat Qualid (NE.NonEmpty Pattern)
@@ -1149,16 +1140,13 @@ guardTerm gs rhs failure = go gs where
 
   go (BoolGuard cond : gs) =
     ifThenElse <*> pure LinearIf <*> pure cond <*> go gs <*> pure failure
-  -- if the pattern is exhaustive, don't include an otherwise case
-  go (PatternGuard pat exp : gs) | isWildRocq pat = do
-    guarded' <- go gs
-    pure $ Coq.Match [MatchItem exp Nothing Nothing] Nothing
-                     [ Equation [MultPattern [pat]] guarded' ]
   go (PatternGuard pat exp : gs) = do
     guarded' <- go gs
+    ref <- refutability pat
+    let fallback = [ Equation [MultPattern [UnderscorePat]] failure
+                   | isRefutable ref ]
     pure $ Coq.Match [MatchItem exp Nothing Nothing] Nothing
-                     [ Equation [MultPattern [pat]] guarded'
-                     , Equation [MultPattern [UnderscorePat]] failure ]
+                     (Equation [MultPattern [pat]] guarded' : fallback)
   go (LetGuard bind : gs) =
     bind $ go gs
 
