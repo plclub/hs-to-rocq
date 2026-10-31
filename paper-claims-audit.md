@@ -277,6 +277,22 @@ Validation for this update:
   build. The latter checks the exact final theorem type, the absence of the
   removed names, and the assumptions of final Exitify and substitution.
 
+### Key-only contract refinement (2026-10-30)
+
+**Baseline: `c8187b0c` on `proof-recovery`.** Emptiness, subset, and disjointness
+specifications and their public set-algebra helpers now require structural WF
+without payload validity. Filter membership implies original membership without
+payload validity or predicate compatibility; predicate-sensitive filtering and
+lookup-payload comparisons retain their validity premises.
+
+`ValidVarSet_iff_StrongValidVarSet` proves the two validity formulations equivalent
+without structural WF. The original one-way implication remains available.
+`RecoveryChecks.v` checks these signatures, conditional structural extensionality,
+and the absence of the old dummy FSet operations and laws. A positive regression
+uses a WF singleton with an invalid payload to exercise the key-only contracts.
+The final Exitify theorem keeps its exact contract. No new axioms or admissions
+are introduced by this refinement; the model assumptions listed above remain.
+
 ### Admitted Summary (GHC Theories, historical)
 
 Only the CSE and Exitify rows were rechecked on 2026-10-28. The other rows

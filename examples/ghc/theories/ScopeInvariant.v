@@ -51,8 +51,7 @@ Ltac scope_fresh_disjoint H :=
   lazymatch type of H with
   | disjointVarSet ?t ?u = true =>
     eapply (disjointVarSet_subVarSet_l _ t u);
-      [solve_varset_inv | solve_varset_inv | solve_varset_inv |
-       solve_varset_inv | solve_varset_inv | exact H |]
+      [solve_varset_inv | solve_varset_inv | solve_varset_inv | exact H |]
   end.
 
 #[local] Hint Resolve exprFreeVars_WF exprFreeVars_valid
@@ -739,7 +738,7 @@ Proof.
         let Wf := fresh "Wf" in let Vf := fresh "Vf" in
         assert (Wf : forall y, List.In y xs -> WF (f y)) by (intros [dc' pats' rhs'] _; solve_varset_inv);
         assert (Vf : forall y, List.In y xs -> ValidVarSet (f y)) by (intros [dc' pats' rhs'] _; solve_varset_inv);
-        let H := fresh "HM" in pose proof (@mapUnionVarSet_In_subVarSet _ _ xs f Wf Vf HIn) as H;
+        let H := fresh "HM" in pose proof (@mapUnionVarSet_In_subVarSet _ _ xs f Wf HIn) as H;
         let WM := fresh in pose proof (mapUnionVarSet_WF f xs Wf) as WM;
         let VM := fresh in pose proof (mapUnionVarSet_valid f xs Wf Vf) as VM;
         simpl in H end.
@@ -941,7 +940,7 @@ Lemma WellScoped_exprFreeVars :
   exprFreeVars e [<=] vs.
 Proof.
   intros e vs S W V.
-  apply (proj1 (SubsetE _ _ (exprFreeVars_WF e) W (exprFreeVars_valid e))).
+  apply (proj1 (SubsetE _ _ (exprFreeVars_WF e) W)).
   apply WellScoped_subset; assumption.
 Qed.
 

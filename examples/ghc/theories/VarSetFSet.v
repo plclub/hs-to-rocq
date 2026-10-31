@@ -129,13 +129,13 @@ Module VarSetFacts.
     rewrite -> Bool.andb_true_iff, Bool.negb_true_iff.
     destruct (elemVarSet x t); intuition discriminate.
   Qed.
-  Lemma subset_iff s t : WF s -> WF t -> ValidVarSet s ->
+  Lemma subset_iff s t : WF s -> WF t ->
     (Subset s t <-> subset s t = true).
-  Proof. intros W T V. symmetry. apply subVarSet_spec; assumption. Qed.
-  Lemma is_empty_iff s : WF s -> ValidVarSet s ->
+  Proof. intros W T. symmetry. apply subVarSet_spec; assumption. Qed.
+  Lemma is_empty_iff s : WF s ->
     (Empty s <-> is_empty s = true).
   Proof.
-    intros W V. unfold Empty, In, is_empty.
+    intros W. unfold Empty, In, is_empty.
     rewrite -> isEmptyVarSet_spec by assumption.
     split; intros H x; specialize (H x); destruct (elemVarSet x s); intuition discriminate.
   Qed.
@@ -158,10 +158,10 @@ Module VarSetFacts.
   Lemma exists_iff s f : WF s -> ValidVarSet s -> RespectsVar f ->
     (Exists (fun x => f x = true) s <-> exists_ f s = true).
   Proof. intros W V R. symmetry. apply anyVarSet_spec; assumption. Qed.
-  Lemma disjoint_iff s t : WF s -> WF t -> ValidVarSet s ->
+  Lemma disjoint_iff s t : WF s -> WF t ->
     (disjointVarSet s t = true <-> forall x, In x s -> ~ In x t).
   Proof.
-    intros W T V. rewrite -> (disjointVarSet_spec s t W T V).
+    intros W T. rewrite -> (disjointVarSet_spec s t W T).
     unfold In. split; intros H x M; specialize (H x M).
     - rewrite H; discriminate.
     - apply Bool.not_true_is_false; exact H.
@@ -179,11 +179,11 @@ Lemma unionVarSet_union : unionVarSet = union. Proof. reflexivity. Qed.
 Lemma minusVarSet_diff : minusVarSet = diff. Proof. reflexivity. Qed.
 Lemma filterVarSet_filter : filterVarSet = filter. Proof. reflexivity. Qed.
 Lemma intersectVarSet_inter : intersectVarSet = inter. Proof. reflexivity. Qed.
-Lemma SubsetE s t : WF s -> WF t -> ValidVarSet s ->
+Lemma SubsetE s t : WF s -> WF t ->
   (subVarSet s t <-> s [<=] t).
-Proof. intros W T V. symmetry. apply subset_iff; assumption. Qed.
-Lemma EmptyE s : WF s -> ValidVarSet s -> (isEmptyVarSet s <-> Empty s).
-Proof. intros W V. symmetry. apply is_empty_iff; assumption. Qed.
+Proof. intros W T. symmetry. apply subset_iff; assumption. Qed.
+Lemma EmptyE s : WF s -> (isEmptyVarSet s <-> Empty s).
+Proof. intros W. symmetry. apply is_empty_iff; assumption. Qed.
 
 Module VarSetProperties.
   Lemma equal_refl s : s [=] s. Proof. reflexivity. Qed.
@@ -311,14 +311,14 @@ Module VarSetBasicFacts.
   Lemma mem_1 s x : In x s -> mem x s = true. Proof. auto. Qed.
   Lemma mem_2 s x : mem x s = true -> In x s. Proof. auto. Qed.
   Lemma empty_1 : Empty empty. Proof. fsetdec. Qed.
-  Lemma subset_1 s t : WF s -> WF t -> ValidVarSet s ->
+  Lemma subset_1 s t : WF s -> WF t ->
     Subset s t -> subset s t = true.
-  Proof. intros W T V. apply (proj1 (subset_iff s t W T V)). Qed.
-  Lemma subset_2 s t : WF s -> WF t -> ValidVarSet s ->
+  Proof. intros W T. apply (proj1 (subset_iff s t W T)). Qed.
+  Lemma subset_2 s t : WF s -> WF t ->
     subset s t = true -> Subset s t.
-  Proof. intros W T V. apply (proj2 (subset_iff s t W T V)). Qed.
-  Lemma is_empty_1 s : WF s -> ValidVarSet s -> Empty s -> is_empty s = true.
-  Proof. intros W V; apply (proj1 (is_empty_iff s W V)). Qed.
+  Proof. intros W T. apply (proj2 (subset_iff s t W T)). Qed.
+  Lemma is_empty_1 s : WF s -> Empty s -> is_empty s = true.
+  Proof. intros W; apply (proj1 (is_empty_iff s W)). Qed.
   Lemma is_empty_2 s : is_empty s = true -> Empty s.
   Proof.
     destruct s as [[m]]. destruct m; intros H x K;
@@ -352,9 +352,15 @@ Module VarSetBasicFacts.
   Proof. intros W T. rewrite -> diff_iff by assumption. tauto. Qed.
   Lemma diff_3 s t x : WF s -> WF t -> In x s -> ~ In x t -> In x (diff s t).
   Proof. intros W T. rewrite -> diff_iff by assumption. tauto. Qed.
-  Lemma filter_1 s x f : WF s -> ValidVarSet s -> RespectsVar f ->
+  Lemma filter_1 s x f : WF s ->
     In x (filter f s) -> In x s.
-  Proof. intros W V R. rewrite -> filter_iff by assumption. tauto. Qed.
+  Proof.
+    intro W. unfold In, filter.
+    rewrite -> (elemVarSet_lookup _ _ (filterVarSet_WF f s W)),
+      (lookupVarSet_filter f s x W), (elemVarSet_lookup s x W).
+    destruct (lookupVarSet s x) as [v|]; [destruct (f v)|];
+      simpl; intuition discriminate.
+  Qed.
   Lemma filter_2 s x f : WF s -> ValidVarSet s -> RespectsVar f ->
     In x (filter f s) -> f x = true.
   Proof. intros W V R. rewrite -> filter_iff by assumption. tauto. Qed.

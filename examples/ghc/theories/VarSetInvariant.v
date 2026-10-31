@@ -374,10 +374,10 @@ Proof.
 Qed.
 
 Lemma isEmptyVarSet_spec s :
-  WF (VarSet_IntMap s) -> ValidVarSet s ->
+  WF (VarSet_IntMap s) ->
   (isEmptyVarSet s = true <-> forall v, elemVarSet v s = false).
 Proof.
-  intros W V. split.
+  intros W. split.
   - destruct s as [[m]]. destruct W as [f S]. intro E.
     change (Data.IntMap.Internal.null m = true) in E.
     pose proof (proj1 (IntMapProofs.null_Sem S) E) as Empty. intro v.
@@ -386,21 +386,20 @@ Proof.
   - intro E. destruct s as [[m]]. destruct W as [f S].
     change (Data.IntMap.Internal.null m = true). apply (proj2 (IntMapProofs.null_Sem S)).
     intro k. destruct (f k) as [v|] eqn:F; [|reflexivity].
-    assert (L : Data.IntMap.Internal.lookup k m = Some v).
-    { rewrite (lookup_Sem S). exact F. }
-    pose proof (ValidVarSet_lookup_key _ V k v L) as K. specialize (E v).
-    change (Data.IntMap.Internal.member (key v) m = false) in E.
-    cbn beta in E, K. rewrite K, (member_Sem S), F in E. discriminate.
+    (* Rekey a stored value to query k, irrespective of its payload unique. *)
+    specialize (E (setVarUnique v (Unique.MkUnique k))).
+    destruct v.
+    change (Data.IntMap.Internal.member k m = false) in E.
+    rewrite (member_Sem S), F in E. discriminate.
 Qed.
 
 Lemma subVarSet_spec s t :
-  WF (VarSet_IntMap s) -> WF (VarSet_IntMap t) -> ValidVarSet s ->
+  WF (VarSet_IntMap s) -> WF (VarSet_IntMap t) ->
   (subVarSet s t = true <->
    forall v, elemVarSet v s = true -> elemVarSet v t = true).
 Proof.
-  intros W X V. unfold subVarSet.
-  rewrite (isEmptyVarSet_spec _ (minusVarSet_WF s t W X)
-    (minusVarSet_valid s t W X V)).
+  intros W X. unfold subVarSet.
+  rewrite (isEmptyVarSet_spec _ (minusVarSet_WF s t W X)).
   split; intros H v; specialize (H v).
   - rewrite (elemVarSet_minus s t v W X) in H.
     destruct (elemVarSet v s), (elemVarSet v t); simpl in *; congruence.
@@ -534,11 +533,11 @@ Proof.
 Qed.
 
 Lemma disjointVarSet_spec s t :
-  WF (VarSet_IntMap s) -> WF (VarSet_IntMap t) -> ValidVarSet s ->
+  WF (VarSet_IntMap s) -> WF (VarSet_IntMap t) ->
   (disjointVarSet s t = true <->
    forall v, elemVarSet v s = true -> elemVarSet v t = false).
 Proof.
-  intros W X V. destruct s as [[m]], t as [[n]].
+  intros W X. destruct s as [[m]], t as [[n]].
   unfold disjointVarSet, UniqSet.getUniqSet, UniqFM.disjointUFM.
   rewrite (IntMapUnionProofs.disjoint_spec m n W X).
   split.
@@ -550,12 +549,14 @@ Proof.
     destruct H as [H|H]; [rewrite H in M; discriminate|rewrite H; reflexivity].
   - intros H k.
     destruct (Data.IntMap.Internal.lookup k m) as [v|] eqn:L; [|left; reflexivity].
-    right. pose proof (ValidVarSet_lookup_key _ V k v L) as K.
-    assert (M : elemVarSet v (UniqSet.Mk_UniqSet (UniqFM.UFM m)) = true).
-    { apply (lookupVarSet_member _ _ v W).
-      rewrite lookupVarSet_IntMap. cbn beta in K. cbn [VarSet_IntMap]. rewrite K. exact L. }
-    specialize (H v M). rewrite (elemVarSet_lookup _ _ X), lookupVarSet_IntMap in H.
-    cbn [VarSet_IntMap] in H. cbn beta in H, K. rewrite K in H.
+    right.
+    pose (q := setVarUnique v (Unique.MkUnique k)).
+    assert (K : key q = k) by (unfold q; destruct v; reflexivity).
+    assert (M : elemVarSet q (UniqSet.Mk_UniqSet (UniqFM.UFM m)) = true).
+    { rewrite (elemVarSet_lookup _ _ W), lookupVarSet_IntMap.
+      cbn [VarSet_IntMap]. cbn beta. rewrite K, L. reflexivity. }
+    specialize (H q M). rewrite (elemVarSet_lookup _ _ X), lookupVarSet_IntMap in H.
+    cbn [VarSet_IntMap] in H. cbn beta in H. rewrite K in H.
     destruct (Data.IntMap.Internal.lookup k n); [discriminate|reflexivity].
 Qed.
 

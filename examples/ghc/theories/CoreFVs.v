@@ -596,7 +596,7 @@ Lemma subVarSet_exprFreeVars_exprsFreeVars:
 Proof.
   intros v rhs pairs H.
   apply (proj2 (subVarSet_spec _ _ (exprFreeVars_WF rhs)
-    (exprsFreeVars_WF (map snd pairs)) (exprFreeVars_valid rhs))).
+    (exprsFreeVars_WF (map snd pairs)))).
   intros x M. revert H. induction pairs as [|[b r] ps IH]; intro H; [contradiction|].
   change (elemVarSet x (exprsFreeVars (r :: map snd ps)) = true).
   rewrite -> (equal_members _ _ (exprsFreeVars_cons r (map snd ps)) x),
@@ -613,14 +613,14 @@ Lemma subVarSet_exprsFreeVars:
   subVarSet (exprsFreeVars es) vs = true.
 Proof.
   intros es vs W H.
-  apply (proj2 (subVarSet_spec _ _ (exprsFreeVars_WF es) W (exprsFreeVars_valid es))).
+  apply (proj2 (subVarSet_spec _ _ (exprsFreeVars_WF es) W)).
   induction H as [|e es E F IH]; intros x M.
   - rewrite -> exprsFreeVars_nil in M. discriminate M.
   - rewrite -> (equal_members _ _ (exprsFreeVars_cons e es) x),
       elemVarSet_union in M by solve_varset_inv.
     apply Bool.orb_true_iff in M. destruct M as [M|M].
     + apply IH; exact M.
-    + exact (proj1 (subVarSet_spec _ _ (exprFreeVars_WF e) W (exprFreeVars_valid e)) E x M).
+    + exact (proj1 (subVarSet_spec _ _ (exprFreeVars_WF e) W) E x M).
 Qed.
 
 Lemma elemVarSet_exprFreeVars_Var_false: forall v' v,

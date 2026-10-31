@@ -224,6 +224,8 @@ Proof bridge lemmas: `GHC.Base.foldl'` is CPS-via-`fold_right` (not `fold_left`)
 
 **WF contract recovery**: When changing IntMap/VarSet proofs or their callers, follow the "WF contract recovery" section in `examples/ghc/README.md`. Supply explicit WF and validity evidence using `VarSetInvariant`; raw membership equality does not establish either invariant. `IntMapRecursion` derives operation equations from guarded deferred recursion, and `IntMapUnionProofs` proves semantic preservation. `RecoveryChecks.v` fixes the final Exitify contract and checks that the rejected blanket declarations remain absent.
 
+Key-only VarSet laws require trie-WF without payload validity. Keep validity premises on payload-sensitive lookup/filter laws; `ValidVarSet_iff_StrongValidVarSet` converts the equivalent validity predicates without a WF premise. `RecoveryChecks.v` guards these distinctions with exact theorem types and a well-formed, invalid-payload singleton.
+
 **Exitify/CSE recovery**: When changing their translation, proofs, or assumptions, read [Exitify and CSE proof recovery](examples/ghc/README.md#exitify-and-cse-proof-recovery). It covers guarded unfolding, edit-only Identity support, the restored locality axiom, remaining theorem assumptions, and validation scope.
 
 Un-axiomatized: `Subst` (concrete inductive in Core.v), `substExpr`/`substBind` (mutual Fixpoint in CoreSubst midamble), `exitifyRec` (concrete with `deferredFix2`), `Id.idJoinPointHood`. CoreSubst hybrid auto-generation: 4 auto-generated, 9 redefined (simplified for `TvSubstEnv=CvSubstEnv=unit`), core subst in midamble (ordering: midamble before generated code).

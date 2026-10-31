@@ -221,11 +221,11 @@ Definition ValidVarSet (vs : VarSet) : Prop :=
 
 (** ** Strong Valid VarSets *)
 
-(* StrongValidVarSet says that every entry (k, v) in a VarSet's underlying
-   IntMap has key_of(v) = k. This is key-surjectivity: it ensures that every
-   key in the IntMap comes from the Unique of the stored Var. This is needed
-   for proofs that go from "no Var is a member" to "the map is empty", or
-   from "all Vars pass a predicate" to "all stored values pass". *)
+(* StrongValidVarSet says that the stored variable's unique agrees with its
+   lookup key in the underlying IntMap. This agreement is needed
+   for relating queries to stored payloads, for example when going from
+   "all Vars pass a predicate" to "all stored values pass". It is equivalent
+   to ValidVarSet, independently of the IntMap's structural well-formedness. *)
 
 Definition StrongValidVarSet (vs : VarSet) : Prop :=
   match vs with
@@ -270,6 +270,24 @@ Proof.
   destruct y as [ny [uy] ty my sy dy iy].
   change (ux = uy -> BinNat.N.eqb ux uy = true).
   intro Heq. subst uy. apply BinNat.N.eqb_refl.
+Qed.
+
+(* A lookup queries precisely the unique of its argument. No trie-WF or
+   default payload is needed to recover query validity from key validity. *)
+Lemma StrongValidVarSet_ValidVarSet :
+  forall vs, StrongValidVarSet vs -> ValidVarSet vs.
+Proof.
+  intros [[m]] Hvalid v1 v2 Hlookup.
+  apply Var_key_equal_complete.
+  symmetry. exact (Hvalid _ _ Hlookup).
+Qed.
+
+Lemma ValidVarSet_iff_StrongValidVarSet :
+  forall vs, ValidVarSet vs <-> StrongValidVarSet vs.
+Proof.
+  intro vs. split.
+  - apply ValidVarSet_StrongValidVarSet.
+  - apply StrongValidVarSet_ValidVarSet.
 Qed.
 
 Lemma VarSet_extensional_equal : forall vs1 vs2 : VarSet,

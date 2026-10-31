@@ -273,12 +273,12 @@ Require Import Proofs.VarSetStrong.
 
 Lemma elemVarSet_uniqAway:
   forall v iss vs,
-  WF vs -> WF (getInScopeVars iss) -> ValidVarSet vs ->
+  WF vs -> WF (getInScopeVars iss) ->
   subVarSet vs (getInScopeVars iss) = true ->
   elemVarSet (uniqAway iss v) vs = false.
 Proof.
-  intros v iss vs W X V H.
-  eapply subVarSet_elemVarSet_false; [exact W|exact X|exact V|exact H|].
+  intros v iss vs W X H.
+  eapply subVarSet_elemVarSet_false; [exact W|exact X|exact H|].
   apply (proj1 (lookupVarSet_None_elemVarSet _ _ X)).
   apply uniqAway_lookupVarSet_fresh.
 Qed.

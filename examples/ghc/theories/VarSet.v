@@ -470,42 +470,41 @@ Proof.
         constructor; [apply Eq_refl|exact IHy].
 Qed.
 
-Lemma subVarSet_refl s : WF s -> ValidVarSet s -> subVarSet s s.
-Proof. intros W V. apply (proj2 (subVarSet_spec s s W W V)); auto. Qed.
+Lemma subVarSet_refl s : WF s -> subVarSet s s.
+Proof. intros W. apply (proj2 (subVarSet_spec s s W W)); auto. Qed.
 Lemma subVarSet_trans s t u : WF s -> WF t -> WF u ->
-  ValidVarSet s -> ValidVarSet t ->
   subVarSet s t -> subVarSet t u -> subVarSet s u.
 Proof.
-  intros W T U V Q H K. apply (proj2 (subVarSet_spec s u W U V)).
-  intros x M. apply (proj1 (subVarSet_spec t u T U Q) K).
-  apply (proj1 (subVarSet_spec s t W T V) H). exact M.
+  intros W T U H K. apply (proj2 (subVarSet_spec s u W U)).
+  intros x M. apply (proj1 (subVarSet_spec t u T U) K).
+  apply (proj1 (subVarSet_spec s t W T) H). exact M.
 Qed.
 Lemma subVarSet_emptyVarSet s : WF s -> subVarSet emptyVarSet s.
 Proof.
-  intro W. apply (proj2 (subVarSet_spec _ _ emptyVarSet_WF W emptyVarSet_valid)).
+  intro W. apply (proj2 (subVarSet_spec _ _ emptyVarSet_WF W)).
   intros x H. discriminate H.
 Qed.
-Lemma subVarSet_equal_empty s t : WF s -> WF t -> ValidVarSet s ->
+Lemma subVarSet_equal_empty s t : WF s -> WF t ->
   s [=] emptyVarSet -> subVarSet s t = true.
 Proof.
-  intros W T V E. apply (proj2 (subVarSet_spec _ _ W T V)).
+  intros W T E. apply (proj2 (subVarSet_spec _ _ W T)).
   intros x H. apply (proj1 (E x)) in H. discriminate H.
 Qed.
-Lemma subVarSet_elemVarSet_true v s t : WF s -> WF t -> ValidVarSet s ->
+Lemma subVarSet_elemVarSet_true v s t : WF s -> WF t ->
   subVarSet s t -> elemVarSet v s -> elemVarSet v t.
-Proof. intros W T V H; apply (proj1 (subVarSet_spec s t W T V) H). Qed.
-Lemma subVarSet_elemVarSet_false v s t : WF s -> WF t -> ValidVarSet s ->
+Proof. intros W T H; apply (proj1 (subVarSet_spec s t W T) H). Qed.
+Lemma subVarSet_elemVarSet_false v s t : WF s -> WF t ->
   subVarSet s t -> elemVarSet v t = false -> elemVarSet v s = false.
 Proof.
-  intros W T V H K. destruct (elemVarSet v s) eqn:M; [|reflexivity].
-  pose proof (subVarSet_elemVarSet_true v s t W T V H M) as N.
+  intros W T H K. destruct (elemVarSet v s) eqn:M; [|reflexivity].
+  pose proof (subVarSet_elemVarSet_true v s t W T H M) as N.
   rewrite K in N. discriminate.
 Qed.
 Lemma subVarSet_unitVarSet v s : WF s ->
   subVarSet (unitVarSet v) s = elemVarSet v s.
 Proof.
   intro W. apply Bool.eq_true_iff_eq.
-  rewrite (subVarSet_spec _ _ (unitVarSet_WF v) W (unitVarSet_valid v)).
+  rewrite (subVarSet_spec _ _ (unitVarSet_WF v) W).
   split.
   - intro H. apply H. rewrite elemVarSet_unit. apply Eq_refl.
   - intros H x M. rewrite elemVarSet_unit in M.
@@ -519,44 +518,42 @@ Lemma extendVarSetList_subset s t xs : WF s -> WF t ->
 Proof.
   intros W T H x. rewrite -> !extendVarSetList_iff by assumption. firstorder.
 Qed.
-Lemma subVarSet_extendVarSet s t v : WF s -> WF t -> ValidVarSet s ->
+Lemma subVarSet_extendVarSet s t v : WF s -> WF t ->
   subVarSet s t -> subVarSet s (extendVarSet t v).
-Proof. intros W T V H; fsetdec. Qed.
-Lemma subVarSet_extendVarSet_both s t v : WF s -> WF t -> ValidVarSet s ->
+Proof. intros W T H; fsetdec. Qed.
+Lemma subVarSet_extendVarSet_both s t v : WF s -> WF t ->
   subVarSet s t -> subVarSet (extendVarSet s v) (extendVarSet t v).
-Proof. intros W T V H; fsetdec. Qed.
-Lemma subVarSet_extendVarSet_l s t v w : WF s -> WF t -> ValidVarSet s ->
+Proof. intros W T H; fsetdec. Qed.
+Lemma subVarSet_extendVarSet_l s t v w : WF s -> WF t ->
   subVarSet s t -> lookupVarSet t v = Some w -> subVarSet (extendVarSet s v) t.
 Proof.
-  intros W T V H K. pose proof (lookupVarSet_member t v w T K) as M.
+  intros W T H K. pose proof (lookupVarSet_member t v w T K) as M.
   fsetdec.
 Qed.
-Lemma subVarSet_extendVarSetList s t xs : WF s -> WF t -> ValidVarSet s ->
+Lemma subVarSet_extendVarSetList s t xs : WF s -> WF t ->
   subVarSet s t -> subVarSet s (extendVarSetList t xs).
 Proof.
-  intros W T V H. apply (proj2 (subVarSet_spec _ _ W
-    (extendVarSetList_WF t xs T) V)).
+  intros W T H. apply (proj2 (subVarSet_spec _ _ W
+    (extendVarSetList_WF t xs T))).
   intros x M. change (In x (extendVarSetList t xs)). rewrite -> extendVarSetList_iff by exact T. left.
-  apply (proj1 (subVarSet_spec s t W T V) H). exact M.
+  apply (proj1 (subVarSet_spec s t W T) H). exact M.
 Qed.
-Lemma subVarSet_extendVarSetList_l s t xs : WF s -> WF t -> ValidVarSet s ->
+Lemma subVarSet_extendVarSetList_l s t xs : WF s -> WF t ->
   subVarSet s t -> subVarSet s (extendVarSetList t xs).
 Proof. apply subVarSet_extendVarSetList. Qed.
-Lemma subVarSet_delVarSet s v : WF s -> ValidVarSet s -> subVarSet (delVarSet s v) s.
-Proof. intros W V; fsetdec. Qed.
-Lemma subVarSet_delVarSetList s xs : WF s -> ValidVarSet s ->
+Lemma subVarSet_delVarSet s v : WF s -> subVarSet (delVarSet s v) s.
+Proof. intros W; fsetdec. Qed.
+Lemma subVarSet_delVarSetList s xs : WF s ->
   subVarSet (delVarSetList s xs) s.
 Proof.
-  intros W V. apply (proj2 (subVarSet_spec _ _ (delVarSetList_WF s xs W) W
-    (delVarSetList_valid s xs W V))).
+  intros W. apply (proj2 (subVarSet_spec _ _ (delVarSetList_WF s xs W) W)).
   intros x H. change (In x (delVarSetList s xs)) in H.
   rewrite -> delVarSetList_iff in H by exact W. exact (proj1 H).
 Qed.
 Lemma subVarSet_unionVarSet s t u : WF s -> WF t -> WF u ->
-  ValidVarSet s -> ValidVarSet t ->
   subVarSet (unionVarSet s t) u = subVarSet s u && subVarSet t u.
 Proof.
-  intros W T U V Q. apply Bool.eq_true_iff_eq. rewrite Bool.andb_true_iff.
+  intros W T U. apply Bool.eq_true_iff_eq. rewrite Bool.andb_true_iff.
   rewrite -> !subVarSet_spec by solve_varset_inv.
   split.
   - intro H. split; intros x M; apply H; rewrite -> elemVarSet_union by assumption;
@@ -565,45 +562,45 @@ Proof.
     apply Bool.orb_true_iff in M. destruct M; auto.
 Qed.
 
-Lemma subVarSet_delVarSetList_both s t xs : WF s -> WF t -> ValidVarSet s ->
+Lemma subVarSet_delVarSetList_both s t xs : WF s -> WF t ->
   subVarSet s t -> subVarSet (delVarSetList s xs) (delVarSetList t xs).
 Proof.
-  intros W T V H. apply (proj2 (subVarSet_spec _ _
-    (delVarSetList_WF s xs W) (delVarSetList_WF t xs T) (delVarSetList_valid s xs W V))).
+  intros W T H. apply (proj2 (subVarSet_spec _ _
+    (delVarSetList_WF s xs W) (delVarSetList_WF t xs T))).
   intros x M. change (In x (delVarSetList s xs)) in M.
   rewrite -> delVarSetList_iff in M by exact W.
   change (In x (delVarSetList t xs)). rewrite -> delVarSetList_iff by exact T. split; [|exact (proj2 M)].
-  apply (proj1 (subVarSet_spec _ _ W T V) H). exact (proj1 M).
+  apply (proj1 (subVarSet_spec _ _ W T) H). exact (proj1 M).
 Qed.
-Lemma subVarSet_delVarSet_extendVarSet s t v : WF s -> WF t -> ValidVarSet s ->
+Lemma subVarSet_delVarSet_extendVarSet s t v : WF s -> WF t ->
   subVarSet s t -> subVarSet (delVarSet s v) (extendVarSet t v).
-Proof. intros W T V H; fsetdec. Qed.
-Lemma subVarSet_delVarSetList_extendVarSetList s t xs : WF s -> WF t -> ValidVarSet s ->
+Proof. intros W T H; fsetdec. Qed.
+Lemma subVarSet_delVarSetList_extendVarSetList s t xs : WF s -> WF t ->
   subVarSet s t -> subVarSet (delVarSetList s xs) (extendVarSetList t xs).
 Proof.
-  intros W T V H. apply (proj2 (subVarSet_spec _ _
-    (delVarSetList_WF s xs W) (extendVarSetList_WF t xs T) (delVarSetList_valid s xs W V))).
+  intros W T H. apply (proj2 (subVarSet_spec _ _
+    (delVarSetList_WF s xs W) (extendVarSetList_WF t xs T))).
   intros x M. change (In x (delVarSetList s xs)) in M.
   rewrite -> delVarSetList_iff in M by exact W.
   change (In x (extendVarSetList t xs)). rewrite -> extendVarSetList_iff by exact T. left.
-  apply (proj1 (subVarSet_spec _ _ W T V) H). exact (proj1 M).
+  apply (proj1 (subVarSet_spec _ _ W T) H). exact (proj1 M).
 Qed.
-Lemma subVarSet_delVarSetList_extendVarSetList_dual s t xs : WF s -> WF t -> ValidVarSet s ->
+Lemma subVarSet_delVarSetList_extendVarSetList_dual s t xs : WF s -> WF t ->
   subVarSet s (extendVarSetList t xs) -> subVarSet (delVarSetList s xs) t.
 Proof.
-  intros W T V H. apply (proj2 (subVarSet_spec _ _
-    (delVarSetList_WF s xs W) T (delVarSetList_valid s xs W V))).
+  intros W T H. apply (proj2 (subVarSet_spec _ _
+    (delVarSetList_WF s xs W) T)).
   intros x M. change (In x (delVarSetList s xs)) in M.
   rewrite -> delVarSetList_iff in M by exact W.
-  pose proof (proj1 (subVarSet_spec _ _ W (extendVarSetList_WF t xs T) V) H x (proj1 M)) as N.
+  pose proof (proj1 (subVarSet_spec _ _ W (extendVarSetList_WF t xs T)) H x (proj1 M)) as N.
   change (In x (extendVarSetList t xs)) in N.
   rewrite -> extendVarSetList_iff in N by exact T. tauto.
 Qed.
-Lemma subVarSet_extendVarSetList_r xs s t : WF s -> WF t -> ValidVarSet s ->
+Lemma subVarSet_extendVarSetList_r xs s t : WF s -> WF t ->
   subVarSet s (mkVarSet xs) -> subVarSet s (extendVarSetList t xs).
 Proof.
-  intros W T V H. apply (proj2 (subVarSet_spec _ _ W (extendVarSetList_WF t xs T) V)).
-  intros x M. pose proof (proj1 (subVarSet_spec _ _ W (mkVarSet_WF xs) V) H x M) as N.
+  intros W T H. apply (proj2 (subVarSet_spec _ _ W (extendVarSetList_WF t xs T))).
+  intros x M. pose proof (proj1 (subVarSet_spec _ _ W (mkVarSet_WF xs)) H x M) as N.
   change (In x (mkVarSet xs)) in N.
   rewrite -> mkVarSet_extendVarSetList, extendVarSetList_iff in N by solve_varset_inv.
   change (In x (extendVarSetList t xs)).
@@ -618,12 +615,11 @@ Qed.
 
 Lemma mapUnionVarSet_In_subVarSet {a} (x : a) xs f :
   (forall y, List.In y xs -> WF (f y)) ->
-  (forall y, List.In y xs -> ValidVarSet (f y)) ->
   List.In x xs -> subVarSet (f x) (mapUnionVarSet f xs).
 Proof.
-  intros W V H. apply (proj2 (subVarSet_spec _ _ (W x H)
-    (mapUnionVarSet_WF f xs W) (V x H))).
-  intros v M. revert W V H. induction xs as [|y ys IH]; intros W V H; [contradiction|].
+  intros W H. apply (proj2 (subVarSet_spec _ _ (W x H)
+    (mapUnionVarSet_WF f xs W))).
+  intros v M. revert W H. induction xs as [|y ys IH]; intros W H; [contradiction|].
   change (elemVarSet v (unionVarSet (f y) (mapUnionVarSet f ys)) = true).
   assert (Wy : WF (f y)) by (apply W; left; reflexivity).
   assert (Ws : WF (mapUnionVarSet f ys)) by
@@ -631,7 +627,7 @@ Proof.
   rewrite -> elemVarSet_union by assumption.
   apply Bool.orb_true_iff. destruct H as [H|H].
   - subst y. auto.
-  - right. apply IH; auto; intros z Z; [apply W|apply V]; right; exact Z.
+  - right. apply IH; auto; intros z Z; apply W; right; exact Z.
 Qed.
 
 Lemma lookupVarSet_ae vs v1 v2 : almostEqual v1 v2 ->
@@ -936,33 +932,31 @@ Proof.
 Qed.
 Lemma subVarSet_mapUnionVarSet {a} (xs : list a) f s : WF s ->
   (forall x, List.In x xs -> WF (f x)) ->
-  (forall x, List.In x xs -> ValidVarSet (f x)) ->
   Forall (fun x => subVarSet (f x) s) xs -> subVarSet (mapUnionVarSet f xs) s.
 Proof.
-  intros S W V H. induction xs as [|x xs IH]; [apply subVarSet_emptyVarSet; exact S|].
+  intros S W H. induction xs as [|x xs IH]; [apply subVarSet_emptyVarSet; exact S|].
   inversion H as [|y ys Hx Hxs]; subst.
   change (subVarSet (unionVarSet (f x) (mapUnionVarSet f xs)) s = true).
   rewrite -> subVarSet_unionVarSet by
-    (solve_varset_inv || (apply W; left; reflexivity) || (apply V; left; reflexivity) ||
-     (apply mapUnionVarSet_WF; intros y Y; apply W; right; exact Y) ||
-     (apply mapUnionVarSet_valid; intros y Y; [apply W|apply V]; right; exact Y)).
+    (solve_varset_inv || (apply W; left; reflexivity) ||
+     (apply mapUnionVarSet_WF; intros y Y; apply W; right; exact Y)).
   apply Bool.andb_true_iff; split; [exact Hx|].
-  apply IH; [intros y Y; apply W; right; exact Y|intros y Y; apply V; right; exact Y|exact Hxs].
+  apply IH; [intros y Y; apply W; right; exact Y|exact Hxs].
 Qed.
 
-Lemma disjointVarSet_iff s t : WF s -> WF t -> ValidVarSet s ->
+Lemma disjointVarSet_iff s t : WF s -> WF t ->
   (disjointVarSet s t = true <-> forall x, In x s -> ~ In x t).
 Proof.
-  intros W T V. rewrite -> (disjointVarSet_spec s t W T V).
+  intros W T. rewrite -> (disjointVarSet_spec s t W T).
   unfold In. split; intros H x M; specialize (H x M).
   - rewrite H; discriminate.
   - apply Bool.not_true_is_false; exact H.
 Qed.
 Lemma disjointVarSet_m s t u v : WF s -> WF t -> WF u -> WF v ->
-  ValidVarSet s -> ValidVarSet t -> s [=] t -> u [=] v ->
+  s [=] t -> u [=] v ->
   disjointVarSet s u = disjointVarSet t v.
 Proof.
-  intros W T U V P Q E F. apply Bool.eq_true_iff_eq.
+  intros W T U V E F. apply Bool.eq_true_iff_eq.
   rewrite -> !disjointVarSet_iff by assumption.
   split; intros H x M N.
   - apply (H x); [apply (proj2 (E x)); exact M|apply (proj2 (F x)); exact N].
@@ -974,10 +968,10 @@ Proof.
 Qed.
 Lemma disjointVarSet_mkVarSet_nil s : disjointVarSet s (mkVarSet []).
 Proof. apply disjointVarSet_empytVarSet. Qed.
-Lemma disjointVarSet_extendVarSet s x t : WF s -> WF t -> ValidVarSet s ->
+Lemma disjointVarSet_extendVarSet s x t : WF s -> WF t ->
   (disjointVarSet s (extendVarSet t x) <-> elemVarSet x s = false /\ disjointVarSet s t).
 Proof.
-  intros W T V. unfold is_true.
+  intros W T. unfold is_true.
   rewrite -> !disjointVarSet_iff by solve_varset_inv.
   split.
   - intro H; split.
@@ -990,11 +984,11 @@ Proof.
       unfold In in L. rewrite H in L; discriminate.
     + exact (K y M N).
 Qed.
-Lemma disjointVarSet_mkVarSet s xs : WF s -> ValidVarSet s ->
+Lemma disjointVarSet_mkVarSet s xs : WF s ->
   (disjointVarSet s (mkVarSet xs) <-> Forall (fun v => elemVarSet v s = false) xs).
 Proof.
-  intros W V. unfold is_true.
-  rewrite -> (disjointVarSet_spec s (mkVarSet xs) W (mkVarSet_WF xs) V).
+  intros W. unfold is_true.
+  rewrite -> (disjointVarSet_spec s (mkVarSet xs) W (mkVarSet_WF xs)).
   rewrite Forall_forall. split.
   - intros H x X. apply Bool.not_true_is_false. intro M.
     specialize (H x M). assert (K : elemVarSet x (mkVarSet xs) = true).
@@ -1006,35 +1000,35 @@ Proof.
     assert (Q : x == v) by (apply varUnique_iff; symmetry; exact E).
     rewrite <- (elemVarSet_eq x v s Q) in H. rewrite M in H; discriminate.
 Qed.
-Lemma disjointVarSet_mkVarSet_cons v s xs : WF s -> ValidVarSet s ->
+Lemma disjointVarSet_mkVarSet_cons v s xs : WF s ->
   (disjointVarSet s (mkVarSet (v :: xs)) <->
    elemVarSet v s = false /\ disjointVarSet s (mkVarSet xs)).
 Proof.
-  intros W V. rewrite -> !disjointVarSet_mkVarSet by assumption.
+  intros W. rewrite -> !disjointVarSet_mkVarSet by assumption.
   rewrite Forall_cons_iff. reflexivity.
 Qed.
-Lemma disjointVarSet_mkVarSet_append s xs ys : WF s -> ValidVarSet s ->
+Lemma disjointVarSet_mkVarSet_append s xs ys : WF s ->
   (disjointVarSet s (mkVarSet (xs ++ ys)) <->
    disjointVarSet s (mkVarSet xs) /\ disjointVarSet s (mkVarSet ys)).
 Proof.
-  intros W V. rewrite -> !disjointVarSet_mkVarSet by assumption.
+  intros W. rewrite -> !disjointVarSet_mkVarSet by assumption.
   apply Forall_app.
 Qed.
-Lemma elemNegbDisjoint s xs : WF s -> ValidVarSet s ->
+Lemma elemNegbDisjoint s xs : WF s ->
   disjointVarSet s (mkVarSet xs) -> forall v, Foldable.elem v xs -> negb (elemVarSet v s).
 Proof.
-  intros W V H v M. apply Bool.negb_true_iff.
-  pose proof (proj1 (disjointVarSet_spec s (mkVarSet xs) W (mkVarSet_WF xs) V) H) as D.
+  intros W H v M. apply Bool.negb_true_iff.
+  pose proof (proj1 (disjointVarSet_spec s (mkVarSet xs) W (mkVarSet_WF xs)) H) as D.
   apply Bool.not_true_is_false. intro K. specialize (D v K).
   rewrite -> mkVarSet_extendVarSetList, elemVarSet_extendVarSetList in D by solve_varset_inv.
   rewrite -> M, Bool.orb_true_l in D. discriminate.
 Qed.
 Lemma disjointVarSet_subVarSet_l s t u : WF s -> WF t -> WF u ->
-  ValidVarSet s -> ValidVarSet t -> disjointVarSet t u -> subVarSet s t -> disjointVarSet s u.
+  disjointVarSet t u -> subVarSet s t -> disjointVarSet s u.
 Proof.
-  intros W T U V Q H K. apply (proj2 (disjointVarSet_spec s u W U V)).
-  intros x M. apply (proj1 (disjointVarSet_spec t u T U Q) H).
-  apply (proj1 (subVarSet_spec s t W T V) K). exact M.
+  intros W T U H K. apply (proj2 (disjointVarSet_spec s u W U)).
+  intros x M. apply (proj1 (disjointVarSet_spec t u T U) H).
+  apply (proj1 (subVarSet_spec s t W T) K). exact M.
 Qed.
 
 #[export] Hint Rewrite elemVarSet_emptyVarSet

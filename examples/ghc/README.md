@@ -254,17 +254,24 @@ three contracts alongside the six existing malformed-tree counterexamples.
 
 #### Explicit invariants and corrected helper contracts
 
-The translated algorithms and exposed raw datatypes are unchanged. Generic
-proofs now require the relevant representation evidence explicitly:
+The translated algorithms and exposed raw datatypes are unchanged. Structural
+operation laws require trie-WF evidence. Payload-sensitive laws additionally
+require validity of the stored Vars:
 
 ```coq
 IntMapProofs.WF (Axioms.VarSet_IntMap s) /\ Axioms.ValidVarSet s
 ```
 
 `WF` describes the IntMap structure; `ValidVarSet` relates lookup keys to the
-stored Vars. Neither follows from raw membership equality. The existing
-`ValidVarSet_StrongValidVarSet` implication remains proved, but callers must
-supply validity rather than obtain it from a blanket assumption.
+stored Vars. Neither follows from raw membership equality. `ValidVarSet` and
+`StrongValidVarSet` are proved equivalent without a WF premise; callers supply
+validity rather than obtain it from a blanket assumption.
+
+Key-only laws for emptiness, subset, and disjointness require WF, but no payload
+validity. Their proofs query an arbitrary numeric key with a rekeyed Var rather
+than assume that the stored Var already has that key. Filtering membership
+implies original membership without validity or predicate-compatibility evidence;
+relating the predicate on a stored Var to the queried Var still requires both.
 
 The six raw IntMap contracts `non_member_lookup`, `member_lookup`, `null_member`,
 `lookup_insert_neq`, `member_insert`, and `tree_elem_kv_lookup` retain explicit
@@ -340,6 +347,27 @@ consistent.
   the removed names with `Fail Check`, and prints the assumptions of final
   Exitify and substitution. To rerun it, use
   `make -C theories -W RecoveryChecks.v RecoveryChecks.vo` with Coq 8.20 active.
+
+#### Key-only contract refinement (2026-10-30)
+
+Relative to `c8187b0c`, the emptiness, subset, and disjointness specifications and
+their public set-algebra helpers no longer require payload validity. WF premises
+remain explicit. Lookup-payload and predicate-sensitive filter laws retain their
+validity requirements. `ValidVarSet_iff_StrongValidVarSet` completes the two-way
+relationship between the existing predicates while preserving the original
+`ValidVarSet_StrongValidVarSet` implication.
+
+`RecoveryChecks.v` pins these contracts and conditional structural extensionality,
+rejects the removed dummy FSet operations and laws, and exercises the key-only
+specifications on a well-formed singleton whose stored Var has the wrong unique.
+That singleton is proved invalid, so the regression cannot discharge its goals
+through a hidden validity premise. The final Exitify contract and its remaining
+model assumptions stay as described above.
+
+Validation on 2026-10-30 passed the enabled GHC theory build, a per-file compile
+gate with Coq 8.20.1, `coqchk -silent` for `Proofs.RecoveryChecks` and its imported
+dependencies, and the shared Coq compiler suite. This refinement adds no axioms
+or admissions.
 
 Theory proof scope and status
 -----------------------------
