@@ -3,8 +3,6 @@ Require Import Data.Functor. Import Data.Functor.Notations.
 
 Require Import TrieMap.
 
-Require UniqFM.
-
 From Coq Require Import ssreflect ssrbool ssrfun.
 Set Bullet Behavior "Strict Subproofs".
 
@@ -43,28 +41,6 @@ Theorem tml_delete_there `{TML : TrieMapLaws m} {a} k (tm : m a) k' :
   k <> k' ->
   lookupTM k' (deleteTM k tm) = lookupTM k' tm.
 Proof. by move=> NEQ; rewrite /deleteTM tml_alter_there. Qed.
-
-(* BLOCKER (TrieMapLaws__Map): Map operations (lookup, alter, empty, foldr)
-   are concrete, but proving the 5 laws requires:
-   - tml_empty: lookup k empty = None. Needs Map.lookup_empty lemma.
-   - tml_alter_here/there: lookup k (alter k f m) = f (lookup k m) and
-     lookup k' (alter k f m) = lookup k' m for k<>k'. Needs alter_Desc
-     from containers/theories/MapProofs but in a lookup-oriented form.
-   - tml_fold_in/fold_via_list: Properties of Map.foldr. Needs foldr_spec
-     from MapProofs/ToListProofs.v adapted to the TrieMap formulation.
-   FEASIBLE but requires ~200 lines of glue lemmas connecting containers
-   proof infrastructure to the TrieMap interface. *)
-Instance TrieMapLaws__Map          {k} `{GHC.Base.Ord k}                        : TrieMapLaws (Data.Map.Internal.Map k).   Admitted.
-
-(* BLOCKER (TrieMapLaws__IntMap): IntMap operations are concrete.
-   - tml_empty: IntMap.lookup k IntMap.empty = None. Straightforward.
-   - tml_alter_here/there: IntMap.lookup k (IntMap.alter f k m) = f (IntMap.lookup k m).
-     Needs IntMap alter/lookup interaction lemmas (not yet in IntSetProofs
-     or IntMapProofs — those focus on member/insert/delete/union).
-   - tml_fold_in/fold_via_list: Properties of IntMap.foldr. The same
-     foldr unfolding issue as VarSetFSet's bridge lemmas (memory exhaustion).
-   PARTIALLY FEASIBLE: empty + alter laws likely provable; fold laws blocked. *)
-Instance TrieMapLaws__IntMap                                                    : TrieMapLaws IntMap.IntMap. Admitted.
 
 Instance TrieMapLaws__MaybeMap     {m} `{TrieMapLaws m}                         : TrieMapLaws (MaybeMap m).
 Proof.
@@ -119,19 +95,9 @@ Qed.
    the operation interactions. UNFIXABLE without changes to lib/TrieMap.v. *)
 Instance TrieMapLaws__ListMap      {m} `{TrieMapLaws m}                         : TrieMapLaws (ListMap m).                 Admitted.
 
-(* BLOCKER (TrieMapLaws__UniqFM): UniqFM wraps IntMap, and its operations
-   (lookupUFM, alterUFM, emptyUFM, nonDetFoldUFM) delegate to IntMap.
-   The key type goes through Uniquable (getUnique). Proving the laws requires:
-   - IntMap alter/lookup interaction lemmas (same as IntMap instance above)
-   - Uniquable injectivity or at least consistency axiom
-   - nonDetFoldUFM fold properties (blocked by foldr unfolding issues)
-   PARTIALLY FEASIBLE but depends on IntMap instance being proved first. *)
-Instance TrieMapLaws__UniqFM {key} `{Unique.Uniquable key}                       : TrieMapLaws (UniqFM.UniqFM key).        Admitted.
-
 (* Many TrieMap types (TypeMapX, CoreMapX, etc.) were axiomatized or removed
    in GHC 9.10. Only declare instances for types that exist. *)
 (* BLOCKER (TrieMapLaws__GenMap): GenMap is axiomatized (Axiom in TrieMap.v),
    so its structure is completely opaque. All operations are axiomatized.
    UNFIXABLE without de-axiomatizing GenMap. *)
 Instance TrieMapLaws__GenMap       {m} `{TrieMapLaws m} `{GHC.Base.Eq_ (Key m)} : TrieMapLaws (GenMap m).                  Admitted.
-

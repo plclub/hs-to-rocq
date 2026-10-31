@@ -5,6 +5,7 @@ Require Import Proofs.ScopeInvariant Proofs.JoinPointInvariants Proofs.Exitify.
 Require Proofs.ContainerContractCounterexamples Proofs.CoreSubst.
 Require Proofs.Axioms Proofs.VarSetInvariant Proofs.VarSetFSet.
 Require Proofs.VarSet Proofs.VarEnv.
+Require Proofs.TrieMap.
 
 (* Payload validity has two equivalent formulations, without trie-WF or
    default-value premises. Preserve the original one-way API as well. *)
@@ -127,6 +128,11 @@ Fail Check IntMapProofs.All_IntMaps_WF.
 Fail Check Axioms.ValidVarSet_Axiom.
 Fail Check Axioms.StrongValidVarSet_Axiom.
 Fail Check IntMapProofs.deferredFix2_eq.
+
+(* Raw map types do not satisfy the unconditional TrieMap laws. *)
+Fail Check Proofs.TrieMap.TrieMapLaws__Map.
+Fail Check Proofs.TrieMap.TrieMapLaws__IntMap.
+Fail Check Proofs.TrieMap.TrieMapLaws__UniqFM.
 
 (* The raw membership API must not grow the old dummy FSet operations or
    their unsupported interface laws back. Qualify names to avoid library

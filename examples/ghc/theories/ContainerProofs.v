@@ -320,8 +320,8 @@ Local Lemma filterWithKey_Desc {A} (s : IntMap.IntMap A) r f
   IntMapProofs.Desc0 (filterWithKey p s) r
     (fun i => match f i with Some v => if p i v then Some v else None | None => None end).
 Proof.
-  induction S as [A k v r f F R |
-    A l rl fl rr tr fr p mask r f Sl IHl Sr IHr Bits SubL SubR P M F]; intro pred.
+  induction S as [k v r f F R |
+    l rl fl rr tr fr p mask r f Sl IHl Sr IHr Bits SubL SubR P M F]; intro pred.
   - subst r. simpl. destruct (pred k v) eqn:E.
     + apply IntMapProofs.Desc_Desc0. apply IntMapProofs.DescTip; [|reflexivity].
       intro i. rewrite F. destruct (N.eqb_spec i k) as [->|H]; [rewrite E|]; reflexivity.
@@ -344,7 +344,7 @@ Local Lemma filterWithKey_Sem {A} (s : IntMap.IntMap A) f
   IntMapProofs.Sem (filterWithKey p s)
     (fun i => match f i with Some v => if p i v then Some v else None | None => None end).
 Proof.
-  destruct S as [A f F|A s r f S].
+  destruct S as [f F|s r f S].
   - apply IntMapProofs.SemNil. intro i. rewrite F. reflexivity.
   - apply IntMapProofs.Desc0_Sem with (r := r). apply filterWithKey_Desc. exact S.
 Qed.
@@ -399,8 +399,8 @@ Local Lemma tree_elem_Desc {A} (m : IntMap.IntMap A) r f
     (S : IntMapProofs.Desc m r f) : forall k v,
   tree_elem_kv k v m -> f k = Some v.
 Proof.
-  induction S as [A key val r f F R|
-    A l rl fl rr tr fr p mask r f Sl IHl Sr IHr Bits SubL SubR P M F]; intros k v H.
+  induction S as [key val r f F R|
+    l rl fl rr tr fr p mask r f Sl IHl Sr IHr Bits SubL SubR P M F]; intros k v H.
   - destruct H as [-> ->]. rewrite F N.eqb_refl. reflexivity.
   - destruct H as [H|H]; rewrite F.
     + rewrite (IHl _ _ H). reflexivity.
@@ -416,7 +416,7 @@ Lemma tree_elem_kv_lookup : forall A k (v:A) (m : IntMap.IntMap A),
   IntMapProofs.WF m -> tree_elem_kv k v m -> lookup k m = Some v.
 Proof.
   intros A k v m [f S] H. rewrite (IntMapProofs.lookup_Sem S).
-  destruct S as [A f F|A m r f S]; [contradiction|]. eapply tree_elem_Desc; eassumption.
+  destruct S as [f F|m r f S]; [contradiction|]. eapply tree_elem_Desc; eassumption.
 Qed.
 Lemma IntMap_map_keys_equal {A} `{GHC.Base.Eq_ A}
     (keyof : A -> N)

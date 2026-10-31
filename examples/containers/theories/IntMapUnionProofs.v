@@ -160,25 +160,17 @@ Program Fixpoint union_Desc
   Desc (union s1 s2) (commonRange r1 r2) f :=
   fun HD1 HD2 Hf => _.
 Next Obligation.
-  inversion HD1 as [a' k v r' f' Hf1 Hr1 |
-    a' l1 rl1 fl1 t1 rt1 ft1 p1 m1 r' f' HL1 HR1 HB1 HS1 HT1 HP1 HM1 HF1]; subst.
-  - repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-      apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-    rewrite union_Tip_l. eapply insert_Desc; try eassumption; try reflexivity.
+  inversion HD1 as [k v r' f' Hf1 Hr1 |
+    l1 rl1 fl1 t1 rt1 ft1 p1 m1 r' f' HL1 HR1 HB1 HS1 HT1 HP1 HM1 HF1]; subst.
+  - rewrite union_Tip_l. eapply insert_Desc; try eassumption; try reflexivity.
     union_sem.
-  - repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-      apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-    inversion HD2 as [a'' key2 value2 r'' f'' Hf2 Hr2 |
-      a'' l2 rl2 fl2 t2 rt2 ft2 p2 m2 r'' f'' HL2 HR2 HB2 HS2 HT2 HP2 HM2 HF2]; subst.
-    + repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-        apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-      erewrite union_Tip_r by eassumption.
+  - inversion HD2 as [key2 value2 r'' f'' Hf2 Hr2 |
+      l2 rl2 fl2 t2 rt2 ft2 p2 m2 r'' f'' HL2 HR2 HB2 HS2 HT2 HP2 HM2 HF2]; subst.
+    + erewrite union_Tip_r by eassumption.
       rewrite commonRange_sym by (eapply Desc_rNonneg; eassumption).
       eapply insertWithKey_Desc; try eassumption; try reflexivity.
       union_sem.
-    + repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-        apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-      rewrite union_Bin_Bin.
+    + rewrite union_Bin_Bin.
       set (sl := Bin (rPrefix r1) (rMask r1) l1 t1) in *.
       set (sr := Bin (rPrefix r2) (rMask r2) l2 t2) in *.
       rewrite !IntSetProofs.shorter_spec by assumption.
@@ -369,11 +361,9 @@ Program Fixpoint difference_Desc
   (forall i, f i = match f2 i with Some _ => None | None => f1 i end) ->
   Desc0 (difference s1 s2) r1 f := fun HD1 HD2 Hf => _.
 Next Obligation.
-  inversion HD1 as [a' k v r' f' Hf1 Hr1 |
-    a' l1 rl1 fl1 t1 rt1 ft1 p1 m1 r' f' HL1 HR1 HB1 HS1 HT1 HP1 HM1 HF1]; subst.
-  - repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-      apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-    rewrite difference_Tip_l, (member_Desc HD2).
+  inversion HD1 as [k v r' f' Hf1 Hr1 |
+    l1 rl1 fl1 t1 rt1 ft1 p1 m1 r' f' HL1 HR1 HB1 HS1 HT1 HP1 HM1 HF1]; subst.
+  - rewrite difference_Tip_l, (member_Desc HD2).
     destruct (f2 k) eqn:E; cbn.
     + apply Desc0Nil. intro i. rewrite Hf, Hf1.
       destruct (i =? k)%N eqn:Ei.
@@ -384,17 +374,11 @@ Next Obligation.
       destruct (i =? k)%N eqn:Ei.
       * apply N.eqb_eq in Ei. subst i. rewrite E. reflexivity.
       * destruct (f2 i); reflexivity.
-  - repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-      apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-    inversion HD2 as [b' key2 value2 r'' f'' Hf2 Hr2 |
-      b' l2 rl2 fl2 t2 rt2 ft2 p2 m2 r'' f'' HL2 HR2 HB2 HS2 HT2 HP2 HM2 HF2]; subst.
-    + repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-        apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-      erewrite difference_Tip_r by eassumption.
+  - inversion HD2 as [key2 value2 r'' f'' Hf2 Hr2 |
+      l2 rl2 fl2 t2 rt2 ft2 p2 m2 r'' f'' HL2 HR2 HB2 HS2 HT2 HP2 HM2 HF2]; subst.
+    + erewrite difference_Tip_r by eassumption.
       eapply delete_Desc; [exact HD1 | apply isSubrange_refl |]. union_sem.
-    + repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-        apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-      rewrite difference_Bin_Bin.
+    + rewrite difference_Bin_Bin.
       set (sl := Bin (rPrefix r1) (rMask r1) l1 t1) in *.
       set (sr := Bin (rPrefix r2) (rMask r2) l2 t2) in *.
       rewrite !IntSetProofs.shorter_spec by assumption.
@@ -579,11 +563,9 @@ Program Fixpoint intersection_Desc
   (forall i, f i = match f2 i with Some _ => f1 i | None => None end) ->
   Desc0 (intersection s1 s2) r1 f := fun HD1 HD2 Hf => _.
 Next Obligation.
-  inversion HD1 as [a' k v r' f' Hf1 Hr1 |
-    a' l1 rl1 fl1 t1 rt1 ft1 p1 m1 r' f' HL1 HR1 HB1 HS1 HT1 HP1 HM1 HF1]; subst.
-  - repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-      apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-    rewrite intersection_Tip_l, (member_Desc HD2).
+  inversion HD1 as [k v r' f' Hf1 Hr1 |
+    l1 rl1 fl1 t1 rt1 ft1 p1 m1 r' f' HL1 HR1 HB1 HS1 HT1 HP1 HM1 HF1]; subst.
+  - rewrite intersection_Tip_l, (member_Desc HD2).
     destruct (f2 k) eqn:E; cbn.
     + eapply Desc0NotNil; [exact HD1 | apply isSubrange_refl |].
       intro i. rewrite Hf, Hf1.
@@ -594,13 +576,9 @@ Next Obligation.
       destruct (i =? k)%N eqn:Ei.
       * apply N.eqb_eq in Ei. subst i. rewrite E. reflexivity.
       * destruct (f2 i); reflexivity.
-  - repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-      apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-    inversion HD2 as [b' key2 value2 r'' f'' Hf2 Hr2 |
-      b' l2 rl2 fl2 t2 rt2 ft2 p2 m2 r'' f'' HL2 HR2 HB2 HS2 HT2 HP2 HM2 HF2]; subst.
-    + repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-        apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-      rewrite (intersection_Tip_r _ _ _ _ _ HD1).
+  - inversion HD2 as [key2 value2 r'' f'' Hf2 Hr2 |
+      l2 rl2 fl2 t2 rt2 ft2 p2 m2 r'' f'' HL2 HR2 HB2 HS2 HT2 HP2 HM2 HF2]; subst.
+    + rewrite (intersection_Tip_r _ _ _ _ _ HD1).
       destruct (f1 key2) eqn:E.
       * eapply Desc0NotNil; [apply singleton_Desc | |].
         -- unfold isSubrange. rewrite rPrefix_singletonRange.
@@ -614,9 +592,7 @@ Next Obligation.
         destruct (i =? key2)%N eqn:Ei.
         -- apply N.eqb_eq in Ei. subst i. exact E.
         -- reflexivity.
-    + repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-        apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-      rewrite intersection_Bin_Bin.
+    + rewrite intersection_Bin_Bin.
       set (sl := Bin (rPrefix r1) (rMask r1) l1 t1) in *.
       set (sr := Bin (rPrefix r2) (rMask r2) l2 t2) in *.
       rewrite !IntSetProofs.shorter_spec by assumption.
@@ -724,24 +700,16 @@ Program Fixpoint disjoint_intersection_Desc
   Desc s1 r1 f1 -> Desc s2 r2 f2 ->
   disjoint s1 s2 = null (intersection s1 s2) := fun HD1 HD2 => _.
 Next Obligation.
-  inversion HD1 as [a' k v r' f' Hf1 Hr1 |
-    a' l1 rl1 fl1 t1 rt1 ft1 p1 m1 r' f' HL1 HR1 HB1 HS1 HT1 HP1 HM1 HF1]; subst.
-  - repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-      apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-    rewrite disjoint_Tip_l, intersection_Tip_l.
+  inversion HD1 as [k v r' f' Hf1 Hr1 |
+    l1 rl1 fl1 t1 rt1 ft1 p1 m1 r' f' HL1 HR1 HB1 HS1 HT1 HP1 HM1 HF1]; subst.
+  - rewrite disjoint_Tip_l, intersection_Tip_l.
     unfold notMember. destruct (member k s2); reflexivity.
-  - repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-      apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-    inversion HD2 as [b' key2 value2 r'' f'' Hf2 Hr2 |
-      b' l2 rl2 fl2 t2 rt2 ft2 p2 m2 r'' f'' HL2 HR2 HB2 HS2 HT2 HP2 HM2 HF2]; subst.
-    + repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-        apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-      rewrite disjoint_Tip_r, (intersection_Tip_r _ _ _ _ _ HD1).
+  - inversion HD2 as [key2 value2 r'' f'' Hf2 Hr2 |
+      l2 rl2 fl2 t2 rt2 ft2 p2 m2 r'' f'' HL2 HR2 HB2 HS2 HT2 HP2 HM2 HF2]; subst.
+    + rewrite disjoint_Tip_r, (intersection_Tip_r _ _ _ _ _ HD1).
       unfold notMember. rewrite (member_Desc HD1).
       destruct (f1 key2); reflexivity.
-    + repeat match goal with H : existT _ _ _ = existT _ _ _ |- _ =>
-        apply Eqdep.EqdepTheory.inj_pair2 in H end; subst.
-      rewrite disjoint_Bin_Bin, intersection_Bin_Bin.
+    + rewrite disjoint_Bin_Bin, intersection_Bin_Bin.
       repeat match goal with |- context [if ?test then _ else _] => destruct test end;
         rewrite ?null_bin;
         repeat erewrite disjoint_intersection_Desc by

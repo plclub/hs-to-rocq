@@ -301,7 +301,7 @@ Thus `WellScoped_substExpr` keeps its well-scopedness conclusion but has
 stronger hypotheses through this internal predicate. `WellScoped` itself
 has not changed.
 
-#### Final Exitify boundary and remaining assumptions
+#### Final Exitify boundary and 2026-10-29 assumptions
 
 `exitifyProgram_WellScoped_JPV` retains its exact statement:
 
@@ -320,7 +320,7 @@ construction and preservation lemmas rather than new program hypotheses.
 
 Actual `Print Assumptions` checks for final Exitify and `WellScoped_substExpr`
 contain none of the three rejected axioms or the blanket validity alias.
-Final Exitify still depends on:
+At this checkpoint, final Exitify depends on:
 
 * `uniqAway` contracts, the unique-locality axiom, and type/FV model APIs;
 * abstract GHC parameters, including opaque type builders and DSet functions;
@@ -368,6 +368,36 @@ Validation on 2026-10-30 passed the enabled GHC theory build, a per-file compile
 gate with Coq 8.20.1, `coqchk -silent` for `Proofs.RecoveryChecks` and its imported
 dependencies, and the shared Coq compiler suite. This refinement adds no axioms
 or admissions.
+
+#### TrieMap and Eqdep cleanup (2026-10-31)
+
+Relative to `c14ff1f6`, the admitted `TrieMapLaws__Map`,
+`TrieMapLaws__IntMap`, and `TrieMapLaws__UniqFM` instances are removed.
+Their unconditional laws were false on the exposed raw map types: a fold can
+visit a stored value that lookup cannot reach. The generic laws and proved
+`MaybeMap` instance remain. `TrieMap.v` now has two admitted law instances,
+for the opaque `ListMap` and `GenMap` APIs; their proofs are still incomplete.
+
+The IntMap predicates `Desc`, `Desc0`, and `Sem` now take their element type as
+a uniform parameter. Their constructor fields, representation invariants, and
+operation contracts are preserved. Ordinary inversion replaces dependent-pair
+injectivity in `IntMapProofs.v` and `IntMapUnionProofs.v`; the GHC container
+proofs use the corresponding constructor patterns.
+
+Actual before/after `Print Assumptions` checks show that final Exitify loses
+only `Eqdep.Eq_rect_eq.eq_rect_eq` from the 2026-10-29 assumption list above.
+Its exact program-level contract and the WF/validity boundary remain intact.
+The substitution theorem's assumption list is unchanged. This cleanup adds
+no axioms or admissions; the existing model, functional-extensionality, and
+guarded deferred-recursion assumptions remain.
+
+Validation with Coq 8.20.1 passed the full containers and enabled GHC theory
+builds, a fresh compile gate for all five changed Coq files, and
+`coqchk -silent` for `IntMapProofs`, `IntMapUnionProofs`, `Proofs.TrieMap`, and
+`Proofs.RecoveryChecks` and their imported dependencies. The shared Coq compiler
+suite passed all 53 PASS cases and 3 expected compiler failures.
+`RecoveryChecks.v` continues to pin the final Exitify type and now also rejects
+the three removed TrieMap instance names with `Fail Check`.
 
 Theory proof scope and status
 -----------------------------

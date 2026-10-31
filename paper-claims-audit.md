@@ -6,6 +6,7 @@
 **Original branch**: ghc910-coq820 (GHC 9.10.3, Coq 8.20, containers v0.7)
 **Recovery update**: 2026-10-28, proof-recovery, starting at `1e4483ca`
 **Invariant recovery update**: 2026-10-29, proof-recovery, relative to `bd8b4f9d`
+**Logical-assumption cleanup**: 2026-10-31, proof-recovery, relative to `c14ff1f6`
 
 This document preserves a source-search audit of claims from three publications.
 The dated updates distinguish later proof recovery from that historical
@@ -293,6 +294,31 @@ uses a WF singleton with an invalid payload to exercise the key-only contracts.
 The final Exitify theorem keeps its exact contract. No new axioms or admissions
 are introduced by this refinement; the model assumptions listed above remain.
 
+### TrieMap and Eqdep cleanup (2026-10-31)
+
+**Baseline: `c14ff1f6` on `proof-recovery`.** The admitted
+`TrieMapLaws__Map`, `TrieMapLaws__IntMap`, and `TrieMapLaws__UniqFM` instances
+are removed because their unconditional laws do not hold on raw map types.
+The remaining two admissions in `theories/TrieMap.v` are the law instances
+for the opaque `ListMap` and `GenMap` APIs. No replacement instances or new
+axioms/admissions are introduced.
+
+IntMap's `Desc`, `Desc0`, and `Sem` now use a uniform element-type parameter,
+preserving their constructor content and all representation premises. This
+lets the semantic proofs use ordinary inversion without
+`Eqdep.EqdepTheory.inj_pair2`. Actual before/after `Print Assumptions` checks
+show that final Exitify loses only `Eqdep.Eq_rect_eq.eq_rect_eq`; substitution's
+assumption list is unchanged. The exact final Exitify contract, scoping and
+join-point predicates, and WF/validity requirements are preserved. The model,
+functional-extensionality, and guarded deferred-recursion assumptions remain.
+
+Coq 8.20.1 validation passed the full containers and enabled GHC theory builds,
+a fresh compile gate for all five changed Coq files, and `coqchk -silent` for
+`IntMapProofs`, `IntMapUnionProofs`, `Proofs.TrieMap`, and `Proofs.RecoveryChecks`
+with their imported dependencies. The shared Coq compiler suite passed all
+53 PASS cases and 3 expected compiler failures. `RecoveryChecks.v` pins the
+final theorem type and rejects the removed instance names with `Fail Check`.
+
 ### Admitted Summary (GHC Theories, historical)
 
 Only the CSE and Exitify rows were rechecked on 2026-10-28. The other rows
@@ -340,7 +366,9 @@ JoinPointInvariantsInductive, OrdList, Unique, Util
 1. **CSE.v**: The four equation regressions were resolved on 2026-10-28 with
    native translation, edits, and a translator pattern-guard fix. The inherited
    `WS_cseExpr` admission remains.
-2. **TrieMap.v** (5 Admitted): TrieMap types axiomatized in GHC 9.10
+2. **TrieMap.v** (historical: 5 Admitted): On 2026-10-31, three unsupported raw-map
+   law instances were removed. The two law instances for opaque ListMap and
+   GenMap APIs remain admitted.
 
 ### Proof Work Identified in the Original Audit
 
@@ -356,14 +384,15 @@ JoinPointInvariantsInductive, OrdList, Unique, Util
 
 ## Summary
 
-The GHC entries below include the dated recoveries through 2026-10-29. Other
+The GHC entries below include the dated recoveries through 2026-10-31. Other
 entries retain the original audit's findings and have not been re-audited here.
 
 ### What Holds
 - `WellScoped_substExpr`: preserved conclusion under strengthened
   `WellScoped_Subst` hypotheses (2026-10-29)
 - `exitifyProgram_WellScoped_JPV`: exact statement retained without the three
-  inconsistent axioms; disclosed model and logical assumptions remain (2026-10-29)
+  inconsistent axioms or `eq_rect_eq`; disclosed model and other logical
+  assumptions remain (2026-10-31)
 - Complete FSetInterface for Set, IntSet; FMapInterface for Map
 - All type class laws (Eq, Ord, Semigroup, Monoid, Functor) for Set, IntSet, Map
 - QuickCheck property proofs for IntSet (0 Admitted)
@@ -383,6 +412,8 @@ entries retain the original audit's findings and have not been re-audited here.
 - IntMap/VarSet: blanket WF, blanket key validity, and unguarded fixpoint
   assumptions removed on 2026-10-29, with no new axioms or admissions relative
   to `bd8b4f9d`
+- IntMap/TrieMap: `eq_rect_eq` removed from final Exitify's dependencies and
+  three false raw-map law instances removed on 2026-10-31
 - Map fromList proofs: 0 Admitted (both Coq 8.20 `Program Fixpoint` regressions fixed)
 
 ### What Improved
