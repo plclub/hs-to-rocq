@@ -38,6 +38,17 @@ and are needed to translate any modules that use the ``base`` libraries.
 The ``-o`` argument specifies the output directory for the generated ``.v`` files.
 In this case, it is the current directory.
 
+.. option:: --require-origin SOURCE=ROCQ
+
+Require this invocation to emit a definition translated from the original,
+fully qualified Haskell binding ``SOURCE`` at the fully qualified Rocq name
+``ROCQ``. Repeat the option to require multiple definitions. For example, after
+renaming module ``Input`` to ``Output``, use
+``--require-origin Input.f=Output.f``. Skipping, axiomatizing, or redefining
+``Input.f`` does not satisfy this check. A failed check exits nonzero; generated
+files can still exist. Compile the output separately to check its type and
+assumptions.
+
 .. option:: --target-version {8.20|9.0}
 
 Selects the target Rocq/Coq version. The default is ``8.20``, which emits

@@ -1,0 +1,66 @@
+# The legacy Empty case has no payload. The Choreo2 API uses a separate,
+# evidence-based unwrap; Network needs only LocTm from the legacy module.
+skip Choreography.Location.unwrap
+data kinds Choreography.Location.@ Type, Parkour.Symbol.Symbol
+
+# The final argument is an index. Existentials in App, Bind, Send, Comm
+# and Locally are quantified in their constructor, not fixed parameters.
+data type arguments Control.Monad.Tree.Tree (parameters: f) (indices: a)
+data type arguments Choreography.Network.NetworkSig (parameters: m) (indices: a)
+data kinds Choreography.Network.NetworkSig (Type -> Type), Type
+data type arguments Choreography.Choreo2.ChoreoSig (parameters: m p) (indices: a)
+data kinds Choreography.Choreo2.ChoreoSig (Type -> Type), Parkour.Symbol.Symbol, Type
+rename value Choreography.Choreo2.At = Choreography.Choreo2.Mk_At
+rename value Choreography.Choreo2.Epp = Choreography.Choreo2.Mk_Epp
+data kinds Choreography.Choreo2.At Type, Parkour.Symbol.Symbol, Parkour.Symbol.Symbol
+order Choreography.Choreo2.Applicative__Epp Choreography.Choreo2.Monad__Epp Choreography.Choreo2.MonadReader__SessionId__Epp
+order Choreography.Choreo2.Monad__Epp Choreography.Choreo2.MonadTrans__Epp
+
+rename type GHC.Types.Symbol = Parkour.Symbol.Symbol
+rename type GHC.Internal.TypeLits.KnownSymbol = Parkour.Symbol.KnownSymbol
+rename type GHC.Internal.TypeLits.SSymbol = Parkour.Symbol.SSymbol
+rename value GHC.Internal.TypeLits.SSymbol = Parkour.Symbol.MkSSymbol
+rename value GHC.Internal.TypeLits.symbolVal = Parkour.Symbol.symbolVal
+rename value Data.Singletons.Decide.Proved = Parkour.Symbol.Proved
+rename value Data.Singletons.Decide.Disproved = Parkour.Symbol.Disproved
+rename value Data.Singletons.Decide.%~ = Parkour.Symbol.decide
+rename type GHC.Internal.Data.Type.Equality.:~: = Parkour.Symbol.Equal
+rename value GHC.Internal.Data.Type.Equality.Refl = Parkour.Symbol.Refl
+rename value GHC.Internal.Data.Type.Equality.sym = eq_sym
+rename value GHC.Internal.Data.Type.Equality.trans = eq_trans
+
+rename type Language.Haskell.TH.Syntax.Q = Parkour.TH.Q
+rename type Language.Haskell.TH.Syntax.Dec = Parkour.TH.Dec
+rename value Language.Haskell.TH.Syntax.mkName = Parkour.TH.mkName
+rename value Language.Haskell.TH.Syntax.SigD = Parkour.TH.SigD
+rename value Language.Haskell.TH.Syntax.AppT = Parkour.TH.AppT
+rename value Language.Haskell.TH.Syntax.ConT = Parkour.TH.ConT
+rename value Language.Haskell.TH.Syntax.LitT = Parkour.TH.LitT
+rename value Language.Haskell.TH.Syntax.StrTyLit = Parkour.TH.StrTyLit
+rename value Language.Haskell.TH.Syntax.ValD = Parkour.TH.ValD
+rename value Language.Haskell.TH.Syntax.VarP = Parkour.TH.VarP
+rename value Language.Haskell.TH.Syntax.NormalB = Parkour.TH.NormalB
+rename value Language.Haskell.TH.Syntax.ConE = Parkour.TH.ConE
+
+rename type GHC.Internal.Show.Show = Parkour.Codec.Show
+rename type GHC.Internal.Read.Read = Parkour.Codec.Read
+
+rename type Control.Monad.Reader.Class.MonadReader = Parkour.Reader.MonadReader
+rename value Control.Monad.Reader.Class.ask = Parkour.Reader.ask
+rename value Control.Monad.Reader.Class.local = Parkour.Reader.local
+rename value Control.Monad.Reader.Class.reader = Parkour.Reader.reader
+
+# Runtime boundary for the upstream quorum-voting executable.
+rename type GHC.Types.IO = Parkour.Runtime.IO
+rename type GHC.Internal.Conc.Sync.TVar = Parkour.Runtime.TVar
+rename type Choreography.Network.Http.HttpConfig = Parkour.Http.HttpConfig
+rename value GHC.Internal.Conc.Sync.atomically = Parkour.Runtime.atomically
+rename value GHC.Internal.Conc.Sync.newTVarIO = Parkour.Runtime.newTVarIO
+rename value GHC.Internal.Conc.Sync.readTVar = Parkour.Runtime.readTVar
+rename value Control.Concurrent.STM.TVar.modifyTVar = Parkour.Runtime.modifyTVar
+rename value Control.Monad.STM.check = Parkour.Runtime.check
+rename value GHC.Internal.System.IO.getLine = Parkour.Runtime.getLine
+rename value GHC.Internal.System.IO.putStrLn = Parkour.Runtime.putStrLn
+rename value GHC.Internal.System.Environment.getArgs = Parkour.Runtime.getArgs
+rename value GHC.Internal.Text.Read.read = Parkour.Runtime.read
+rename value Choreography.Network.Http.mkHttpConfig = Parkour.Http.mkHttpConfig

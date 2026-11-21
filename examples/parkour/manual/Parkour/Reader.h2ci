@@ -1,0 +1,18 @@
+classDefns:
+  Parkour.Reader.MonadReader: ClassDefinition (Qualified "Parkour.Reader" "MonadReader")
+    [Typed Ungeneralizable Explicit (Ident (Bare "r") :| []) (Qualid (Bare "Type")),Typed
+    Ungeneralizable Explicit (Ident (Bare "m") :| []) (Arrow (Qualid (Bare "Type"))
+    (Qualid (Bare "Type"))),Generalized Implicit (App (Qualid (Qualified "GHC.Base"
+    "Monad")) (PosArg (Qualid (Bare "m")) :| []))] Nothing [(Qualified "Parkour.Reader"
+    "ask",App (Qualid (Bare "m")) (PosArg (Qualid (Bare "r")) :| [])),(Qualified "Parkour.Reader"
+    "local",Forall (Typed Ungeneralizable Implicit (Ident (Bare "a") :| []) (Qualid
+    (Bare "Type")) :| []) (Arrow (Arrow (Qualid (Bare "r")) (Qualid (Bare "r"))) (Arrow
+    (App (Qualid (Bare "m")) (PosArg (Qualid (Bare "a")) :| [])) (App (Qualid (Bare
+    "m")) (PosArg (Qualid (Bare "a")) :| []))))),(Qualified "Parkour.Reader" "reader",Forall
+    (Typed Ungeneralizable Implicit (Ident (Bare "a") :| []) (Qualid (Bare "Type"))
+    :| []) (Arrow (Arrow (Qualid (Bare "r")) (Qualid (Bare "a"))) (App (Qualid (Bare
+    "m")) (PosArg (Qualid (Bare "a")) :| []))))]
+classTypes:
+  Parkour.Reader.MonadReader: fromList []
+superclassCount:
+  Parkour.Reader.MonadReader: '3'

@@ -179,7 +179,7 @@ rewriteDataTypeArguments dta bs = do
   let dtaEditFailure what =
         editFailure $ what ++ " when adjusting data type parameters and indices"
 
-  let (ibs, ebs) = span (\b -> binderExplicitness b == Coq.Implicit) bs
+  let (ibs, ebs) = span (\b -> binderExplicitness b /= Coq.Explicit) bs
 
   explicitMap <-
     let extraImplicit  = "non-initial implicit arguments"
@@ -189,7 +189,7 @@ rewriteDataTypeArguments dta bs = do
          Typed    g Coq.Explicit xs ty -> Right [(x, Typed g Coq.Explicit (pure x) ty) | x <- toList xs]
 
          ImplicitBinders _           -> Left extraImplicit
-         Typed    _ Coq.Implicit _ _ -> Left extraImplicit
+         Typed{}                     -> Left extraImplicit
 
          Generalized _ _   -> Left complexBinding
 

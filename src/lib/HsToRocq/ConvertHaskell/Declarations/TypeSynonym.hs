@@ -13,7 +13,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
 
 import HsToRocq.Rocq.Gallina as Coq
-import HsToRocq.Rocq.Gallina.Util (pattern Var, appList, binderIdents)
+import HsToRocq.Rocq.Gallina.Util (pattern Var, appList, binderIdents, mkTypedBinder)
 import HsToRocq.Rocq.FreeVars
 import HsToRocq.Util.FVs
 
@@ -37,12 +37,16 @@ convertSynDecl :: LocalConvMonad r m
                -> m SynBody
 convertSynDecl name args def  = do
   coqName <- freeVar $ unLoc name
-  params <- convertLHsTyVarBndrs Coq.Explicit args
+  rawParams <- convertLHsTyVarBndrs Coq.Explicit args
+  q <- var TypeNS (unLoc name)
+  kinds <- view (edits.dataKinds.at q)
+  let annotate (ExplicitBinder n) (Just k) = mkTypedBinder Explicit n k
+      annotate binder _ = binder
+      params = zipWith annotate rawParams (maybe [] (map Just . NE.toList) kinds ++ repeat Nothing)
   rhs    <- convertLHsType def
   let (params', rhs') = etaContract params rhs
-  SynBody <$> var TypeNS (unLoc name)
-          <*> pure params'
-          <*> view (edits.typeSynonymTypes . at coqName . to (fmap Var))
+  SynBody q params'
+          <$> view (edits.typeSynonymTypes . at coqName . to (fmap Var))
           <*> pure (rhs' `InScope` "type")
 
 -- Eta-contracting type synonyms allows Coq’s instance resolution mechanism
@@ -61,5 +65,3 @@ etaContract bndrs (App f args)
         = go bs as
     go bs as = (bs, as)
 etaContract b t = (b,t)
-
-

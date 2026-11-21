@@ -5,7 +5,7 @@
 module HsToRocq.Util.GHC.Module (
   module Module, ModuleData(..),
   moduleNameText, mkModuleNameT,
-  modName, modExports, modDetails) where
+  modName, modExports, modDetails, modCallbackUses, modMethodCalls) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -13,6 +13,8 @@ import qualified Data.Text as T
 import Control.Lens
 
 import qualified GHC
+import HsToRocq.Util.GHC.Callbacks (CallbackUses)
+import HsToRocq.Util.GHC.MethodCalls (MethodCalls)
 #if __GLASGOW_HASKELL__ >= 900
 import GHC.Plugins hiding ((<>))
 import GHC.Core.InstEnv (InstEnv, unionInstEnv)
@@ -29,6 +31,8 @@ import HscTypes (ModDetails(..), emptyModDetails)
 data ModuleData = ModuleData { _modName     :: ModuleName
                              , _modExports  :: [GHC.Name]
                              , _modDetails  :: ModDetails
+                             , _modCallbackUses :: CallbackUses
+                             , _modMethodCalls :: MethodCalls
                              } 
 makeLenses ''ModuleData
 

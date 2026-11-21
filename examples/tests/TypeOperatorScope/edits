@@ -1,0 +1,4 @@
+add TypeOperatorScope Theorem TypeOperatorScope.operator_sample :
+  TypeOperatorScope.sample =
+  TypeOperatorScope.Next (TypeOperatorScope.Box (TypeOperatorScope.End true false)).
+Proof. reflexivity. Qed.

@@ -191,6 +191,7 @@ data Generalizability = Ungeneralizable                                         
 -- |@/explicitness/ ::=@ – not a part of the grammar /per se/, but a common fragment
 data Explicitness = Explicit                                                                   -- ^@( ⋯ )@ – wrap in parentheses
                   | Implicit                                                                   -- ^@{ ⋯ }@ – wrap in braces
+                  | NonMaximal                                                                 -- ^@[ ... ]@ – insert only when followed by another argument
                   deriving (Eq, Ord, Show, Read, Enum, Bounded, Typeable, Data)
 
 -- |@/binder/ ::=@ – the @/explicitness/@ is extra

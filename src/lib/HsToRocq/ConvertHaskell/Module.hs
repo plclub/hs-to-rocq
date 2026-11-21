@@ -44,6 +44,7 @@ import GHC hiding (Name)
 import HsToRocq.Util.GHC.HsTypes (noExtCon)
 #endif
 import HsToRocq.Util.GHC.Module
+import HsToRocq.Util.GHC.Name (nameModule_maybe, occNameString, nameOccName)
 #if __GLASGOW_HASKELL__ >= 910
 import HsToRocq.Util.GHC.Deriving (neededDerivingBinds)
 #endif
@@ -90,6 +91,7 @@ data ConvertedModuleDeclarations =
                               , convertedClsInstDecls :: ![Sentence]
                               , convertedAddedTyCls   :: ![Sentence]
                               , convertedAddedDecls   :: ![Sentence]
+                              , convertedOrigins      :: [(T.Text, Qualid)]
                               }
   deriving (Eq, Ord, Show, Data)
 
@@ -384,7 +386,7 @@ toEquationsSentence cdef mterm = do
 
     isImplicitBinder (ImplicitBinders _) = True
     isImplicitBinder (Generalized Implicit _) = True
-    isImplicitBinder (Typed _ Implicit _ _) = True
+    isImplicitBinder (Typed _ ex _ _) = ex /= Explicit
     isImplicitBinder _ = False
 
 -- The first auxiliary pool comes from axiomatized original modules. Keep its
@@ -433,13 +435,23 @@ convertHsGroup HsGroup{..} (axAuxBinds, auxBinds) = do
           ValBindsOut binds lsigs -> do
 #endif
             sigs <- convertLSigs lsigs `catchIfAxiomatizing` const @_ @SomeException (pure M.empty)
-            let convertBinding' !b = (,) (convertedBindingName b) <$> convertBinding sigs b
+            let convertBinding' source !b = do
+                  sentences <- convertBinding sigs b
+                  let origins = case (source, b) of
+                        (FunBind{fun_id = L _ hs}, ConvertedDefinitionBinding cd)
+                          | Just home <- nameModule_maybe hs ->
+                            [ (moduleNameText (moduleName home) <> "." <> T.pack (occNameString (nameOccName hs)), name)
+                            | sentence <- sentences
+                            , name <- definitionNames sentence
+                            , name == cd^.convDefName ]
+                        _ -> []
+                  pure (convertedBindingName b, sentences, origins)
             defns <- (convertTypedModuleBindings (concatMap (bagToList . snd) binds) sigs
                        ??
                        handler)
                      convertBinding'
-            let unnamedSentences = concat [ sentences | (Nothing, sentences) <- defns ]
-            let namedSentences   = [ (name, sentences) | (Just name, sentences) <- defns ]
+            let unnamedSentences = concat [ sentences | (Nothing, sentences, _) <- defns ]
+            let namedSentences   = [ (name, sentences) | (Just name, sentences, _) <- defns ]
             let defnsMap = M.fromList namedSentences
 
             -- defnsMap    :: Map Qualid [Sentence]
@@ -454,13 +466,15 @@ convertHsGroup HsGroup{..} (axAuxBinds, auxBinds) = do
             let (promotedSentences, namedSentences') =
                   partition (\(name, _) -> name `S.member` depsSet) namedSentences
 
-            pure (unnamedSentences ++ concatMap snd namedSentences', concatMap snd promotedSentences)
+            pure (unnamedSentences ++ concatMap snd namedSentences', concatMap snd promotedSentences,
+                  concat [os | (_, _, os) <- defns])
 
-  (axVals, axPromoted) <- local (edits.axiomatizedModules %~ S.insert mod) $
+  (axVals, axPromoted, axOrigins) <- local (edits.axiomatizedModules %~ S.insert mod) $
     convertVals (neededAux axAuxBinds)
-  (vals, promoted) <- convertVals (hs_valds `plusHsValBinds` neededAux auxBinds)
+  (vals, promoted, origins) <- convertVals (hs_valds `plusHsValBinds` neededAux auxBinds)
   let convertedValDecls = axVals ++ vals
       promotedDecls = axPromoted ++ promoted
+      convertedOrigins = axOrigins ++ origins
 
   (convertedAddedTyCls,convertedAddedDecls) <- view (edits.additions.at mod.non ([],[]))
 
@@ -469,13 +483,19 @@ convertHsGroup HsGroup{..} (axAuxBinds, auxBinds) = do
   pure ConvertedModuleDeclarations{..}
   where
     -- TODO: factor this out?
-    axiomatizeBinding :: ConversionMonad r m => HsBind GhcRn -> GhcException -> m (Maybe Qualid, [Sentence])
+    definitionNames (DefinitionSentence (DefinitionDef _ name _ _ _ _)) = [name]
+    definitionNames (FixpointSentence (Fixpoint bodies _)) = [name | FixBody name _ _ _ _ <- toList bodies]
+    definitionNames (ProgramSentence sentence _) = definitionNames sentence
+    definitionNames (EquationsSentence eqns) = [eqnName eqns]
+    definitionNames _ = []
+
+    axiomatizeBinding :: ConversionMonad r m => HsBind GhcRn -> GhcException -> m (Maybe Qualid, [Sentence], [(T.Text, Qualid)])
     axiomatizeBinding FunBind{..} exn = do
       name <- var ExprNS (unLoc fun_id)
-      pure (Just name, [translationFailedComment (qualidBase name) exn, axiom name])
+      pure (Just name, [translationFailedComment (qualidBase name) exn, axiom name], [])
     axiomatizeBinding _ exn =
       pure (Nothing, [CommentSentence $ Comment $
-        "While translating non-function binding: " <> T.pack (show exn)])
+        "While translating non-function binding: " <> T.pack (show exn)], [])
 
 #if __GLASGOW_HASKELL__ >= 806 && __GLASGOW_HASKELL__ < 910
 convertHsGroup (XHsGroup v) _ = noExtCon v
@@ -491,6 +511,7 @@ data ConvertedModule =
                   , convModClsInstDecls :: ![Sentence]
                   , convModAddedTyCls   :: ![Sentence]
                   , convModAddedDecls   :: ![Sentence]
+                  , convModOrigins      :: [(T.Text, Qualid)]
                   }
   deriving (Eq, Ord, Show, Data)
 
@@ -508,6 +529,7 @@ convertModule convModData group auxBinds = do
                                 , convertedClsInstDecls = convModClsInstDecls
                                 , convertedAddedTyCls   = convModAddedTyCls
                                 , convertedAddedDecls   = convModAddedDecls
+                                , convertedOrigins      = convModOrigins
                                 }
       <- convertHsGroup group auxBinds
     let convModName = convModData ^. modName
@@ -572,12 +594,12 @@ convertModules :: GlobalMonad r m => [(ModuleData, HsGroup GhcRn, HsValBinds Ghc
 convertModules sources = do
   -- Collect modules with the same post-`rename module` name
   let noAux = (hs_valds emptyRnGroup, hs_valds emptyRnGroup)
-  mergedModulesNELs <-  traverse (foldrM buildGroups (emptyRnGroup, emptyRnGroup, mempty, mempty, mempty, noAux))
+  mergedModulesNELs <-  traverse (foldrM buildGroups (emptyRnGroup, emptyRnGroup, mempty, mempty, mempty, mempty, noAux))
                     .   M.fromListWith (<>)
                     =<< traverse (renameModule . _modName . (\(modData, _, _) -> modData) <&&&> pure . pure @NonEmpty) sources
 
-  cmods <- for (M.toList mergedModulesNELs) $ \(name, (axGrp, convGrp, mode, combinedExports, combinedDetails, auxBinds)) ->
-            let modData = ModuleData {_modName = name, _modExports = combinedExports, _modDetails = combinedDetails} in 
+  cmods <- for (M.toList mergedModulesNELs) $ \(name, (axGrp, convGrp, mode, combinedExports, combinedDetails, (uses,calls), auxBinds)) ->
+            let modData = ModuleData name combinedExports combinedDetails uses calls in
               case mode of
                 ModeAxiomatize -> axiomatizeModule' modData (axGrp `appendGroups` convGrp) auxBinds
                 ModeConvert    -> convertModule modData convGrp auxBinds
@@ -587,23 +609,25 @@ convertModules sources = do
   pure $ stronglyConnCompNE [(cmod, convModName cmod, imps) | (cmod, imps) <- cmods]
 
   where
-    buildGroups (modData, modGrp, auxBinds) (axGrp, convGrp, mode, combinedExports, combinedDetails, (axAux, convAux)) =
+    buildGroups (modData, modGrp, auxBinds) (axGrp, convGrp, mode, combinedExports, combinedDetails, uses, (axAux, convAux)) =
       view (edits.axiomatizedOriginalModuleNames.contains (modData^.modName)) <&> \case
         True  -> ( modGrp{hs_tyclds = []}                     `appendGroups` axGrp
                  , emptyRnGroup{hs_tyclds = hs_tyclds modGrp} `appendGroups` convGrp
                  , ModeAxiomatize <> mode
                  , (modData^.modExports) <> combinedExports
                  , (modData^.modDetails) <> combinedDetails
+                 , uses
                  , (auxBinds `plusHsValBinds` axAux, convAux) )
         False -> ( axGrp
                  , modGrp `appendGroups` convGrp
                  , ModeConvert <> mode
                  , (modData^.modExports) <> combinedExports
                  , (modData^.modDetails) <> combinedDetails
+                 , ((modData^.modCallbackUses) <> fst uses, M.unionWith S.union (modData^.modMethodCalls) (snd uses))
                  , (axAux, auxBinds `plusHsValBinds` convAux) )
 
-    combineModules (ConvertedModule name  imports1 tyClDecls1 valDecls1 clsInstDecls1 addedTyCls1 addedDecls1, imps1)
-                   (ConvertedModule _name imports2 tyClDecls2 valDecls2 clsInstDecls2 _addedTyCls2 _addedDecls2, imps2) =
+    combineModules (ConvertedModule name  imports1 tyClDecls1 valDecls1 clsInstDecls1 addedTyCls1 addedDecls1 origins1, imps1)
+                   (ConvertedModule _name imports2 tyClDecls2 valDecls2 clsInstDecls2 _addedTyCls2 _addedDecls2 origins2, imps2) =
       ( ConvertedModule name
                         (ordNub                     $ imports1      <> imports2)
                         (                             tyClDecls1    <> tyClDecls2)
@@ -611,6 +635,7 @@ convertModules sources = do
                         (                             clsInstDecls1 <> clsInstDecls2)
                                                       addedTyCls1     -- only need one copy of the added components
                                                       addedDecls1     --
+                        (origins1 <> origins2)
       , S.toList $ ((<>) `on` S.fromList) imps1 imps2 )
       -- It's OK not to worry about ordering the declarations
       -- because we 'topoSortByVariablesBy' them in 'moduleDeclarations'.

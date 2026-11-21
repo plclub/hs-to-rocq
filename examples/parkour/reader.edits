@@ -1,0 +1,16 @@
+# Use the kinds from the package's declared Haskell2010 language.
+data kinds Control.Monad.Signatures.Catch Type, Type -> Type, Type
+data kinds Control.Monad.Signatures.CallCC Type -> Type, Type, Type
+data kinds Control.Monad.Trans.Reader.ReaderT Type, Type -> Type, Type
+# Haskell2010 left sections elaborate to leftSection f x = f x.
+rename value GHC.Prim.leftSection = Parkour.Functions.leftSection
+rename type GHC.Types.IO = Parkour.Runtime.IO
+rename type Data.Functor.Contravariant.Contravariant = Parkour.Contravariant.Contravariant
+rename value Data.Functor.Contravariant.contramap = Parkour.Contravariant.contramap
+rename value Data.Functor.Contravariant.>$ = Parkour.Contravariant.op_zgzd__
+# ReaderT is both a Haskell type and constructor.
+rename value Control.Monad.Trans.Reader.ReaderT = Control.Monad.Trans.Reader.Mk_ReaderT
+order Control.Monad.Trans.Reader.Functor__ReaderT Control.Monad.Trans.Reader.Applicative__ReaderT_liftA2
+order Control.Monad.Trans.Reader.Functor__ReaderT Control.Monad.Trans.Reader.Applicative__ReaderT_op_ztzg__ Control.Monad.Trans.Reader.Applicative__ReaderT Control.Monad.Trans.Reader.Monad__ReaderT_op_zgzg__ Control.Monad.Trans.Reader.Monad__ReaderT_return_ Control.Monad.Trans.Reader.Monad__ReaderT
+order Control.Monad.Trans.Reader.MonadTrans__ReaderT Control.Monad.Trans.Reader.MonadFail__ReaderT_fail
+order Control.Monad.Trans.Reader.Monad__ReaderT Control.Monad.Trans.Reader.MonadFail__ReaderT_fail

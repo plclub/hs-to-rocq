@@ -717,8 +717,8 @@ Examples:
 Extra information
 -----------------
 
-``data kinds`` -- Declare kinds of type arguments to Inductive datatypes
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``data kinds`` -- Declare parameter kinds for datatypes and type synonyms
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. index::
    single: data kinds, edit
@@ -732,7 +732,10 @@ Effect:
   datatypes. This usually isn't a problem, but for higher-order parameters, some
   phantom type parameters, or poly-kinded type parameters, Coq does not
   necessarily automatically infer the right types. In these cases, the
-  information can be included in an edit.
+  information can be included in an edit. For type synonyms, the same edit
+  supplies kinds for parameters without an explicit source kind. For example,
+  ``data kinds M.Handler Type, Type -> Type, Type`` disambiguates
+  ``type Handler e m a = m a -> (e -> m a) -> m a``.
 
 Examples:
   .. code-block:: shell

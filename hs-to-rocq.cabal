@@ -30,6 +30,8 @@ source-repository head
 library
   exposed-modules:     HsToRocq.Util.GHC
                      , HsToRocq.Util.GHC.Module
+                     , HsToRocq.Util.GHC.Callbacks
+                     , HsToRocq.Util.GHC.MethodCalls
                      , HsToRocq.Util.GHC.FastString
                      , HsToRocq.Util.GHC.DynFlags
                      , HsToRocq.Util.GHC.RdrName
@@ -85,6 +87,7 @@ library
                      , HsToRocq.ConvertHaskell.Type
                      , HsToRocq.ConvertHaskell.HsType
                      , HsToRocq.ConvertHaskell.Expr
+                     , HsToRocq.ConvertHaskell.NestedFold
                      , HsToRocq.ConvertHaskell.Pattern
                      , HsToRocq.ConvertHaskell.Sigs
                      , HsToRocq.ConvertHaskell.Declarations.Notations

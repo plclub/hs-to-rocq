@@ -386,6 +386,7 @@ generateArgumentSpecifiers (IndBody _ params _resTy cons _)
     binderArgumentSpecifiers binder = case binderExplicitness binder of
       Explicit -> ArgExplicit
       Implicit -> ArgMaximal
+      NonMaximal -> ArgImplicit
 
 generateGroupArgumentSpecifiers :: ConversionMonad r m => DeclarationGroup -> m [Sentence]
 generateGroupArgumentSpecifiers = fmap (fmap ArgumentsSentence)

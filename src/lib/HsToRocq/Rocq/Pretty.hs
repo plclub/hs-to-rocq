@@ -32,6 +32,7 @@ import qualified Data.List.NonEmpty
 import           Data.List.NonEmpty          (NonEmpty ((:|)))
 
 import           Data.Data                   (Data (..))
+import           Data.Generics               (everywhere, mkT)
 import           Data.Typeable
 
 import           HsToRocq.Rocq.FreeVars
@@ -450,6 +451,7 @@ instance Gallina Arg where
 ifExplicit :: Explicitness -> (Doc -> Doc) -> Doc -> Doc
 ifExplicit Explicit = ($)
 ifExplicit Implicit = const braces
+ifExplicit NonMaximal = const brackets
 
 -- Module-local
 -- The 'Bool' is 'True' if parentheses are always necessary and 'False' otherwise.
@@ -643,8 +645,20 @@ instance Gallina Definition where
                      <+> ":=") <$$> renderGallina body <>  ".")
 
 instance Gallina Inductive where
-  renderGallina' _ (Inductive   bodies nots) = renderUnivPoly bodies <> renderMutualDef "Inductive"   renderIndBody bodies nots
-  renderGallina' _ (CoInductive bodies nots) = renderUnivPoly bodies <> renderMutualDef "CoInductive" renderIndBody bodies nots
+  renderGallina' _ (Inductive   bodies nots) = renderInductive "Inductive" bodies nots
+  renderGallina' _ (CoInductive bodies nots) = renderInductive "CoInductive" bodies nots
+
+renderInductive :: Doc -> NonEmpty IndBody -> [NotationBinding] -> Doc
+renderInductive kw bodies nots =
+  renderUnivPoly bodies <> renderMutualDef kw renderIndBody rawBodies nots
+  where
+    -- An operator's notation is declared after its mutual block. Both
+    -- result types and recursive constructor fields need its raw name here.
+    ops = S.fromList [q | IndBody q _ _ _ _ <- toList bodies, qualidIsOp q]
+    rawBodies | S.null ops = bodies
+              | otherwise  = everywhere (mkT raw) bodies
+    raw (Qualid q) | q `S.member` ops = RawQualid q
+    raw t = t
 
 -- | Emit a @#[universes(...)]@ attribute for the entire mutual inductive block.
 -- In Coq, this attribute applies to the whole @Inductive@/@CoInductive@ sentence,

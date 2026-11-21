@@ -1,0 +1,1 @@
+except in Sample.outer, Sample.other redefine Definition Sample.unused := true.

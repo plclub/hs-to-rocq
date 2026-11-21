@@ -5,6 +5,8 @@ module TypeEdits where
 
 type Small = Bool
 
+type Handler e m a = m a -> (e -> m a) -> m a
+
 data Product a b = MkProduct a b
 
 data Scoped = ScopedBool Bool | DefaultUnit Bool

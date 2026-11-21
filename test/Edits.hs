@@ -983,7 +983,7 @@ taskChecks :: [IO ()]
 taskChecks =
   [ checkBuilt ("definitionTask: " ++ label) input expected $ \ed ->
       runReader (definitionTask (Qualified "Sample" "f"))
-        (ModuleEnv ed Strict Rocq_8_20 (ModuleData (mkModuleName "Sample") [] mempty))
+        (ModuleEnv ed Strict Rocq_8_20 (ModuleData (mkModuleName "Sample") [] mempty mempty mempty))
   | (label, input, expected) <-
       [ ("ordinary definitions translate", [], TranslateIt)
       , ("skip", [skip], SkipIt)

@@ -117,7 +117,7 @@ derivationIsSkipped mod sourceTy headTy = uncurry (||) <$> derivationSkips mod s
 derivationSkips :: GlobalMonad r m => ModuleName -> LHsType GhcRn -> LHsType GhcRn -> m (Bool, Bool)
 derivationSkips mod sourceTy headTy = do
   targetMod <- view (edits.Edits.renamedModules.at mod.non mod)
-  withCurrentModule (ModuleData targetMod [] mempty) $ do
+  withCurrentModule (ModuleData targetMod [] mempty mempty mempty) $ do
     skipMods <- view (edits.Edits.skippedModules)
     skipCls <- view (edits.Edits.skippedClasses)
     moduleRenames <- view (edits.Edits.renamedModules)

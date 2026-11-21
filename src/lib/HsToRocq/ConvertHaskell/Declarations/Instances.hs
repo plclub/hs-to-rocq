@@ -49,6 +49,8 @@ import HsToRocq.Rocq.Subst
 import HsToRocq.Rocq.SubstTy
 import HsToRocq.Rocq.Pretty
 import HsToRocq.Rocq.Gallina.Util
+import HsToRocq.Rocq.Gallina.UseTypeInBinders (useTypeInBinders')
+import HsToRocq.Rocq.FreeVars (getFreeVars)
 
 import HsToRocq.Edits.Types
 import HsToRocq.ConvertHaskell.Monad
@@ -506,10 +508,13 @@ convertClsInstDecl env cid@ClsInstDecl{..} = runWriterT $ do
 
       -- decomposeClassTy can fail, so run it in the monad so that
       -- failure will be caught and cause the instance to be skipped
-      (className, instTy) <- either convUnsupportedHere pure $ decomposeClassTy classTy
+      (className, instTys) <- either convUnsupportedHere pure $ decomposeClassTy classTy
       
-      _inst@ConvertedInstance{..} <- lookupInstance instTy className env
+      _inst@ConvertedInstance{..} <- lookupInstance instTys className env
       let binds = convertedInstanceBinds ++ filter (\b -> binderGeneralizability b == Generalizable) binds'
+      sites <- if null binds
+               then views (currentModule.modMethodCalls) (M.findWithDefault S.empty convertedInstanceDFun)
+               else pure S.empty
 
       -- Get the methods of this class (this should already exclude skipped ones)
       (classMethods, classArgs) <- lookupClassDefn className >>= \case
@@ -578,7 +583,7 @@ convertClsInstDecl env cid@ClsInstDecl{..} = runWriterT $ do
 
         methBody <- case (M.lookup meth cid_binds_map, M.lookup meth cid_types_map, M.lookup meth classDefaults) of
           (Just bind, _, _) ->
-            local (envFor meth) $ convertMethodBinding localMeth bind >>= \case
+            local (envFor meth) $ convertMethodBinding sites meth localMeth bind >>= \case
               ConvertedDefinitionBinding cd -> do
                 tell [bind]
                 pure . CMDefined CLTerm $ maybeFun (cd^.convDefArgs) (cd^.convDefBody)
@@ -609,7 +614,7 @@ convertClsInstDecl env cid@ClsInstDecl{..} = runWriterT $ do
             let extraSubst
                   | meth `elem` classTypes =
                     let names = foldMap (^..binderIdents) . filter (\b -> binderExplicitness b == Explicit)
-                    in M.fromList $ zip (names classArgs) [instTy]
+                    in M.fromList $ zip (names classArgs) instTys
                   | otherwise =
                     mempty
             in -- In the body of the default definition, make methods names
@@ -642,11 +647,17 @@ convertClsInstDecl env cid@ClsInstDecl{..} = runWriterT $ do
               CLTerm -> expandCoerce (Just ty) body
               _       -> pure body
             qbody <- quantify sub meth $ substTy sub' expandedBody
+            methodTerm <- if localMeth `S.member` getFreeVars qbody
+              then case qbody of
+                Fun args rhs | Right (result, args') <- useTypeInBinders' ty args ->
+                  pure $ Fix (FixOne (FixBody localMeth args' Nothing (Just result) rhs))
+                _ -> convUnsupportedHere "recursive method without typed arguments"
+              else pure qbody
             pure . DefinitionSentence $ DefinitionDef Local
                                                       localMeth
                                                       (subst allLocalNames <$> params)
                                                       (Just $ subst allLocalNames ty)
-                                                      qbody
+                                                      methodTerm
                                                       NotExistingClass
 
       let instHeadTy = appList (Qualid className)
@@ -741,12 +752,13 @@ makeInstanceMethodSubst params =
         Generalized ei tm      -> Generalized   ei <$> sub tm in
   (instBnds, instSubst)
 
--- from "instance C ty where" access C and ty
--- TODO: multiparameter type classes   "instance C t1 t2 where"
---       instances with contexts       "instance C a => C (Maybe a) where"
-decomposeClassTy :: Term -> Either String (Qualid, Term)
-decomposeClassTy (App1 (Qualid cn) a) = Right (cn, normalizeType a)
-decomposeClassTy ty                   =  Left $ "type class instance head `" ++ showP ty ++ "'"
+-- Preserve the order of all visible class parameters in the source head.
+decomposeClassTy :: Term -> Either String (Qualid, [Term])
+decomposeClassTy ty = case normalizeType ty of
+  App (Qualid cn) args | Just ts <- traverse positional (NE.toList args) -> Right (cn,ts)
+  _ -> Left $ "type class instance head `" ++ showP ty ++ "'"
+  where positional (PosArg t) = Just (normalizeType t)
+        positional _ = Nothing
 
 decomposeForall :: Term -> ([Binder], Term)
 decomposeForall (Forall bnds ty) = first (NE.toList bnds ++) (decomposeForall ty)

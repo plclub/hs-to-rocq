@@ -1,0 +1,2 @@
+# This comment mentions redefine but changes no binding.
+order Probe.keep Probe.other

@@ -1,0 +1,31 @@
+data type arguments NestedFold.Tree (parameters: f) (indices: a)
+data type arguments NestedFold.Op (parameters: p) (indices: a)
+data kinds NestedFold.Op Type, Type
+
+add NestedFold Theorem NestedFold.branch_equation
+  {A X P : Type} (v : X) (k : X -> NestedFold.Tree (NestedFold.Op P) A) (p : P) :
+  NestedFold.project (NestedFold.Perform (NestedFold.Branch v k)) p =
+  NestedFold.project (k v) p.
+Proof.
+  reflexivity.
+Qed.
+
+order NestedFold.project NestedFold.branch_equation
+
+add NestedFold Theorem NestedFold.inspect_equation
+  {A P : Type} (f : P -> A) (p : P) :
+  NestedFold.project (NestedFold.Perform (NestedFold.Inspect f)) p = f p.
+Proof.
+  reflexivity.
+Qed.
+
+order NestedFold.project NestedFold.inspect_equation
+
+add NestedFold Theorem NestedFold.shadowed_equation
+  {A P : Type} (v : A) (p : P) :
+  NestedFold.project (NestedFold.Perform (NestedFold.Stored v)) p = v.
+Proof.
+  reflexivity.
+Qed.
+
+order NestedFold.project NestedFold.shadowed_equation

@@ -25,6 +25,9 @@ PASS = \
   Poly \
   Irrefutable \
   LocalTopoSort \
+  NestedFold \
+  RankCallback \
+  TypeOperatorScope \
   InstCtx \
   ExhaustGuard \
   PartialAppliedPolyDataCon \

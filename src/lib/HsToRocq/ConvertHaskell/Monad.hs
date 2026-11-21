@@ -13,6 +13,7 @@ module HsToRocq.ConvertHaskell.Monad (
   -- * Constraints
   GlobalMonad, ConversionMonad, LocalConvMonad,
   HasEdits(..), HasLeniency(..), HasRocqVersion(..), HasCurrentModule(..), HasCurrentDefinition(..),
+  HasMatchedPolyVars(..), HasPolyParameters(..), HasSelfCalls(..),
   runGlobalMonad,
   withCurrentModule,
   withCurrentDefinition,
@@ -54,6 +55,9 @@ import Control.Monad.State
 import Control.Monad.Reader
 
 import Data.Set (Set)
+import Data.Map (Map)
+import qualified GHC
+import HsToRocq.Util.GHC.MethodCalls (MethodSites)
 
 import HsToRocq.Rocq.Gallina (Qualid, Qualid(..), Ident, RocqVersion(..))
 import HsToRocq.Rocq.Pretty
@@ -128,6 +132,9 @@ data LocalEnv = LocalEnv
     , _localEnvRocqVersion       :: !RocqVersion
     , _localEnvCurrentModule     :: !ModuleData
     , _localEnvCurrentDefinition :: !Qualid
+    , _localEnvMatchedPolyVars   :: !(Map GHC.Name Int)
+    , _localEnvPolyParameters    :: !(Map GHC.Name (Set Int))
+    , _localEnvSelfCalls         :: !MethodSites
     }
 
 makeFields ''GlobalEnv
@@ -206,6 +213,9 @@ type LocalConvMonad r m =
         ( ConversionMonad r m
         , MonadCounter m
         , HasCurrentDefinition r Qualid
+        , HasMatchedPolyVars r (Map GHC.Name Int)
+        , HasPolyParameters r (Map GHC.Name (Set Int))
+        , HasSelfCalls r MethodSites
         )
 
 runGlobalMonad :: GhcMonad m =>
@@ -258,6 +268,9 @@ withCurrentDefinition newDef act = do
         , _localEnvRocqVersion       = _version
         , _localEnvCurrentModule     = _currentModule
         , _localEnvCurrentDefinition = newDef
+        , _localEnvMatchedPolyVars = mempty
+        , _localEnvPolyParameters = mempty
+        , _localEnvSelfCalls = mempty
         }
 
 

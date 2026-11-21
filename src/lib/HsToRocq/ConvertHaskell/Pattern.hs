@@ -167,7 +167,12 @@ convertPat (LitPat NOEXTP lit) =
   case lit of
     GHC.HsChar   _ c       -> pure $ InScopePat (StringPat $ T.singleton c) "char"
     HsCharPrim   _ _       -> convUnsupported "`Char#' literal patterns"
-    GHC.HsString _ fs      -> pure . StringPat $ fsToText fs
+    -- Rocq string patterns match its native string, whereas Haskell
+    -- strings in the base model are lists of Char. Like numeric guards,
+    -- an equality test preserves fall-through to later alternatives.
+    GHC.HsString _ fs      -> do
+      name <- gensym "str"
+      Coq.VarPat name <$ tell ([mkInfix (Var name) "GHC.Base.==" (convertFastString fs)] :: [Term])
     HsStringPrim _ _       -> convUnsupported "`Addr#' literal patterns"
     HsInt        _ intl    -> convertIntegerPat "`Integer' literal patterns" (il_value intl)
     HsIntPrim    _ int     -> convertIntegerPat "`Integer' literal patterns" int

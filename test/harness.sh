@@ -73,6 +73,9 @@ case "${1:-}" in
         case "$mode" in
             success)
                 printf 'generated %s\n' "${GENERATION:-initial}" > "$output/$module.v"
+                if [[ "$module" == GHC/Base ]]; then
+                    printf '%s\n' '#[global] Definition op_zgzgze__ := generated_bind.' >> "$output/$module.v"
+                fi
                 printf 'generated %s\n' "${GENERATION:-initial}" > "$output/$module.h2ci"
                 # Like the real translator, do not create the dependency directory.
                 if [[ -n "$dependency_dir" ]]; then
@@ -848,6 +851,11 @@ for suite_name in rocq9 base-src8; do
     fi
     assert_output "$output_dir/GHC/Base.v" present
     assert_output "$output_dir/GHC/Base.h2ci" present
+    if [[ "$suite" == rocq9 ]]; then
+        assert_contains "$output_dir/GHC/Base.v" '#[global] Polymorphic Definition op_zgzgze__ '
+    else
+        assert_contains "$output_dir/GHC/Base.v" '#[global] Definition op_zgzgze__ '
+    fi
     assert_contains "$dependency_file" "$dependency_target:"
     assert_calls translate GHC/Base 1
     passed
@@ -1149,7 +1157,7 @@ for target in 8.20 9.0; do
         fi
         if (
             cd "$caller_dir" || exit 1
-            PATH="$test_dir/bin:$PATH" COQC= TMPDIR="$test_dir/tmp" \
+            PATH="$test_dir/bin:$PATH" COQC='' TMPDIR="$test_dir/tmp" \
                 HARNESS_LOG="$test_dir/tools.log" \
                 HARNESS_IDENTITY_SOURCE="$workspace/examples/base-tests/IdentityTraversal.v" \
                 bash "$runner" --target-version "$target"

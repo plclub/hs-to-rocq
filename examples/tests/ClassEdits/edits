@@ -38,3 +38,20 @@ Proof.
   reflexivity.
 Qed.
 order ClassEdits.BodyOnly__Mark ClassEdits.default_body_only_skipped
+
+add ClassEdits Theorem ClassEdits.choose_both_parameters :
+  (choose LeftMark LeftMark = RightMark) /\ (choose LeftMark OtherRight = OtherLeft).
+Proof. split; reflexivity. Qed.
+order ClassEdits.Choose__Mark__Mark ClassEdits.choose_both_parameters
+order ClassEdits.Choose__Mark__OtherMark ClassEdits.choose_both_parameters
+
+add ClassEdits Theorem ClassEdits.result_recursive_and_overloaded :
+  result (Step (Step (Last LeftMark))) = RightMark.
+Proof. reflexivity. Qed.
+order ClassEdits.Result__Mark ClassEdits.Result__Steps_result
+order ClassEdits.Result__Steps ClassEdits.result_recursive_and_overloaded
+
+add ClassEdits Theorem ClassEdits.qualified_do_operators :
+  (qualifiedDo LeftMark = RightMark) /\ (qualifiedDo RightMark = LeftMark).
+Proof. split; reflexivity. Qed.
+order ClassEdits.qualifiedDo ClassEdits.qualified_do_operators

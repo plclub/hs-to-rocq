@@ -1,0 +1,10 @@
+add PatternGuard Theorem PatternGuard.refutable_do_uses_monad_fail :
+  (PatternGuard.single (Some (cons true nil)) = Some true) /\
+  (PatternGuard.single (Some nil) = None).
+Proof. split; reflexivity. Qed.
+
+add PatternGuard Theorem PatternGuard.location_matches :
+  (PatternGuard.location (GHC.Base.hs_string__ "voter") = Some true) /\
+  ((PatternGuard.location (GHC.Base.hs_string__ "voter1") = Some false) /\
+   (PatternGuard.location (GHC.Base.hs_string__ "voter2") = None)).
+Proof. repeat split; reflexivity. Qed.

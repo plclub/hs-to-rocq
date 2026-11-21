@@ -4,3 +4,4 @@ rename type GHC.Bool = bool
 data type arguments GADT.MaybeO  (indices: ex t)
 data kinds GADT.MaybeO Type, Type
 
+data type arguments GADT.Nested (parameters: f) (indices: a)

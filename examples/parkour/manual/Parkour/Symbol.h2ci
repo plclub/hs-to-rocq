@@ -1,0 +1,14 @@
+constructorFields:
+  Parkour.Symbol.Refl: NonRecordFields 0
+  Parkour.Symbol.Disproved: NonRecordFields 1
+  Parkour.Symbol.Proved: NonRecordFields 1
+  Parkour.Symbol.MkSSymbol: NonRecordFields 0
+constructorTypes:
+  Parkour.Symbol.Refl: Qualified "Parkour.Symbol" "Equal"
+  Parkour.Symbol.Disproved: Qualified "Parkour.Symbol" "Decision"
+  Parkour.Symbol.Proved: Qualified "Parkour.Symbol" "Decision"
+  Parkour.Symbol.MkSSymbol: Qualified "Parkour.Symbol" "SSymbol"
+constructors:
+  Parkour.Symbol.Equal: '[Qualified "Parkour.Symbol" "Refl"]'
+  Parkour.Symbol.Decision: '[Qualified "Parkour.Symbol" "Proved",Qualified "Parkour.Symbol" "Disproved"]'
+  Parkour.Symbol.SSymbol: '[Qualified "Parkour.Symbol" "MkSSymbol"]'

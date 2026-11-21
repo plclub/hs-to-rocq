@@ -6,6 +6,11 @@ checkNum :: Int -> Bool
 checkNum 2 = True
 checkNum _ = False
 
+location :: String -> Maybe Bool
+location "voter" = Just True
+location "voter1" = Just False
+location _ = Nothing
+
 -- Inline data structures, so that this test case
 -- works independent of inter-module data flow
 data Pairing a b = Pair a b
@@ -24,3 +29,8 @@ take2 x n = case Pair n x of
         Pair n _      | n <= 0 -> Nil
         Pair _ Nil             -> Nil
         Pair n (Cons x xs)     -> Cons x (take2 xs (n-1))
+
+single :: Maybe [Bool] -> Maybe Bool
+single xs = do
+  [x] <- xs
+  pure x

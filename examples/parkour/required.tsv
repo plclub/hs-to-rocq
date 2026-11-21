@@ -1,0 +1,5 @@
+Control.Monad.Tree.interp	Control.Monad.Tree.interp
+Control.Monad.Tree.par	Control.Monad.Tree.par
+Choreography.Choreo2.epp	Choreography.Choreo2.epp
+Choreography2.runChoreography	Choreography2.runChoreography
+Main.quorumVoting	Main.quorumVoting

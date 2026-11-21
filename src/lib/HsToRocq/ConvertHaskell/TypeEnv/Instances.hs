@@ -3,7 +3,6 @@
 
 module HsToRocq.ConvertHaskell.TypeEnv.Instances where
 
-import Data.Foldable
 import Data.Generics (Data)
 import Data.Map as M
 import Data.Maybe
@@ -23,14 +22,17 @@ import GHC.Unit.Module.ModDetails
 import GHC.Core.InstEnv
 import GHC.Core.RoughMap (RoughMatchTc(..))
 import GHC.Types.Var
+import GHC.Types.Name (nameStableString)
 #else
 import HscTypes
 import InstEnv
 import Var
+import Name (nameStableString)
 #endif
 
 data ConvertedInstance =
   ConvertedInstance { convertedInstanceClass :: ConvertedTyCl
+                    , convertedInstanceDFun :: String
                     , convertedInstanceBinds :: [Binder]
                     , convertedInstanceTops  :: [Qualid]
                     , convertedInstanceSubst :: M.Map Qualid Term
@@ -47,6 +49,7 @@ instancesOfModDetails mod = mapM convertInstance GHC_900($ instEnvElts) $ md_ins
 convertInstance :: ConversionMonad r m => ClsInst -> m ConvertedInstance
 convertInstance inst = do
   let (binds, cls, tms) = instanceHead inst
+      convertedInstanceDFun = nameStableString (varName (is_dfun inst))
   convertedInstanceClass <- convertTyCl cls
   convertedInstanceBinds <- mapM tyVarToBinder binds
   convertedInstanceTypes <- mapM convertType tms
@@ -65,12 +68,17 @@ convertInstance inst = do
           typ  <- convertType $ varType tv
           pure $ mkTypedBinder Implicit (Ident name) typ
 
-lookupInstance :: ConversionMonad r m => Term -> Qualid -> ConvertedInstanceEnv -> m ConvertedInstance
-lookupInstance instTy className env = case find matchInstance env of
-  Just t -> pure t
-  _      -> throwProgramError $ "The class " <> showP className <> " of " <> showP instTy <> " is not found"
-  where matchInstance i = any (matchType instTy) (convertedInstanceTypes i) &&
-          convertedTyClName (convertedInstanceClass i) == className
+lookupInstance :: ConversionMonad r m => [Term] -> Qualid -> ConvertedInstanceEnv -> m ConvertedInstance
+lookupInstance instTys className env = case Prelude.filter matchInstance env of
+  [i] -> pure i
+  []  -> throwProgramError $ "No checked instance for " <> showP headTy
+  _   -> throwProgramError $ "Ambiguous checked instances for " <> showP headTy
+  where headTy = appList (Qualid className) (PosArg <$> instTys)
+        matchInstance i =
+          let cls = convertedInstanceClass i
+              args = filterVisibleVars cls (convertedInstanceTypes i)
+          in convertedTyClName cls == className && length args == length instTys &&
+             and (zipWith matchType instTys args)
         -- Match types, allowing for the env type to have extra type arguments
         -- from GHC's representation polymorphism (e.g., instTy = GHC.Prim.arrow
         -- matching env type = GHC.Prim.arrow LiftedRep LiftedRep)

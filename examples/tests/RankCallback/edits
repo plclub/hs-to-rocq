@@ -1,0 +1,5 @@
+add RankCallback Theorem RankCallback.callback_specializations :
+  (RankCallback.applyAtTwoTypes (fun k => k (fun a x => x)) = true) /\
+  ((RankCallback.atUnit (fun k => k (fun a x => true)) = true) /\
+   (RankCallback.underRecursion (fun k => k (fun a x => x)) (cons false nil) = false)).
+Proof. repeat split; reflexivity. Qed.

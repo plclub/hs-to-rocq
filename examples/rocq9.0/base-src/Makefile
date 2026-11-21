@@ -121,7 +121,7 @@ GHC_BASE_PRE = $(wildcard $(BASE_SRC)/module-edits/GHC/Base/preamble.v $(BASE_SR
 GHC_BASE_MID = $(wildcard $(BASE_SRC)/module-edits/GHC/Base/midamble.v $(BASE_SRC)/module-edits/GHC/Maybe/midamble.v)
 GHC_BASE_EDITS = $(wildcard $(BASE_SRC)/module-edits/GHC/Base/edits $(BASE_SRC)/module-edits/GHC/Maybe/edits)
 
-$(OUT)/GHC/Base.v: $(GHC_BASE_PRE) $(GHC_BASE_MID) $(GHC_BASE_EDITS) $(BASE_SRC)/edits
+$(OUT)/GHC/Base.v: $(GHC_BASE_PRE) $(GHC_BASE_MID) $(GHC_BASE_EDITS) $(BASE_SRC)/edits Makefile
 	rm -f $@
 	cat /dev/null $(GHC_BASE_PRE) > Base_preamble.v
 	cat /dev/null $(GHC_BASE_MID) > Base_midamble.v
@@ -133,6 +133,12 @@ $(OUT)/GHC/Base.v: $(GHC_BASE_PRE) $(GHC_BASE_MID) $(GHC_BASE_EDITS) $(BASE_SRC)
 	             $(BASE_SRC)/gen-files/GHC/Internal/Exception/Context.hs \
 	             $(BASE_SRC)/ghc-internal/src/GHC/Internal/Base.hs $(BASE_SRC)/ghc-internal/src/GHC/Internal/Maybe.hs || { status=$$?; rm -f "$@"; exit $$status; }
 	test -e $(OUT)/GHC/Base.v
+	# Bind must instantiate its universes independently in Tree and ReaderT.
+	# Keep this Rocq-9-only: a module-wide flag changes unrelated class instances.
+	{ awk '/^#\[global\] Definition op_zgzgze__ / { count++ } END { exit (count != 1) }' $@ && \
+	  sed 's/^#\[global\] Definition op_zgzgze__ /#[global] Polymorphic Definition op_zgzgze__ /' $@ > $@.tmp && \
+	  mv $@.tmp $@; \
+	} || { status=$$?; rm -f "$@" "$@.tmp"; exit $$status; }
 	rm -f Base_preamble.v Base_midamble.v
 
 # Handwritten modules: copy from base-src/manual/ rewriting Coq.* paths to

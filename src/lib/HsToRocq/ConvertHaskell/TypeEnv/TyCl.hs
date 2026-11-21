@@ -25,6 +25,8 @@ import GHC.Types.Var
 import GHC.Core.Class
 import GHC.Core.TyCon
 import GHC.Types.TypeEnv
+import GHC.Tc.Utils.TcType (eqType, tcSplitSigmaTy, transSuperClasses, mkSpecSigmaTy)
+import Data.List (nubBy)
 #else
 import Class
 import HscTypes
@@ -104,7 +106,19 @@ convertTyCl cl = do
   convertedTyClName      <- var TypeNS $ className cl
   convertedTyClTyVars    <- mapM convertTyClVar $ classTyVars cl
   convertedTyClMethods   <- mapM convertId $ classMethods cl
-  convertedTyClPredTypes <- mapM convertPredType $ classSCTheta cl
+  convertedTyClPredTypes <- mapM convertPredType $
+#if __GLASGOW_HASKELL__ >= 900
+    -- A quantified dictionary does not bring the dictionaries for its result's
+    -- superclasses into Rocq's context. Infer these from the same GHC constraint
+    -- and put them in dependency order before the quantified result.
+    let expand p = case tcSplitSigmaTy p of
+          (vs@(_:_), theta, res) ->
+            map (mkSpecSigmaTy vs theta) (nubBy eqType $ reverse $ transSuperClasses res) ++ [p]
+          _ -> [p]
+    in concatMap expand (classSCTheta cl)
+#else
+    classSCTheta cl
+#endif
   let convertedTyClVisibility = (\b -> if isVisibleTyConBinder b then Explicit else Implicit)
                                <$> tyConBinders (classTyCon cl)
   pure ConvertedTyCl{..}

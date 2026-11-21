@@ -72,11 +72,14 @@ import HsToRocq.Edits.Types
 import HsToRocq.Util.Monad
 import HsToRocq.Util.Messages
 import HsToRocq.Util.GHC.Module
+import HsToRocq.Util.GHC.Callbacks (callbackUses)
+import HsToRocq.Util.GHC.MethodCalls (methodCalls)
 import HsToRocq.PrettyPrint hiding ((</>))
 import HsToRocq.Rocq.Gallina.Util
+import HsToRocq.Rocq.FreeVars (definedBy)
 import HsToRocq.Util.FVs
 import HsToRocq.Rocq.Pretty
-import HsToRocq.Rocq.Gallina (RocqVersion(..), Sentence)
+import HsToRocq.Rocq.Gallina (RocqVersion(..), Sentence, Qualid(Bare))
 import HsToRocq.Rocq.Preamble
 import HsToRocq.ProcessFiles
 import HsToRocq.ConvertHaskell
@@ -108,6 +111,7 @@ data ProgramArgs = ProgramArgs { outputFileArg          :: !(Maybe FilePath)
                                , ghcOptionsArgs         :: ![String]
                                , directInputFilesArgs   :: ![FilePath]
                                , rocqVersionArg         :: !RocqVersion
+                               , requiredOriginsArg     :: ![(T.Text, T.Text)]
                                }
                  deriving (Eq, Ord, Show, Read)
 
@@ -193,6 +197,19 @@ argParser = ProgramArgs <$> optional (strOption       $  long    "output"
                                                       <> value   Rocq_8_20
                                                       <> help    "Target Rocq version: 8.20 (default) or 9.0")
 
+                        <*> many (option (eitherReader parseOrigin)
+                                   (long "require-origin" <> metavar "SOURCE=ROCQ"
+                                    <> help "Require a translated Haskell binding at its specified Rocq name (both fully qualified; repeatable)"))
+
+parseOrigin :: String -> Either String (T.Text, T.Text)
+parseOrigin arg
+  | let (prefix, target) = T.breakOnEnd "=" (T.pack arg)
+  , let source = T.dropEnd 1 prefix
+  , all qualified [source, target] = Right (source, target)
+  | otherwise = Left "required origin must be SOURCE=ROCQ with fully qualified names"
+  where qualified t = let (m, n) = T.breakOn "." t
+                      in not (T.null m || T.null (T.drop 1 n))
+
 parseRocqVersion :: String -> Either String RocqVersion
 parseRocqVersion "8.20" = Right Rocq_8_20
 parseRocqVersion "9.0"  = Right Rocq_9_0
@@ -214,6 +231,7 @@ data Config = Config { _outputFile          :: !(Maybe FilePath)
                      , _ifaceDirs           :: ![FilePath]
                      , _dependencyDir       :: !(Maybe FilePath)
                      , _cfgRocqVersion      :: !RocqVersion
+                     , _requiredOrigins     :: ![(T.Text, T.Text)]
                      }
             deriving (Eq, Ord, Show, Read)
 makeLenses ''Config
@@ -267,6 +285,7 @@ processArgs = do
                 , _ifaceDirs           = ifaceDirsArgs
                 , _dependencyDir       = dependencyDirArg
                 , _cfgRocqVersion      = rocqVersionArg
+                , _requiredOrigins     = requiredOriginsArg
                 }
 
 parseModulesFiles :: (MonadIO m, MonadError String m)
@@ -288,7 +307,7 @@ type WithModulePrinter m =
 
 processFilesMain ::
     forall m . GhcMonad m
-    => (forall r m. GlobalMonad r m => WithModulePrinter m -> [(TypecheckedModule, HsValBinds GhcRn)] -> m ())
+    => (forall r m. GlobalMonad r m => WithModulePrinter m -> [(TypecheckedModule, HsValBinds GhcRn)] -> m OriginEvidence)
     -> m ()
 processFilesMain process = do
   conf <- processArgs
@@ -358,12 +377,31 @@ processFilesMain process = do
   runGlobalMonad edits (conf^.translationLeniency) (conf^.ifaceDirs) (conf^.cfgRocqVersion) $
     processFiles (conf^.processingMode) inputFiles >>= \case
       Nothing -> liftIO $ die "hs-to-rocq: could not typecheck input modules"
-      Just modules -> process withModulePrinter modules
+      Just modules -> do
+        evidence <- process withModulePrinter modules
+        let errors = checkOrigins (conf^.requiredOrigins) evidence
+        unless (null errors) $ liftIO . die . T.unpack $ T.unlines errors
+
+-- Retain multiplicity: two source bindings renamed to the same declaration
+-- cannot witness an unambiguous origin. The second list counts final binders,
+-- including ones introduced by edits.
+type OriginEvidence = ([(T.Text, T.Text)], [T.Text])
+
+checkOrigins :: [(T.Text, T.Text)] -> OriginEvidence -> [T.Text]
+checkOrigins required (origins, emitted) =
+  [ "required origin " <> src <> "=" <> target <> ": " <> reason
+  | (src, target) <- required
+  , let names = [n | (s,n) <- origins, s == src]
+  , reason <- case names of
+      [] -> ["missing source-derived definition"]
+      [n] | n /= target -> ["translated to " <> n]
+          | [target] == filter (== target) emitted -> []
+      _ -> ["ambiguous or missing emitted declaration"] ]
 
 printConvertedModule :: GlobalMonad r m
                      => WithModulePrinter m
                      -> ConvertedModule
-                     -> m ()
+                     -> m OriginEvidence
 printConvertedModule withModulePrinter cmod@ConvertedModule{..} = do
   ModuleDeclarations{..} <- moduleDeclarations cmod
 
@@ -393,6 +431,9 @@ printConvertedModule withModulePrinter cmod@ConvertedModule{..} = do
           printUnbound out
 
   withModulePrinter convModName printImportsTypes printValues
+  let qualify q = moduleNameText convModName <> "." <> qualidBase q
+  pure ([(src, qualify q) | (src, q) <- convModOrigins],
+        [moduleNameText convModName <> "." <> n | Bare n <- concatMap definedBy (typDecls' ++ valDecls')])
  where
   gap out = hPutStrLn out "" >> hFlush out
 
@@ -410,11 +451,11 @@ printConvertedModule withModulePrinter cmod@ConvertedModule{..} = do
 printConvertedModules :: GlobalMonad r m
                       => WithModulePrinter m
                       -> [NonEmpty ConvertedModule]
-                      -> m ()
+                      -> m OriginEvidence
 printConvertedModules withModulePrinter =
-  traverse_ (printConvertedModule withModulePrinter) . foldMap toList
+  fmap mconcat . traverse (printConvertedModule withModulePrinter) . foldMap toList
 
-convertAndPrintModules :: GlobalMonad r m => WithModulePrinter m -> [(TypecheckedModule, HsValBinds GhcRn)] -> m ()
+convertAndPrintModules :: GlobalMonad r m => WithModulePrinter m -> [(TypecheckedModule, HsValBinds GhcRn)] -> m OriginEvidence
 convertAndPrintModules p = printConvertedModules p <=< convertModules <=< traverse toRenamedHsGroup
   where
     toRenamedHsGroup (tcm, auxBinds)
@@ -426,7 +467,7 @@ convertAndPrintModules p = printConvertedModules p <=< convertModules <=< traver
 #endif
           let (_, modDetails) = tm_internals_ tcm in
           let exports = modInfoExports (tm_checked_module_info tcm) 
-              modData = ModuleData {_modName = mod, _modExports = exports, _modDetails = modDetails} in
+              modData = ModuleData mod exports modDetails (callbackUses tcm) (methodCalls tcm) in
           pure (modData, hs_group, auxBinds)
       | otherwise = throwProgramError $  "Renamer failed for `" ++ moduleNameString mod ++ "'"
       where mod = ms_mod_name . pm_mod_summary $ tm_parsed_module tcm

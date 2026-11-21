@@ -123,8 +123,13 @@ Key lemmas: `bin_Desc0` (combine Desc0), `Desc_outside` (f=None outside range), 
 
 ## Test Structure
 
+For Parkour source pinning, edit-policy changes, or origin checks, follow the
+[Parkour build and checks](examples/parkour/README.md). Validate with a clean
+`make -C examples/parkour check`: fixture closure is separate from the required
+assumption report for the generated `Choreography.Choreo2.epp`.
+
 - `test/` holds the Cabal suites `edits`, `rocq-version`, and `ci-catalog`, plus shell integration runners. Run the Haskell suites with `stack test` or `cabal test all`; they require no Coq/Rocq compiler or generated base. `CiCatalog` runs its complete self-tests by default; `--self-test` remains accepted for direct compatibility. For focused commands, dependencies, or shell integration checks, read [test/README.md](test/README.md). Shell runners and compiler checks remain separate from the Cabal suites.
-- `examples/tests/` and `examples/rocq9.0/tests/` share `examples/tests/test-rules.mk` and the same fixtures, compiled with `coqc` and `rocq c -w +deprecated-dirpath-Coq` respectively. Each base-independent suite has 67 `PASS` cases and 3 expected compiler failures (`TODO_PASS`); the combined `SoleCtorGuard` fixture counts as one module. Both suites passed at `1ca9107f`. The Rocq warning flag rejects unrewritten root `Coq.*` paths while permitting user-qualified and relative `Coq` components.
+- `examples/tests/` and `examples/rocq9.0/tests/` share `examples/tests/test-rules.mk` and the same fixtures, compiled with `coqc` and `rocq c -w +deprecated-dirpath-Coq` respectively. For class resolution, GADT binders, or nested fold changes, run the [shared compiler fixtures](examples/tests/README.md). The Rocq warning flag rejects unrewritten root `Coq.*` paths while permitting user-qualified and relative `Coq` components.
 - `examples/base-tests/` requires compiled `base/`; its 18 `PASS` cases and 3 expected compiler failures now run alongside `test/deriving.sh` and `test/identity-traversal.sh`. The Rocq parent `make -C examples/rocq9.0 base` runs both scripts after base compilation. `BASE_CHECKS=` disables these real-tool checks for the fake harness only; retain the defaults for normal builds.
 - When changing deriving recovery, stock generation, or shared traversal instances, use the [deriving and base integration checks](examples/tests/README.md#deriving-and-base-integration). Run the complete deriving CLI suite per target in the matching compiler environment; `test/deriving.sh --retained-only` focuses on Kleisli and inline kind regressions. The shared `IdentityTraversal.v` runner requires 14 closed assumption reports, not merely successful compilation.
 - Shared compiler fixtures keep their `edits`, `preamble.v`, and `midamble.v` files in `examples/tests/<TestName>/`.

@@ -84,7 +84,7 @@ do not replace compiler tests.
 | --- | --- |
 | [Edits.hs](../../test/Edits.hs) | Currently 237 assertions through `parseEditList`, `parseTerm`, `buildEdits`, and related public APIs: exact ASTs, configuration fields, diagnostics, ordering, and precedence. |
 | [edits.sh](../../test/edits.sh) | 32 real-CLI cases per target, 64 for both. Success requires nonempty `.v` and `.h2ci` output plus selected source assertions; rejection requires a nonzero exit and a diagnostic substring. This script does not compile output. |
-| Shared compiler fixtures | Currently 67 `PASS` cases and 3 `TODO_PASS` cases per compiler. Generated proofs, type checks, and deliberate `Fail` commands distinguish selected edit effects from mere successful translation. |
+| Shared compiler fixtures | Currently 70 `PASS` cases and 3 `TODO_PASS` cases per compiler. Generated proofs, type checks, and deliberate `Fail` commands distinguish selected edit effects from mere successful translation. |
 
 The compiler counts include 12 edit fixtures, the reactivated `Records` and
 `RecordConstruction`, and `SoleCtorGuard`, up from 52 `PASS` cases. The record
@@ -92,8 +92,14 @@ assertions check field update, named-field construction, and projection of the
 constructed value. `SoleCtorGuard` combines `Single`, `Nested`, `Choice`, guarded
 case arms, and empty-list guards with the `Box` and nested-pair cases. Computational
 assertions cover each fixture case, including exhaustive guards and refutable
-fallbacks. It counts as one `PASS` module, so combining the two branches keeps
-the total at 67, not 68.
+fallbacks. It counts as one `PASS` module. `NestedFold` checks a rank-2
+interpreter whose local handler calls the interpreter recursively through
+a continuation. The generated recursive call must compute the same result
+as interpreting the continuation directly, even when the wrapper's value
+argument shadows a type variable used in the local signature.
+Its `Inspect` branch uses both the outer value and its same-spelled type in
+one annotated `let`. The `Stored` branch binds a different value with that
+spelling. Both equations reduce by reflexivity.
 The lists in `test-rules.mk` determine which fixtures run; these counts describe
 the inventory, not the outcome of a particular run.
 
@@ -108,6 +114,14 @@ and `ExceptInDataDefinition`. Expected failures return success only when they
 match their category; an unexpected result must keep Make's nonzero status.
 Generation is forced on reruns, including helper dependencies, and a failed
 translator's partial `.v` output is discarded rather than reused.
+
+`RankCallback` in the shared suite checks specialization of a lambda-bound
+polymorphic value at multiple types, including an explicit application whose
+type cannot be inferred from `Nothing`. Its recursive example must compile as
+a guarded `Fixpoint` and compute on a nonempty list.
+`TypeOperatorScope` declares two mutually recursive infix types. Their
+constructors must compile before either infix notation is in scope, and
+the following definition must compile using the newly declared notation.
 
 ## Deriving and base integration
 
@@ -289,6 +303,7 @@ These checks target interactions that a one-directive smoke test would miss.
 | Rename scopes and aliases | `scopeChecks` and `aliasChecks` test nesting/isolation; `ScopedMethods` checks both original and renamed module spellings against automatic sibling-method renaming. `ModuleEdits` checks aliases through imports, additions, and original-name axiomatization. |
 | Rewrite order and renamed names | `rewriteChecks` and four CLI layouts require reverse source order within a file, then file order across files, with no fixed-point iteration. Rewrites must match the already-renamed spelling; their own patterns are not renamed. |
 | Class edits and default dispatch | `ClassEdits` checks removed classes/methods and a body-only skip; `ClassEditSimple` checks direct encoding; `ClassEditRedefine` distinguishes inherited defaults, explicit methods, and one replaced instance method. |
+| Class method selection | `ClassEdits` distinguishes two instances that share their first type parameter, computes a recursive method that also calls a different instance, and checks both operators in a qualified `do` block. |
 | Redefined newtype and coerce | `NewtypeEdits` changes constructor/accessor metadata, rejects the old selector, and checks both Boolean results of the derived method after wrapping/unwrapping. |
 | Termination, obligations, and ordering | `programChecks`, `StructuralEdits`, and `RecursionEdits` cover structural positions, local polyrec, custom relations, and tactic-only dependencies. CLI rejects well-founded edits on nonrecursive functions or cleared signatures and Equations with deferred/corecursive termination. |
 | Mutual inlining with other edits | `InlineMutualEdits` combines transitive inlining with a scoped rewrite, added notation scope, and a specialized helper type; both the recursive result and rejected wrong-type call are checked. |

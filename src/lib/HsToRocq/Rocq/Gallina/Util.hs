@@ -215,6 +215,7 @@ toExplicitBinder (Generalized _ei ty) = Generalized Explicit ty
 mkBinder :: Explicitness -> Name -> Binder
 mkBinder Explicit name = ExplicitBinder name
 mkBinder Implicit name = ImplicitBinders (pure name)
+mkBinder NonMaximal name = Typed Ungeneralizable NonMaximal (pure name) Underscore
 
 -- | Multi-name binder with explicit type.
 mkBinders :: Explicitness -> NonEmpty Name -> Term -> Binder

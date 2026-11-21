@@ -1,0 +1,17 @@
+async
+base
+bytestring
+hashable
+http-client
+mtl
+servant
+servant-client
+servant-server
+singletons
+singletons-base
+stm
+template-haskell
+text
+transformers
+unordered-containers
+warp

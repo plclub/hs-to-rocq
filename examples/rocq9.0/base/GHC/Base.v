@@ -127,7 +127,7 @@ Existing Class Monad.
    : forall {a : Type}, forall {b : Type}, m a -> m b -> m b :=
   g__0__ _ (op_zgzg____ m).
 
-#[global] Definition op_zgzgze__ `{g__0__ : Monad m}
+#[global] Polymorphic Definition op_zgzgze__ `{g__0__ : Monad m}
    : forall {a : Type}, forall {b : Type}, m a -> (a -> m b) -> m b :=
   g__0__ _ (op_zgzgze____ m).
 

@@ -1,0 +1,2 @@
+# A comment mentioning redefine must be harmless.
+order Sample.first Sample.second

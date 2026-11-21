@@ -1,6 +1,20 @@
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE QualifiedDo #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE NoPolyKinds #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 module ClassEdits where
+
+class First m where
+  first :: m a -> m a
+
+class First m => Second m where
+  second :: m a -> m a
+
+class (forall m. Second m => Second (t m)) => Lift t where
+  lift :: Second m => m a -> t m a
 
 data Mark = LeftMark | RightMark
 data OtherMark = OtherLeft | OtherRight
@@ -40,3 +54,41 @@ class BodyOnly a where
 instance BodyOnly Mark where
   bodyKept _ = LeftMark
   bodyOnly _ = RightMark
+
+-- The checked instance must match both parameters, even when the first
+-- parameter is identical. Methods use the two different result types.
+class Choose a b where
+  choose :: a -> b -> b
+
+instance Choose Mark Mark where
+  choose _ _ = RightMark
+
+instance Choose Mark OtherMark where
+  choose _ _ = OtherLeft
+
+data Steps = Last Mark | Step Steps
+
+class Result a where
+  result :: a -> Mark
+
+instance Result Mark where
+  result _ = RightMark
+
+instance Result Steps where
+  result (Last m) = result m
+  result (Step t) = result t
+
+-- Neither operation is a Prelude method. The qualified do block must
+-- call the two operators chosen by GHC's renamer.
+(>>=) :: Mark -> (Mark -> Mark) -> Mark
+x >>= f = f x
+
+(>>) :: Mark -> Mark -> Mark
+LeftMark >> _ = RightMark
+RightMark >> x = x
+
+qualifiedDo :: Mark -> Mark
+qualifiedDo firstMark = ClassEdits.do
+  x <- firstMark
+  x
+  LeftMark

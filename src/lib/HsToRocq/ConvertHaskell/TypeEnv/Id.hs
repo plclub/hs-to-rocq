@@ -41,4 +41,4 @@ convertIdEnv :: ConversionMonad r m => [Id] -> m ConvertedIdEnv
 convertIdEnv ids = M.fromList <$> mapM convertId ids
 
 convertId :: ConversionMonad r m => Id -> m ConvertedId
-convertId id = (,) <$> var ExprNS (varName id) <*> convertType (varType id)
+convertId id = (,) <$> var ExprNS (varName id) <*> convertBindingType (varType id)

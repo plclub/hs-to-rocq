@@ -33,6 +33,7 @@ import HsToRocq.Util.Function
 import Data.Maybe
 import Data.Either
 import Data.List (sortBy)
+import HsToRocq.Util.GHC.MethodCalls (MethodSites)
 import HsToRocq.Util.List hiding (unsnoc)
 import Data.List.NonEmpty (nonEmpty, NonEmpty(..))
 import qualified Data.List.NonEmpty as NEL
@@ -44,6 +45,7 @@ import Control.Monad (guard, replicateM, (<=<))
 import Control.Monad.Trans.Maybe
 import Control.Monad.Except
 import Control.Monad.Writer
+import Control.Monad.Reader (local)
 import Data.Monoid (Endo(..))
 
 import HsToRocq.Util.Containers
@@ -59,6 +61,9 @@ import qualified GHC
 -- GHC 9.0+ also replaced GHC's own exception handling with Control.Monad.Catch.
 #if __GLASGOW_HASKELL__ >= 910
 import GHC.Data.Bag (bagToList)
+import GHC.Core.ConLike (ConLike(RealDataCon))
+import GHC.Core.DataCon (dataConFullSig, dataConTyCon)
+import GHC.Core.TyCon (tyConDataCons)
 import GHC.Types.Name.Reader (mkOrig)
 import GHC.Types.Basic (Origin(..), GenReason(..), DoPmc(..))
 import GHC.Types.SourceText (IntegralLit(..), SourceText(..))
@@ -103,6 +108,8 @@ import HsToRocq.ConvertHaskell.TypeInfo
 import HsToRocq.ConvertHaskell.Monad
 import HsToRocq.ConvertHaskell.Variables
 import HsToRocq.ConvertHaskell.Definitions
+import HsToRocq.ConvertHaskell.NestedFold (nestedFold, freshenFoldValues)
+import Control.Monad.Trans.Counter (runCounterT)
 import HsToRocq.ConvertHaskell.Literals
 import HsToRocq.ConvertHaskell.HsType
 import HsToRocq.ConvertHaskell.Pattern
@@ -110,6 +117,9 @@ import HsToRocq.ConvertHaskell.Sigs
 import HsToRocq.ConvertHaskell.Axiomatize
 
 import HsToRocq.ConvertHaskell.TypeEnv.Id
+#if __GLASGOW_HASKELL__ >= 910
+import HsToRocq.ConvertHaskell.Type (convertType)
+#endif
 
 -- Compatibility shims: GHC 9.0+ uses LocatedAn (annotated locations) instead
 -- of Located, and renames/restructures several pattern constructors.
@@ -161,8 +171,11 @@ convertExpr :: LocalConvMonad r m => HsExpr GhcRn -> m Term
 convertExpr hsExpr = convertExpr_ hsExpr >>= rewriteExpr
 
 convertExpr_ :: forall r m. LocalConvMonad r m => HsExpr GhcRn -> m Term
-convertExpr_ (HsVar NOEXTP (L _ x)) =
-  Qualid <$> var ExprNS x
+convertExpr_ (HsVar NOEXTP (L _ x)) = do
+  q <- var ExprNS x
+  -- A pattern variable bound by matching @handler has explicit type
+  -- arguments. Instantiate at this occurrence, inside the branch's scope.
+  views (matchedPolyVars.at x) $ maybe (Qualid q) (ExplicitApp q . flip replicate Underscore)
 
 convertExpr_ (HsUnboundVar NOEXTP x) =
   Var <$> freeVar (unboundVarOcc x)
@@ -218,8 +231,26 @@ convertExpr_ (HsLamCase NOEXTP GHC_900(_) mg) = do
   uncurry Fun <$> convertFunction skipPats mg
 #endif
 
-convertExpr_ (HsApp NOEXTP e1 e2) =
-  App1 <$> convertLExpr e1 <*> convertLExpr e2
+convertExpr_ (HsApp NOEXTP e1 e2) = do
+  f <- convertLExpr e1
+  handlers <- view matchedPolyVars
+  arg <- case appliedVar 0 (unLoc e2) of
+    Just (x, 0) | M.member x handlers, Just (callee, position) <- appliedVar 0 (unLoc e1) -> do
+      known <- view (polyParameters.at callee)
+      higher <- case known of
+        Just ps -> pure (position `S.member` ps)
+        Nothing -> lookupName callee >>= \case
+          Just (AnId i) -> M.member position . polyDomains . snd <$> convertId i
+          _ -> pure False
+      if higher then flip ExplicitApp [] <$> var ExprNS x else convertLExpr e2
+    _ -> convertLExpr e2
+  pure (App1 f arg)
+ where
+  appliedVar :: Int -> HsExpr GhcRn -> Maybe (GHC.Name, Int)
+  appliedVar n (HsVar NOEXTP (L _ x)) = Just (x, n)
+  appliedVar n (HsApp NOEXTP f _) = appliedVar (n+1) (unLoc f)
+  appliedVar n (HsPar NOEXTP NOT_GHC_910(GHC_900(_)) f NOT_GHC_910(GHC_900(_))) = appliedVar n (unLoc f)
+  appliedVar _ _ = Nothing
 
 #if __GLASGOW_HASKELL__ >= 808
 convertExpr_ (HsAppType NOEXTP e1 _) =
@@ -238,9 +269,8 @@ convertExpr_ (OpApp _fixity el eop er) =
 convertExpr_ (OpApp el eop _fixity er) =
 #endif
   case eop of
-    L _ (HsVar NOEXTP (L _ hsOp)) -> do
-      op  <- var ExprNS hsOp
-      op' <- rewriteExpr $ Qualid op
+    L _ HsVar{} -> do
+      op' <- convertLExpr eop
       l   <- convertLExpr el
       r   <- convertLExpr er
       pure $ App2 op' l r
@@ -716,7 +746,22 @@ convertSection  ml opE mr = do
 --------------------------------------------------------------------------------
 
 convertLExpr :: LocalConvMonad r m => LHsExpr GhcRn -> m Term
-convertLExpr = convertExpr . unLoc
+#if __GLASGOW_HASKELL__ >= 910
+convertLExpr e | RealSrcSpan s _ <- getLocA e, Just x <- headName (unLoc e) = do
+  recursive <- views selfCalls (S.member (x,s))
+  if recursive then Qualid <$> view currentDefinition else do
+    ts <- view (currentModule.modCallbackUses.at (x,s))
+    case ts of
+      Just args -> do
+        q <- var ExprNS x
+        ExplicitApp q <$> traverse convertType args >>= rewriteExpr
+      Nothing -> convertExpr (unLoc e)
+ where
+  headName (HsVar _ (L _ x)) = Just x
+  headName (HsAppType _ f _) = headName (unLoc f)
+  headName _ = Nothing
+#endif
+convertLExpr e = convertExpr (unLoc e)
 
 --------------------------------------------------------------------------------
 
@@ -733,6 +778,49 @@ convertFunction skipEqns mg = do
   pure (argBinders, match)
  where
    err = convUnsupported "convertFunction: Empty argument list"
+
+-- The keys count value arguments; type variables and dictionaries are
+-- implicit in the Rocq calling convention. Only ordinary quantified type
+-- parameters can be instantiated with holes here (not class dictionaries).
+polyDomains :: Term -> Map Int Int
+polyDomains = M.fromList . zipWithIndex 0
+ where
+  zipWithIndex i (Forall _ t) = zipWithIndex i t
+  zipWithIndex i (Arrow dom t) =
+    [(i,n) | Just n <- [arity dom], n > 0] ++ zipWithIndex (i+1) t
+  zipWithIndex _ _ = []
+  arity (Forall bs t) = (+) <$> (sum <$> traverse simple bs) <*> arity t
+  arity _ = Just 0
+  simple (Typed _ Implicit ns _) = Just (NEL.length ns)
+  simple (ImplicitBinders ns) = Just (NEL.length ns)
+  simple _ = Nothing
+
+convertPolyFunction :: LocalConvMonad r m
+                    => Map Int Int -> Set (NonEmpty NormalizedPattern)
+                    -> MatchGroup GhcRn (LHsExpr GhcRn) -> m (Binders, Term)
+convertPolyFunction ranks skips mg@MG{mg_alts = L _ alts}
+  | not (M.null selected) = do
+      args <- replicateM (matchGroupArity mg) (genqid "arg") >>= maybe
+                (convUnsupported "empty polymorphic match") pure . nonEmpty
+      let scruts = NEL.zipWith (\i q -> if M.member i selected then ExplicitApp q [] else Qualid q)
+                               (0 :| [1..]) args
+          convertAlt alt = fmap (\(ps, hg, rhs) ->
+                            (ps, hg, local (matchedPolyVars %~ M.union (vars alt)) . rhs))
+                           <$> convertMatch alt
+      body <- convertMatchGroupWith convertAlt skips scruts mg
+      pure (mkBinder Explicit . Ident <$> args, body)
+ where
+  selected = M.filterWithKey (\i _ -> all (variableAt i . unLoc) alts) ranks
+  variableAt i alt = case drop i (m_pats alt) of
+    (p:_) -> case unLPat p of
+      GHC.VarPat{} -> True
+      GHC.WildPat{} -> True
+      _ -> False
+    _ -> False
+  vars alt = M.fromList [(x,n) | (i,p) <- zip [0..] (m_pats alt)
+                               , Just n <- [M.lookup i selected]
+                               , GHC.VarPat NOEXTP (L _ x) <- [unLPat p]]
+convertPolyFunction _ skips mg = convertFunction skips mg
 
 isTrivialMatch :: MatchGroup GhcRn (LHsExpr GhcRn) -> Maybe (Match GhcRn (LHsExpr GhcRn))
 isTrivialMatch (MG { mg_alts = L _ [L _ alt] }) = trivMatch alt where
@@ -835,14 +923,31 @@ convertDoBlock allStmts = do
 
     toExpr x rest = toExpr_ x rest >>= rewriteExpr
 
-#if __GLASGOW_HASKELL__ >= 806
+#if __GLASGOW_HASKELL__ >= 910
+    toExpr_ (BodyStmt _ e thenOp _guard) rest = do
+      op <- syntaxOp "GHC.Base.>>" thenOp
+      App2 op <$> convertLExpr e <*> rest
+#elif __GLASGOW_HASKELL__ >= 806
     toExpr_ (BodyStmt _ e _bind _guard) rest =
 #else
     toExpr_ (BodyStmt e _bind _guard _PlaceHolder) rest =
 #endif
+#if __GLASGOW_HASKELL__ < 910
       monThen <$> convertLExpr e <*> rest
+#endif
 
-#if __GLASGOW_HASKELL__ >= 806
+#if __GLASGOW_HASKELL__ >= 910
+    toExpr_ (BindStmt ext pat exp) rest = do
+      bindOp <- syntaxOp "GHC.Base.>>=" (xbsrn_bindOp ext)
+      let monBind = App2 bindOp
+      -- The renamer supplies the actual fail operator (including rebindings)
+      -- when a failed pattern must produce an action of the enclosing monad.
+      fallback <- case xbsrn_failOp ext of
+        Just (SyntaxExprRn failExpr) -> do
+          failOp <- convertExpr failExpr
+          pure $ failOp `App1` HsString "Partial pattern match in `do' notation"
+        _ -> pure patternFailure
+#elif __GLASGOW_HASKELL__ >= 806
     toExpr_ (BindStmt _ pat exp NOT_GHC_900(_bind _fail)) rest =
 #else
     toExpr_ (BindStmt pat exp _bind _fail PlaceHolder) rest =
@@ -853,7 +958,11 @@ convertDoBlock allStmts = do
         (\exp' cont letCont -> letCont (monBind exp' (Qualid cont)) <$> rest)
         (\skipped           -> convUnsupported $
           "binding against the skipped constructor `" ++ showP skipped ++ "' in `do' notation")
+#if __GLASGOW_HASKELL__ >= 910
+        fallback
+#else
         (missingValue `App1` HsString "Partial pattern match in `do' notation")
+#endif
 
     toExpr_ (LetStmt NOEXTP (NOT_GHC_900(L _) binds)) rest =
       convertLocalBinds binds rest
@@ -864,8 +973,13 @@ convertDoBlock allStmts = do
     toExpr_ _ _ =
       convUnsupported "impossibly fancy `do' block statements"
 
+#if __GLASGOW_HASKELL__ >= 910
+    syntaxOp _ (SyntaxExprRn op) = convertExpr op
+    syntaxOp fallback NoSyntaxExprRn = pure (Qualid fallback)
+#else
     monBind e1 = mkInfix e1 "GHC.Base.>>="
     monThen e1 = mkInfix e1 "GHC.Base.>>"
+#endif
 
 convertListComprehension :: LocalConvMonad r m => [ExprLStmt GhcRn] -> m Term
 convertListComprehension allStmts = case fmap unLoc <$> unsnoc allStmts of
@@ -960,19 +1074,26 @@ convertMatchGroup :: LocalConvMonad r m
                   -> NonEmpty Term
                   -> MatchGroup GhcRn (LHsExpr GhcRn)
                   -> m Term
-convertMatchGroup skipEqns args (MG { mg_alts = L _ alts }) = do
-    allConvAlts <- traverse (convertMatch . unLoc) alts
+convertMatchGroup = convertMatchGroupWith convertMatch
+
+convertMatchGroupWith :: LocalConvMonad r m
+                      => (Match GhcRn (LHsExpr GhcRn) -> m (Maybe (MultPattern, HasGuard, Term -> m Term)))
+                      -> Set (NonEmpty NormalizedPattern) -> NonEmpty Term
+                      -> MatchGroup GhcRn (LHsExpr GhcRn) -> m Term
+convertMatchGroupWith convertAlt skipEqns args (MG { mg_alts = L _ alts }) = do
+    allConvAlts <- traverse (convertAlt . unLoc) alts
     let convAlts = [alt | Just alt@(MultPattern pats, _, _) <- allConvAlts
                         , (normalizePattern <$> pats) `notElem` skipEqns ]
     -- TODO: Group
     convGroups <- groupMatches convAlts
 
+    proofCons <- nestedRefinements (concatMap (m_pats . unLoc) alts)
     let scrut = args <&> \arg -> MatchItem arg Nothing Nothing
-    let matches = buildMatch scrut <$> convGroups
+    let matches = buildMatch proofCons scrut <$> convGroups
 
     chainFallThroughs matches patternFailure
 #if __GLASGOW_HASKELL__ >= 806 && __GLASGOW_HASKELL__ < 910
-convertMatchGroup _ _ (XMatchGroup v) = noExtCon v
+convertMatchGroupWith _ _ _ (XMatchGroup v) = noExtCon v
 #endif
 
 data HasGuard = HasGuard | HasNoGuard deriving (Eq, Ord, Enum, Bounded, Show, Read)
@@ -1019,17 +1140,61 @@ convertMatch GHC.Match{..} =
 convertMatch (XMatch v) = noExtCon v
 #endif
 
-buildMatch :: ConversionMonad r m =>
-    NonEmpty MatchItem -> [(MultPattern, Term -> m Term)] -> Term -> m Term
+-- A nested constructor pattern in Rocq does not always infer the dependent
+-- return type that matching the field itself would infer. Recognize nullary
+-- constructors that refine an index (e.g. Refl), using the GHC constructor,
+-- not an occurrence name. Splitting is exhaustive only for a sole constructor.
+nestedRefinements :: LocalConvMonad r m => [LPat GhcRn] -> m (Set Qualid)
+#if __GLASGOW_HASKELL__ >= 910
+nestedRefinements ps = S.fromList . catMaybes <$> traverse classify
+    (S.toList (foldMap (candidates False . unLPat) ps))
+ where
+  candidates :: Bool -> Pat GhcRn -> Set GHC.Name
+  candidates nested (ParPat _ p) = candidates nested (unLPat p)
+  candidates nested (ConPat _ (L _ n) (PrefixCon _ args)) =
+    case args of
+      [] | nested -> S.singleton n
+      _ -> foldMap (candidates True . unLPat) args
+  candidates _ _ = S.empty
+  classify n = lookupName n >>= \case
+    Just (AConLike (RealDataCon dc))
+      | (_, _, _:_, _, [], _) <- dataConFullSig dc, [_] <- tyConDataCons (dataConTyCon dc) ->
+        Just <$> var ExprNS n
+    _ -> pure Nothing
+#else
+nestedRefinements _ = pure S.empty
+#endif
+
+splitRefinements :: LocalConvMonad r m => Set Qualid -> (MultPattern, Term) -> m (MultPattern, Term)
+splitRefinements cons eq@(mp@(MultPattern pats), rhs)
+  | S.null cons = pure eq
+  | otherwise = do
+      (pats', fields) <- runWriterT $ traverse (split False) pats
+      pure (MultPattern pats', foldr eliminate rhs fields)
+ where
+  eliminate (v, con) body = Coq.Match [MatchItem (Qualid v) Nothing Nothing] Nothing
+                              [Equation [MultPattern [ArgsPat con []]] body]
+  avoid = S.fromList (definedBy mp) <> getFreeVars rhs
+  freshField = genqid "evidence" >>= \v -> if S.member v avoid then freshField else pure v
+  split True (ArgsPat c []) | S.member c cons = do
+    v <- lift freshField
+    tell ([(v,c)] :: [(Qualid, Qualid)])
+    pure (QualidPat v)
+  split _ (ArgsPat c args) = ArgsPat c <$> traverse (split True) args
+  split _ p = pure p
+
+buildMatch :: LocalConvMonad r m =>
+    Set Qualid -> NonEmpty MatchItem -> [(MultPattern, Term -> m Term)] -> Term -> m Term
 -- This short-cuts wildcard matches (avoid introducing a match-with alltogether)
-buildMatch _ [(pats,mkRhs)] failure
+buildMatch _ _ [(pats,mkRhs)] failure
     | isUnderscoreMultPattern pats = mkRhs failure
-buildMatch scruts eqns failure = do
+buildMatch proofCons scruts eqns failure = do
     -- Pass the failure
     eqns' <- forM eqns $ \(pat,mkRhs) -> (pat,) <$> mkRhs failure
     is_complete <- isCompleteMultiPattern (map fst eqns')
+    emitted <- traverse (splitRefinements proofCons) eqns'
     pure $ Coq.Match scruts Nothing $
-      [ Equation [pats] rhs | (pats, rhs) <- eqns' ] ++
+      [ Equation [pats] rhs | (pats, rhs) <- emitted ] ++
       [ Equation [MultPattern (UnderscorePat <$ scruts)] failure | not is_complete ]
     -- Only add a catch-all clause if the the patterns can fail
 
@@ -1207,19 +1372,48 @@ convertTypedBinding convHsTy FunBind{..}   = do
                            & maybe (convUnsupported "collapsing non-`let x=… in x` lets") pure
                 False -> pure defn
         
-        defn <-
-          tryCollapseLet =<<
-            if all (null . m_pats . unLoc) . unLoc $ mg_alts fun_matches
-            then case unLoc $ mg_alts fun_matches of
-                   [L _ (GHC.Match NOEXTP _ [] grhss)] -> convertGRHSs [] grhss patternFailure
-                   _ -> convUnsupported "malformed multi-match variable definitions"
-            else do
-              skipEqns <- view $ edits.skippedEquations.at name.non mempty
-              uncurry Fun <$> convertFunction skipEqns fun_matches
+        let translate matches = tryCollapseLet =<<
+              if all (null . m_pats . unLoc) . unLoc $ mg_alts matches
+              then case unLoc $ mg_alts matches of
+                     [L _ (GHC.Match NOEXTP _ [] grhss)] -> convertGRHSs [] grhss patternFailure
+                     _ -> convUnsupported "malformed multi-match variable definitions"
+              else do
+                skipEqns <- view $ edits.skippedEquations.at name.non mempty
+                let ranks = maybe M.empty polyDomains coqTy
+                (bs, rhs) <- local (polyParameters.at (unLoc fun_id) ?~ M.keysSet ranks) $
+                               convertPolyFunction ranks skipEqns matches
+                pure $ Fun (maybe bs (insertResultBinders bs) coqTy) rhs
 
         addScope <- maybe id (flip InScope) <$> view (edits.additionalScopes.at (SPValue, name))
         
-        pure . Just . ConvertedDefinitionBinding $ ConvertedDefinition name tvs coqTy (addScope defn)
+        let build matches = ConvertedDefinition name tvs coqTy . addScope <$> translate matches
+        original <- build fun_matches
+        explicit <- explicitRecursion name
+        cd <- case (explicit, freshenFoldValues original fun_matches) of
+          (False, Just (matches, restore)) -> do
+            -- Match the original top-level gensym stream. A name-sensitive
+            -- edit must not disappear (or begin to match) on the second pass.
+            renamed <- runCounterT (build matches)
+            pure (if restore (_convDefBody renamed) == _convDefBody original
+                     && isJust (nestedFold renamed) then renamed else original)
+          _ -> pure original
+        pure (Just (ConvertedDefinitionBinding cd))
+
+-- Source equations only bind value arguments. When their signature returns
+-- a polymorphic function, account for its type lambdas before binding its
+-- value arguments. Anonymous type binders cannot capture a term variable.
+insertResultBinders :: Binders -> Term -> Binders
+insertResultBinders bs ty = case go (toList bs) ty of
+  (b:rest) -> b :| rest
+  [] -> bs
+ where
+  go [] _ = []
+  go (b:rest) (Arrow _ t) = b : go rest t
+  go rest (Forall qs t)
+    | all ((== NonMaximal) . binderExplicitness) qs =
+        [mkBinder NonMaximal UnderscoreName | q <- toList qs, _ <- toListOf binderNames q]
+        ++ go rest t
+  go rest _ = rest
 
 collapseLet :: Qualid -> Term -> Maybe Term
 collapseLet outer (Let x args _oty defn (Qualid x')) | x == x' =
@@ -1328,7 +1522,7 @@ convertTypedModuleBinding ty defn =
 convertTypedModuleBindings :: ConversionMonad r m
                            => [LHsBind GhcRn]
                            -> Map Qualid Signature
-                           -> (ConvertedBinding -> m a)
+                           -> (HsBind GhcRn -> ConvertedBinding -> m a)
                            -> Maybe (HsBind GhcRn -> GhcException -> m a)
                            -> m [a]
 convertTypedModuleBindings = convertMultipleBindings convertTypedModuleBinding
@@ -1341,15 +1535,15 @@ convertTypedModuleBindings = convertMultipleBindings convertTypedModuleBinding
 -- convUnsupported).
 --
 -- It does, however, support redefinition.
-convertMethodBinding :: ConversionMonad r m => Qualid -> HsBind GhcRn -> m ConvertedBinding
-convertMethodBinding name VarBind{}     = convUnsupportedIn "[internal] `VarBind'"     "method" (showP name)
+convertMethodBinding :: ConversionMonad r m => MethodSites -> Qualid -> Qualid -> HsBind GhcRn -> m ConvertedBinding
+convertMethodBinding _ _ name VarBind{}     = convUnsupportedIn "[internal] `VarBind'"     "method" (showP name)
 #if __GLASGOW_HASKELL__ >= 900
 #else
-convertMethodBinding name AbsBinds{}    = convUnsupportedIn "[internal?] `AbsBinds'"   "method" (showP name)
+convertMethodBinding _ _ name AbsBinds{}    = convUnsupportedIn "[internal?] `AbsBinds'"   "method" (showP name)
 #endif
-convertMethodBinding name PatSynBind{}  = convUnsupportedIn "pattern synonym bindings" "method" (showP name)
-convertMethodBinding name PatBind{}     = convUnsupportedIn "pattern bindings"         "method" (showP name)
-convertMethodBinding name FunBind{..}   = withCurrentDefinition name $ do
+convertMethodBinding _ _ name PatSynBind{}  = convUnsupportedIn "pattern synonym bindings" "method" (showP name)
+convertMethodBinding _ _ name PatBind{}     = convUnsupportedIn "pattern bindings"         "method" (showP name)
+convertMethodBinding sites meth name FunBind{..} = withCurrentDefinition name $ do
   definitionTask name >>= \case
     SkipIt ->
       convUnsupported "skipping instance method definitions (without `skip method')"
@@ -1358,8 +1552,12 @@ convertMethodBinding name FunBind{..}   = withCurrentDefinition name $ do
     AxiomatizeIt _ ->
       convUnsupported "axiomatizing instance method definitions"
     TranslateIt -> do
+      -- A method-scoped rename takes precedence over GHC's default dispatch.
+      resolved <- var ExprNS (unLoc fun_id)
+      let recursiveSites | resolved == meth = S.filter ((== unLoc fun_id) . fst) sites
+                         | otherwise = S.empty
       defn <-
-        if all (null . m_pats . unLoc) . unLoc $ mg_alts fun_matches
+        local (selfCalls .~ recursiveSites) $ if all (null . m_pats . unLoc) . unLoc $ mg_alts fun_matches
         then case unLoc $ mg_alts fun_matches of
                [L _ (GHC.Match NOEXTP _ [] grhss)] -> convertGRHSs [] grhss patternFailure
                _ -> convUnsupported "malformed multi-match variable definitions"
@@ -1368,7 +1566,7 @@ convertMethodBinding name FunBind{..}   = withCurrentDefinition name $ do
           uncurry Fun <$> convertFunction skipEqns fun_matches
       pure $ ConvertedDefinitionBinding $ ConvertedDefinition name [] Nothing defn
 #if __GLASGOW_HASKELL__ >= 806 && __GLASGOW_HASKELL__ < 910
-convertMethodBinding _ (XHsBindsLR v) = noExtCon v
+convertMethodBinding _ _ _ (XHsBindsLR v) = noExtCon v
 #endif
 
 convertTypedBindings :: LocalConvMonad r m
@@ -1376,13 +1574,13 @@ convertTypedBindings :: LocalConvMonad r m
                      -> (ConvertedBinding -> m a)
                      -> Maybe (HsBind GhcRn -> GhcException -> m a)
                      -> m [a]
-convertTypedBindings = convertMultipleBindings convertTypedBinding
+convertTypedBindings binds sigs build = convertMultipleBindings convertTypedBinding binds sigs (const build)
 
 convertMultipleBindings :: ConversionMonad r m
                         => (Maybe Term -> HsBind GhcRn -> m (Maybe ConvertedBinding))
                         -> [LHsBind GhcRn]
                         -> Map Qualid Signature
-                        -> (ConvertedBinding -> m a)
+                        -> (HsBind GhcRn -> ConvertedBinding -> m a)
                         -> Maybe (HsBind GhcRn -> GhcException -> m a)
                         -> m [a]
 convertMultipleBindings convertSingleBinding defns0 sigs build mhandler =
@@ -1395,7 +1593,7 @@ convertMultipleBindings convertSingleBinding defns0 sigs build mhandler =
                             -- Safe because the only place `Left' is introduced
                             -- is in the previous case branch
                         , const id )
-  in traverse (either handler build) <=< addRecursion <=< fmap catMaybes . for defns $ \(L _ defn) ->
+  in traverse (either handler (uncurry build)) <=< addRecursion <=< fmap catMaybes . for defns $ \(L _ defn) ->
        -- 'MaybeT' is responsible for handling the skipped definitions, and
        -- nothing else
        runMaybeT . wrap defn . fmap Right $ do
@@ -1410,7 +1608,7 @@ convertMultipleBindings convertSingleBinding defns0 sigs build mhandler =
                        Nothing -> pure t
                        _       -> fmap sigType <$> lookupSig coqName sigs
                  _ -> pure Nothing
-         MaybeT $ convertSingleBinding ty defn
+         (defn,) <$> MaybeT (convertSingleBinding ty defn)
 
 -- ALMOST a 'ConvertedDefinition', but:
 --   (a) It's guaranteed to have arguments; and
@@ -1472,23 +1670,36 @@ mutualRecursionInlining mutGroup = do
   
   pure $ ((Standalone,) <$> lets) <> recMap
 
-addRecursion :: ConversionMonad r m => [Either e ConvertedBinding] -> m [Either e ConvertedBinding]
+explicitRecursion :: ConversionMonad r m => Qualid -> m Bool
+explicitRecursion n = view $ edits.to (\e -> isJust (e^.termination.at n)
+                                          || e^.equations.contains n || e^.polyrecs.contains n)
+
+addRecursion :: ConversionMonad r m => [Either e (s, ConvertedBinding)] -> m [Either e (s, ConvertedBinding)]
 addRecursion eBindings = do
   fixedBindings <-  M.fromList . fmap (view convDefName &&& id) . foldMap toList
                 <$> traverse fixConnComp (stronglyConnCompNE
                       [ (cd, cd^.convDefName, S.toAscList . getFreeVars $ cd^.convDefBody)
-                      | Right (ConvertedDefinitionBinding cd) <- eBindings ])
+                      | Right (_, ConvertedDefinitionBinding cd) <- eBindings ])
       
-  pure . topoSortByVariablesBy ErrOrVars M.empty . flip map eBindings $ \case
-    Right (ConvertedDefinitionBinding cd) -> case M.lookup (cd^.convDefName) fixedBindings of
-      Just cd' -> Right $ ConvertedDefinitionBinding cd'
+  pure . topoSortByVariablesBy (ErrOrVars . fmap snd) M.empty . flip map eBindings $ \case
+    Right (source, ConvertedDefinitionBinding cd) -> case M.lookup (cd^.convDefName) fixedBindings of
+      Just cd' -> Right (source, ConvertedDefinitionBinding cd')
       Nothing  -> error "INTERNAL ERROR: lost track of converted definition during mutual recursion check"
     untouched ->
       untouched
   where
     fixConnComp (cd :| []) | cd^.convDefName `notElem` getFreeVars (cd^.convDefBody) =
       pure $ cd :| []
-    fixConnComp cds = do
+    fixConnComp cds@(cd :| []) = do
+      let n = cd^.convDefName
+      -- Keep an explicitly requested recursion strategy. Otherwise try a
+      -- nested structural definition before the ordinary singleton fixpoint.
+      explicit <- explicitRecursion n
+      case (explicit, nestedFold cd) of
+        (False, Just result) -> pure (result :| [])
+        _ -> ordinary cds
+    fixConnComp cds = ordinary cds
+    ordinary cds = do
       (commonArgs, cds) <- splitArgs cds
       tbodies <- for cds fixConvertedDefinition
 

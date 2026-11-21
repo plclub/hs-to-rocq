@@ -1,5 +1,6 @@
 # This directive keys the source synonym's unqualified name.
 type synonym Small :-> typeEditsSort
+data kinds TypeEdits.Handler Type, Type -> Type, Type
 data type arguments TypeEdits.Product (parameters: a) (indices: b)
 
 delete unused type variables TypeEdits.MkTrimmed

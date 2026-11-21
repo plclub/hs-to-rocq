@@ -8,7 +8,6 @@ module HsToRocq.Util.GHC (
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Control.Monad
 import Control.Monad.IO.Class (liftIO)
 import System.Exit (exitFailure)
 
@@ -30,6 +29,7 @@ ghcPpr x = fmap T.pack $ showPpr <$> getSessionDynFlags <*> pure x
 defaultRunGhc :: Ghc () -> IO ()
 defaultRunGhc ghc = defaultErrorHandler defaultFatalMessager defaultFlushOut
                   . runGhc (Just libdir)
-                  . handleSourceError (\err -> printException err >> liftIO exitFailure) $ do
-                      void $ setSessionDynFlags =<< getSessionDynFlags
-                      ghc
+                  -- The CLI sets the session flags after parsing --ghc options.
+                  -- Setting them here would select the default interpreter
+                  -- before a caller can request -fexternal-interpreter.
+                  . handleSourceError (\err -> printException err >> liftIO exitFailure) $ ghc

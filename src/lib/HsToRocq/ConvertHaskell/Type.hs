@@ -4,6 +4,7 @@
 
 module HsToRocq.ConvertHaskell.Type (
   convertType,
+  convertBindingType,
   convertKind,
   convertTyCon,
   convertPredType) where
@@ -14,6 +15,12 @@ import Control.Lens
 #if __GLASGOW_HASKELL__ >= 900
 import GHC.Plugins hiding ((<>), App, InScope)
 import GHC.Core.TyCo.Rep
+#if __GLASGOW_HASKELL__ >= 910
+import GHC.Core.TyCo.Tidy (tidyTopType)
+import Data.Maybe (fromMaybe)
+import Data.Bifunctor (first, second)
+import HsToRocq.Util.GHC.Module (modName, moduleNameText)
+#endif
 #else
 #if __GLASGOW_HASKELL__ >= 808
 import Var
@@ -107,6 +114,44 @@ convertType_ _ (CoercionTy _coercion) = convUnsupported' "Injection of a Coercio
   
 convertType :: ConversionMonad r m => Type -> m Term
 convertType = convertType_ False
+
+-- A value can expose more type arguments after its first term argument,
+-- possibly behind a synonym. Mark those binders non-maximal: partial
+-- application must still produce a polymorphic value. Only inspect the
+-- result spine; keep aliases in argument types and ordinary results intact.
+convertBindingType :: ConversionMonad r m => Type -> m Term
+#if __GLASGOW_HASKELL__ >= 910
+convertBindingType ty = case expose False ty of
+  Nothing -> convertType ty
+  Just (aliases, ty') -> do
+    allowed <- and <$> traverse unchangedLocal aliases
+    if allowed then mark False <$> convertType (tidyTopType ty') else convertType ty
+ where
+  -- Do not look through an external model or a substituted declaration.
+  unchangedLocal tc = do
+    let n = getName tc
+    home <- view (currentModule.modName)
+    q <- convertTyCon tc
+    task <- definitionTask q
+    pure $ (moduleName <$> nameModule_maybe n) == Just home
+           && q == Qualified (moduleNameText home) (bareName n)
+           && task == TranslateIt
+  expose after (ForAllTy b body)
+    | after = Just $ second (ForAllTy b) $ fromMaybe ([],body) (expose True body)
+    | otherwise = second (ForAllTy b) <$> expose False body
+  expose after (FunTy af mult arg res) =
+    second (FunTy af mult arg) <$> expose (after || not (isInvisibleFunArg af)) res
+  expose True t@(TyConApp tc _) | Just t' <- coreView t = first (tc:) <$> expose True t'
+  expose _ _ = Nothing
+
+  mark after (Forall bs t) = Forall (if after then fmap nonMax bs else bs) (mark after t)
+  mark _ (Arrow a t) = Arrow a (mark True t)
+  mark _ t = t
+  nonMax (Typed g Coq.Implicit ns k) = Typed g NonMaximal ns k
+  nonMax b = b
+#else
+convertBindingType = convertType
+#endif
 
 convertKind :: ConversionMonad r m => Kind -> m Term
 convertKind = convertType_ False

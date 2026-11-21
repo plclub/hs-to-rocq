@@ -28,3 +28,6 @@
 [submodule "examples/graph/graph"]
 	path = examples/graph/graph
 	url = https://github.com/haskell/fgl.git
+[submodule "examples/parkour/upstream"]
+	path = examples/parkour/upstream
+	url = https://github.com/gshen42/HasChor.git
