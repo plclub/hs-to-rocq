@@ -39,7 +39,9 @@ def main(policy: str, directory: str, export: str, *loads: str) -> None:
         for line in lines:
             if line.startswith(" ") and names:
                 continue
-            match = re.fullmatch(rf"({qualid})(?: : .+)?", line)
+            # For a long type Rocq prints "name :" and starts the type
+            # on the next indented line (e.g. Runtime.bindSTM).
+            match = re.fullmatch(rf"({qualid}) :(?: .+)?", line)
             if not match or match[1] in names:
                 sys.exit(failure)
             names.append(match[1])
