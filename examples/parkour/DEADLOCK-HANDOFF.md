@@ -12,7 +12,24 @@ The translation baseline on `parkour` is `3e36e5828ce19fe61f9ebd04b1a4a455bd1ff0
 The first gate is the fatal-warning build with the existing inputs. A
 successful check at the baseline's weaker warning setting does not pass it.
 
-## Why the proof stops
+## Active source revision
+
+After the counterexample below, the user requested a local upstream fix.
+The active input is now `872bb12fe1698c8a791b8f64df7b8249f7463367` on
+`sequence-cond-announcement` in the submodule. The parent remains the
+original public pin. The fix changes the owner's discarded-result `>>` to
+`>>= \_ ->`, and nothing else in the choreography or network model.
+The [setup instructions](README.md) recover the exact commit without a PR.
+The frozen spec and the historical negative fixture still describe the
+original revision; the requested preservation result now concerns the
+repaired `epp` with the same semantics and assumption ceiling.
+
+`make check-cond-haskell` tests both revisions. The generated-Rocq
+[OwnerCond assertions](theories/OwnerCond.v) check the repaired tree's
+`Bind` root as well as the session IDs inside a parallel continuation.
+These regressions distinguish the repair but do not prove preservation.
+
+## Why the original projection fails
 
 [`counterexample/EXPECTED.md`](counterexample/EXPECTED.md) fixes the inputs and
 observations (revision `fd292580`, SHA-256

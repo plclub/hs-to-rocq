@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from hashlib import sha1
 from pathlib import Path
 
-PIN = "8ff9fadc480ddbd0397db6c3a12240c39fd9b5fb"
+PIN = "872bb12fe1698c8a791b8f64df7b8249f7463367"
 UPSTREAM = Path(__file__).resolve().parent / "upstream"
 ROOTS = ("src", "examples/explicit-parallel/quorum-voting-choreo2")
 

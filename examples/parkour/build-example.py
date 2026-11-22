@@ -119,5 +119,5 @@ for module in modules():
 run("bash", Path("test-checks.sh").resolve(), "--check-closed", lib.resolve(), "Choreography.Choreo2.epp",
     *load_deps,
     cwd=contracts, env=rocq_env)
-for name in ["Required", "Behavior", "Integration"]:
+for name in ["Required", "Behavior", "OwnerCond", "Integration"]:
     check_theory(name)

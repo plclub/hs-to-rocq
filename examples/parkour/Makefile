@@ -1,6 +1,6 @@
 include ../../common.mk
 
-.PHONY: all check lint check-edits check-required test-checks verify-source clean
+.PHONY: all check lint check-edits check-required check-cond-haskell test-checks verify-source clean
 
 all: check-required
 
@@ -9,13 +9,17 @@ RUFF ?= uvx ruff
 SHELLCHECK ?= shellcheck
 
 check: lint
+	$(MAKE) check-cond-haskell
 	$(MAKE) test-checks
 	$(MAKE) check-required
 
 lint:
 	$(MYPY) --strict --cache-dir=build/mypy $(wildcard *.py)
 	$(RUFF) check --no-cache $(wildcard *.py)
-	$(SHELLCHECK) check-ghc checked-tool counterexample/check install-itree-pins test-checks.sh test-vc1
+	$(SHELLCHECK) check-ghc checked-tool counterexample/check counterexample/check-haskell install-itree-pins test-checks.sh test-vc1
+
+check-cond-haskell: verify-source
+	bash counterexample/check-haskell
 
 check-edits:
 	python3 build-example.py --check-edits

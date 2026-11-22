@@ -9,14 +9,24 @@ a well-formed two-role `Cond` whose generated endpoints can deadlock under
 the specified parallel `App` and FIFO rules. See the handoff for the Rocq
 counterexample and the results of the stricter warning gate.
 
-Initialize the [HasChor submodule](upstream) from the repository root:
+The [HasChor submodule](upstream) includes an unpublished, one-commit fix:
+the choice owner binds its broadcast before running the continuation.
+[`cond-order.bundle`](cond-order.bundle) carries just that commit on top of
+the public `explicit-parallel` revision. From the repository root:
 
 ```sh
-git submodule update --init examples/parkour/upstream
+p=examples/parkour/upstream
+git submodule init "$p"
+if [ ! -e "$p/.git" ]; then
+  git clone --no-checkout "$(git config --get submodule.examples/parkour/upstream.url)" "$p"
+fi
+git -C "$p" fetch ../cond-order.bundle refs/heads/sequence-cond-announcement
+git submodule update --init "$p"
 make -C examples/parkour verify-source
 ```
 
-The gitlink pins `8ff9fadc480ddbd0397db6c3a12240c39fd9b5fb`.
+The gitlink pins local revision `872bb12fe1698c8a791b8f64df7b8249f7463367`,
+whose parent is `8ff9fadc480ddbd0397db6c3a12240c39fd9b5fb`.
 `verify-source` compares working-tree bytes against the pinned Git blobs and
 rejects extra files in the source directories. The checkout also supplies the
 `mkLoc` Template Haskell splices used by the upstream protocol.
