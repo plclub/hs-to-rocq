@@ -15,7 +15,7 @@ check: lint
 lint:
 	$(MYPY) --strict --cache-dir=build/mypy $(wildcard *.py)
 	$(RUFF) check --no-cache $(wildcard *.py)
-	$(SHELLCHECK) check-ghc checked-tool test-checks.sh test-vc1
+	$(SHELLCHECK) check-ghc checked-tool counterexample/check install-itree-pins test-checks.sh test-vc1
 
 check-edits:
 	python3 build-example.py --check-edits

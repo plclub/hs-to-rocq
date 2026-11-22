@@ -1,5 +1,4 @@
 From Stdlib Require Import Lists.List.
-From Stdlib Require Import Lia.
 From Counterexample Require Import Family Source Network Projection.
 Require Import Choreography.Network Control.Monad.Tree Parkour.Codec.
 Import ListNotations.
@@ -50,8 +49,9 @@ Proof. destruct 1; [apply step_A | apply step_B]; assumption. Qed.
 
 Lemma enqueue_changes q k w : q k <> enqueue q k w k.
 Proof.
-  unfold enqueue; rewrite put_same. intro H.
-  apply (f_equal (@length wire)) in H. rewrite length_app in H; simpl in H; lia.
+  unfold enqueue; rewrite put_same.
+  induction (q k) as [|x xs IH]; cbn; intro H; [discriminate|].
+  apply IH. exact (f_equal (@tl wire) H).
 Qed.
 
 Lemma classified_action_changes self a t q u r h e :

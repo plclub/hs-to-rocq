@@ -42,6 +42,9 @@ of any choice of induction invariant. It does not show a deadlock in
 `Main.quorumVoting`. A change to the upstream owner's sequencing would
 change the pinned object of the theorem and needs a separate decision.
 
+The [upstream Haskell diagnostic](counterexample/UPSTREAM.md) also observes
+the unit send before the Boolean broadcast without using the Rocq translation.
+
 ## Build evidence
 
 On GHC 9.10.3 and Rocq 9.0.1 with Stdlib 9.0.0, `make clean` in this
@@ -85,6 +88,14 @@ compiled translations, each printed **`Closed under the global context`**:
 | `Projection` | `actual_projected_bad_run`, `no_network_step`, `bad_not_final`, `actual_projected_counterexample` |
 | `Trace` | `projected_action_history` (two wire actions and seven finite bookkeeping steps) |
 | `Refutation` | `two_role_counterexample`, `preservation_fails`, `reflection_fails`, `identity_result`, `other_channels_empty` |
+| [`ObservableRefutation`](counterexample/ObservableRefutation.v) | `observable_two_role_counterexample` |
+
+The last theorem checks that no finite sequence of silent bookkeeping at
+the bad residual can expose a return or a genuine action. It holds for
+**every** labelling of the network rules whose steps erase to network
+microsteps: `Projection.no_network_step` rules out even a first microstep.
+The concrete history therefore witnesses failure without assuming that a
+partial list of observed actions enumerates everything an endpoint could do.
 
 `counterexample/check` is the strict replay command, from this directory,
 with the generated library and dependencies on disk. It uses the production
