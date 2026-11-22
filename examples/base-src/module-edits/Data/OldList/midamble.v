@@ -1,7 +1,7 @@
 Require Import GHC.Char.
 Require GHC.Unicode.
 Require Coq.Lists.List.
-Require Import Lia.
+Require Import Coq.Arith.PeanoNat.
 Import Ascii.AsciiSyntax.
 Import String.StringSyntax.
 
@@ -80,13 +80,17 @@ Lemma mergePairs_length : forall n, forall a cmp (xs : list (list a)) x y,
 induction n. intros; simpl. destruct xs; inversion H. simpl. auto.
 intros.
 destruct xs.
-simpl in *. lia.
+simpl in *. apply (proj1 (Nat.succ_lt_mono _ _)). apply Nat.lt_0_succ.
 destruct xs.
-simpl in *. lia.
+simpl in *. apply (proj1 (Nat.succ_lt_mono _ _)).
+apply (proj1 (Nat.succ_lt_mono _ _)).
+apply Nat.lt_0_succ.
 assert (L : le (length xs) n).
-simpl in H. lia.
+simpl in H. apply Nat.le_trans with (S (length xs)).
+apply Nat.le_succ_diag_r.
+now apply le_S_n in H.
 specialize (IHn a cmp xs l l0 L).
-simpl in *. lia.
+simpl in *. now apply (proj1 (Nat.succ_lt_mono _ _)).
 Qed.
 
 Program Fixpoint mergeAll {a0} (cmp: a0 -> a0 -> comparison)
@@ -97,13 +101,7 @@ Program Fixpoint mergeAll {a0} (cmp: a0 -> a0 -> comparison)
   | cons x (cons y xs) => mergeAll cmp (mergePairs cmp (cons x (cons y xs)))
   end.
 Next Obligation.
-simpl.
-destruct xs. simpl. auto.
-destruct xs. simpl. auto.
-apply Nat.succ_lt_mono.
-pose (MP := mergePairs_length (length xs) a0 cmp xs l l0 ltac:(auto)). clearbody MP.
-simpl in *.
-lia.
+exact (mergePairs_length (length xs) a0 cmp xs x y (le_n _)).
 Defined.
 
 Definition sortBy {a} (cmp : a -> a -> comparison) (xs : list a): list a :=
@@ -132,7 +130,7 @@ Proof.
   + intros p s' H. simpl in *.
     destruct (p a) eqn:Hp.
     pose (K := IHs p s' H). clearbody K.
-    lia.
+    exact (Nat.lt_trans _ _ _ K (Nat.lt_succ_diag_r _)).
     inversion H. subst.
     auto.
 Qed.
@@ -171,7 +169,7 @@ Next Obligation.
   inversion Heq_anonymous. subst.
   symmetry in B.
   pose (h2 := break_length B).
-  lia.
+  exact (Nat.le_lt_trans _ _ _ h2 h1).
 Defined.
 
 Program Fixpoint lines (s : GHC.Base.String) { measure (length s) }
@@ -184,5 +182,5 @@ Program Fixpoint lines (s : GHC.Base.String) { measure (length s) }
          pair l (match s' with | nil => nil | cons _ s'' => lines s'' end)).
 Next Obligation.
   pose (h0 := break_length Heq_anonymous). clearbody h0. simpl in h0.
-  lia.
+  exact (Nat.lt_le_trans _ _ _ (Nat.lt_succ_diag_r _) h0).
 Defined.

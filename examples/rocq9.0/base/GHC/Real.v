@@ -15,9 +15,7 @@ Unset Printing Implicit Defensive.
 
 (* Rational numbers *)
 
-Require Import ZArith.
-Require Import QArith.
-Require Import QArith.QArith_base.
+From Stdlib Require Import ZArith.BinInt QArith.QArith_base.
 
 Definition Rational := QArith_base.Q.
 
@@ -134,4 +132,3 @@ Module Notations.
 Infix "GHC.Real./" := (op_zs__) (left associativity, at level 40).
 Notation "'_GHC.Real./_'" := (op_zs__).
 End Notations.
-

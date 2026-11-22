@@ -19,8 +19,7 @@ Export String.StringSyntax.
 Require Import GHC.Base.
 (* _==_ notation *)
 
-Require Import ZArith.
-Require Import ZArith.BinInt.
+From Stdlib Require Import ZArith.Zbool ZArith.Wf_Z.
 
 (* Hand-translated version of the prelude definitions
    of these functions. *)

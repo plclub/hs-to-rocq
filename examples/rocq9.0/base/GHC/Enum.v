@@ -10,7 +10,7 @@ Generalizable All Variables.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-From Stdlib Require Import ssreflect Lia.
+From Stdlib Require Import ssreflect ZArith.Znat ZArith.ZArith_dec.
 
 (* Note: we will only be able to make instances of this class for bounded
    types so that we can support enumFrom and still terminate.
@@ -318,7 +318,12 @@ Lemma eftInt_aux_pf (y x : Int) :
   (x <= y)%Z ->
   x <> y ->
   (x+1 <= y)%Z.
-Proof. unfold Int in *; lia. Qed.
+Proof.
+  intros Hle Hneq.
+  apply Z.le_succ_l.
+  apply Z.lt_eq_cases in Hle.
+  destruct Hle as [Hlt | Heq]; [exact Hlt | contradiction].
+Qed.
 
 (* Manually copying `GHC.Enum.eftInt`'s local function `go` *)
 Program Fixpoint eftInt_aux (y x : Int) (pf : (x <= y)%Z) {measure (Z.to_nat (y - x))} : list Int :=
@@ -326,14 +331,23 @@ Program Fixpoint eftInt_aux (y x : Int) (pf : (x <= y)%Z) {measure (Z.to_nat (y 
        | left  _   => nil
        | right neq => eftInt_aux (eftInt_aux_pf pf neq)
        end%Z.
-Next Obligation. apply Z2Nat.inj_lt; lia. Defined.
+Next Obligation.
+  apply Z2Nat.inj_lt.
+  - apply Z.le_0_sub. exact (eftInt_aux_pf pf neq).
+  - apply Z.le_0_sub. exact pf.
+  - apply Z.sub_lt_mono_l.
+    apply Z.lt_succ_diag_r.
+Defined.
 Arguments eftInt_aux _ _ _ : clear implicits.
 
 (* Manually copying `GHC.Enum.eftInt` *)
 Definition eftInt (x0 y : Int) :=
   match Z_gt_dec x0 y with
   | left  _   => nil
-  | right Ngt => eftInt_aux y x0 (Znot_gt_le x0 y Ngt)
+  | right Ngt =>
+      eftInt_aux y x0
+        (proj2 (Z.le_ngt x0 y)
+          (fun Hlt => Ngt (proj2 (Z.gt_lt_iff x0 y) Hlt)))
   end.
 
 #[global]

@@ -25,7 +25,6 @@ Require Export Bool.Bool.
 
 (* Int and Integer types *)
 Require NArith.
-Require Import ZArith.
 Require Export GHC.Num.
 
 (* Char type *)

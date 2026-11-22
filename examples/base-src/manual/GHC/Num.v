@@ -1,6 +1,9 @@
 (* The Num class and the Int, Integer and Word Types *)
 
-Require Export ZArith.
+From Coq Require Export ZArith.BinIntDef ZArith.BinInt.
+(* Arithmetic proof clients also use the conversion, decision and order
+   modules that the former ZArith umbrella re-exported. *)
+From Coq Require Export ZArith.Znat ZArith.ZArith_dec ZArith.Zorder.
 Definition Integer  := Z.
 
 Definition Int      := Z.   (* A lie. Sorta. But it is signed. *)
@@ -88,10 +91,9 @@ Instance Num_Word__ : Num Word := {
   negate      := fun _ => 0%N;
   signum      := fun x => match x with | N0 => N0 | _ => 1%N  end }.
 
-Require BinInt.
-
 Module Notations.
-Export BinInt.
+(* Generated modules import Notations to read integer literals in #n. *)
+Export BinIntDef.
 
 Infix    "GHC.Num.+"     := op_zp__ (at level 50, left associativity).
 Notation "'_GHC.Num.+_'" := op_zp__.
