@@ -130,17 +130,30 @@ Proof. exact DeadlockSourceCases.fifo. Qed.
 
 (* Availability must inspect the occurrence-only source delivery too. A
    predicate still using take_pending would miss this enabled receive. *)
-Lemma occurrence_availability_rejects_wrong_wire_head :
+Lemma occurrence_availability_rejects_bad_wire_head :
   ~ delivery_available_at bool DataDelivery F.second_path F.A F.B F.read_bool
       Choreography.Network.Root
       (enqueue empty_queues (F.A,F.B,Choreography.Network.Root)
-        (@Parkour.Codec.show bool F.show_bool true)) F.two_pending.
+        [BinNat.N.of_nat 2]) F.two_pending.
 Proof.
   intro Havailable.
   assert (Htake : take_at DataDelivery F.second_path F.A F.B false F.two_pending
     [Pending bool DataDelivery F.first_path F.A F.B true]).
   { unfold F.two_pending. apply TakeAtOther, TakeAtHead. }
-  destruct (Havailable false _ Htake) as [w [ws [Hhead Hread]]].
-  rewrite enqueue_same in Hhead. cbn [empty_queues F.show_bool] in Hhead.
+  destruct (Havailable false _ Htake) as [w [ws [y [Hhead Hread]]]].
+  rewrite enqueue_same in Hhead. cbn [empty_queues] in Hhead.
   inversion Hhead; subst w ws. discriminate Hread.
+Qed.
+
+(* A different decodable payload does not obstruct readiness. No equality
+   with the payload of the heterogeneous take_at witness is extracted. *)
+Lemma occurrence_availability_accepts_other_decodable_payload :
+  delivery_available_at bool DataDelivery F.second_path F.A F.B F.read_bool
+    Choreography.Network.Root
+    (enqueue empty_queues (F.A,F.B,Choreography.Network.Root)
+      (@Parkour.Codec.show bool F.show_bool true)) F.two_pending.
+Proof.
+  intros x sq' _.
+  exists (@Parkour.Codec.show bool F.show_bool true), [], true.
+  split; [rewrite enqueue_same; reflexivity | reflexivity].
 Qed.

@@ -67,11 +67,17 @@ Qed.
    typed pending entries, the actual FIFO head, and its actual Read dictionary.
    Unlike delivery_consistent it does not reflect a wire receive; it exposes
    a wire receive from an occurrence-only source delivery. In particular it
-   cannot discard a source receive using the stronger take_pending lane guard. *)
+   cannot discard a source receive using the stronger take_pending lane guard.
+
+   Readiness needs some decoded value y, not equality with the payload x of
+   every raw take_at witness. Requiring that equality here would unnecessarily
+   ask coherence to extract payload equality from heterogeneous Pending packs;
+   that extraction is not justified by UIP for Symbol. Exact action matching
+   and codec laws remain separate from this internal readiness condition. *)
 Definition delivery_available_at X kind o sender p (rd : Read X) sid
     (q : queues) (sq : list pending) : Prop :=
-  forall x sq', take_at kind o sender p x sq sq' ->
-    exists w ws, q (sender,p,sid) = w :: ws /\ @read X rd w = Some x.
+  forall (x : X) sq', take_at kind o sender p x sq sq' ->
+    exists w ws y, q (sender,p,sid) = w :: ws /\ @read X rd w = Some y.
 
 Fixpoint delivery_available p X c n
     (Ha : aligned model root_session p X c n) (q : queues) (sq : list pending) : Prop.
@@ -169,18 +175,18 @@ Proof.
     destruct (symbol_eq_dec l p); [contradiction|].
     destruct (symbol_eq_dec p p); [|contradiction].
     destruct Hlive as [x [sq' Htake]].
-    destruct (Havailable x sq' Htake) as [w [ws [Hhead Hread]]].
+    destruct (Havailable x sq' Htake) as [w [ws [y [Hhead Hread]]]].
     right. exists (session_at o root_session). split; [apply ReturnPure |].
-    left. exists w, ws, x. split; assumption.
+    left. exists w, ws, y. split; assumption.
   - left. right. exists (session_at o root_session).
     split; [apply ReturnPure | exact I].
   - unfold primitive_live in Hlive.
     destruct (symbol_eq_dec l p); [contradiction|].
     destruct Hlive as [x [sq' Htake]].
-    destruct (Havailable x sq' Htake) as [w [ws [Hhead Hread]]].
+    destruct (Havailable x sq' Htake) as [w [ws [y [Hhead Hread]]]].
     left. right. exists (session_at o root_session).
     split; [apply ReturnPure |].
-    exists w, ws, x. split; assumption.
+    exists w, ws, y. split; assumption.
 Qed.
 
 Variable participants : list role.
