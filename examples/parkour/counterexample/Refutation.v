@@ -1,11 +1,19 @@
 From Stdlib Require Import Lists.List Strings.String.
-From Counterexample Require Family Source Projection.
+From Counterexample Require Family Source Network Projection.
 Import ListNotations.
 
 (* Even counting every housekeeping step as enabled (a more permissive
    readiness test) cannot make this residual ready. *)
 Definition network_ready n :=
   Projection.network_final n \/ exists n', Projection.nstep n n'.
+
+Lemma other_channels_empty k : k <> Projection.key ->
+  Projection.buffers Projection.bad k = [].
+Proof.
+  intro H. change (Projection.queue2 k = []).
+  unfold Projection.queue2, Projection.queue1.
+  rewrite !Network.put_other by exact H. reflexivity.
+Qed.
 
 Theorem two_role_counterexample :
   (NoDup Family.roles /\ Source.well_formed Family.roles Family.B Family.program) /\

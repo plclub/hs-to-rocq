@@ -41,3 +41,51 @@ This refutes preservation, reflection, and history coverage independently
 of any choice of induction invariant. It does not show a deadlock in
 `Main.quorumVoting`. A change to the upstream owner's sequencing would
 change the pinned object of the theorem and needs a separate decision.
+
+## Build evidence
+
+On GHC 9.10.3 and Rocq 9.0.1 with Stdlib 9.0.0, `make clean` in this
+example exited 0. The subsequent `make check` passed lint and the checker
+controls. The good fixture compiled; the two warning probes failed with
+`arguments-assert` and `disj-pattern-notation` respectively. The alias,
+mixed-client, and extra-premise controls all passed. Source verification
+checked 11 upstream, 2 GHC, and 24 transformers files.
+
+`make check` **exited 2**: the first real `rocq c -q -w +all` compile failed
+at `manual/Parkour/Symbol.v:1` with `[disj-pattern-notation,syntax]`.
+The separate one-line `From Stdlib Require Import ZArith.ZArith.` probe
+exited 1 with `[deprecated-transitive-library-file-since-9.0]` for
+`Stdlib.ZArith.ZArith_base`. No warning-clean production build is claimed.
+These diagnostics are separate from the counterexample: fixing the
+imports does not restore the missing source ordering on the network.
+
+## Kernel evidence for the stop condition
+
+[`Family.v`](counterexample/Family.v) fixes `Id`, the two roles and the
+actual `Choreo` family; [`Local.v`](counterexample/Local.v) gives its shared
+`Ret` interpretation, empty event type, trivial stores and initial input.
+There is no `Exec` in either endpoint. [`Source.v`](counterexample/Source.v)
+checks both applicable structural formation rules and proves readiness by
+induction on **all** finite source runs. [`Projection.v`](counterexample/Projection.v)
+normalizes the two runner terms by conversion and reaches the bad queue
+using the generated `App` and `Bind` constructors. Its residual cannot even
+take a housekeeping step. [`Refutation.v`](counterexample/Refutation.v)
+combines these facts and proves the negations of the two implications on
+this instance. These are fragment-specific counterexample proofs, not
+implementations of the four requested library exports.
+
+Single-query diagnostic checks on Rocq 9.0.1, using the baseline's
+compiled translations, each printed **`Closed under the global context`**:
+
+| File | Checked declarations |
+| --- | --- |
+| Generated `Choreography.Choreo2` | `epp` |
+| `Source` | `program_well_formed`, `source_deadlock_free` |
+| `History` | `no_send_first` |
+| `Projection` | `actual_projected_bad_run`, `no_network_step`, `bad_not_final`, `actual_projected_counterexample` |
+| `Refutation` | `two_role_counterexample`, `preservation_fails`, `reflection_fails` |
+
+`counterexample/check` is the strict replay command, from this directory,
+with the generated library and dependencies on disk. It uses the production
+warning policy. The diagnostic kernel checks above use baseline artifacts;
+they are evidence for the counterexample, not a green warning gate.
