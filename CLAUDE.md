@@ -123,7 +123,7 @@ Key lemmas: `bin_Desc0` (combine Desc0), `Desc_outside` (f=None outside range), 
 
 ## Test Structure
 
-For Parkour source pinning, edit-policy changes, or origin checks, follow the
+For Parkour source pinning, edit policy, origin checks, or local-effect semantics, follow the
 [Parkour build and checks](examples/parkour/README.md). Validate with a clean
 `make -C examples/parkour check`: fixture closure is separate from the required
 assumption report for the generated `Choreography.Choreo2.epp`.
