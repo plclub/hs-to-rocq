@@ -82,7 +82,7 @@ for directory in [deps, lib, support, contracts]:
 
 rocq_env = {k: v for k, v in os.environ.items() if k not in {"COQPATH", "ROCQPATH"}}
 load_deps: list[Arg] = [arg for path in (base, deps, support) for arg in ("-Q", path.resolve(), "")]
-rocq: list[Arg] = ["rocq", "c", "-q", "-w", "+deprecated-dirpath-Coq", *load_deps, "-Q", lib.resolve(), ""]
+rocq: list[Arg] = ["python3", Path("parkour_rocq.py").resolve(), *load_deps, "-Q", lib.resolve(), ""]
 
 
 def build_support(module: str) -> None:
@@ -117,7 +117,7 @@ for module in modules():
         build_support("Http")
 
 run("bash", Path("test-checks.sh").resolve(), "--check-closed", lib.resolve(), "Choreography.Choreo2.epp",
-    "-q", *load_deps,
+    *load_deps,
     cwd=contracts, env=rocq_env)
 for name in ["Required", "Behavior", "Integration"]:
     check_theory(name)

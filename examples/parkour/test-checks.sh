@@ -5,36 +5,27 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 tests="$here/tests"
 root=$(cd "$here/../.." && pwd)
 export STACK_YAML="$root/stack.yaml"
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/parkour-checks.XXXXXXXX")
-trap 'rm -rf "$tmp"' EXIT
 
-# Compile a dedicated one-query file. Reports on other definitions cannot
-# satisfy this check. DIR contains the freshly compiled target library.
+verify_contract() {
+    (cd "$here" &&
+        echo '2eaf6aa2825530ad31ce5e0a46e8574a089076e0bad34e3fe59fc1b369112502  tests/slice1.sha256' |
+            shasum -a 256 -c - && shasum -a 256 -c tests/slice1.sha256)
+}
+verify_contract
+
 check_closed() {
-    local dir=$1 name=$2
-    shift 2
-    [[ "$name" =~ ^([A-Za-z_][A-Za-z0-9_]*\.)+[A-Za-z_][A-Za-z0-9_]*$ ]] || return 2
-    printf 'Require %s.\nPrint Assumptions %s.\n' "${name%.*}" "$name" > "$tmp/ParkourClosure.v"
-    rocq c -w +deprecated-dirpath-Coq "$@" -Q "$dir" '' "$tmp/ParkourClosure.v" > "$tmp/closure.log" 2>&1 || {
-        cat "$tmp/closure.log" >&2
-        return 1
-    }
-    cat "$tmp/closure.log"
-    if ! awk '/^Closed under the global context$/ { closed++ }
-              /^Axioms:/ { axioms++ }
-              END { exit !(closed == 1 && !axioms) }' "$tmp/closure.log"; then
-        printf 'Assumption check failed for %s\n' "$name" >&2
-        return 1
-    fi
+    python3 "$here/check-assumptions.py" closed "$@"
 }
 
-if [[ ${1:-} == --check-closed ]]; then
+if [[ ${1:-} == --check-closed || ${1:-} == --check-client ]]; then
+    policy=${1#--check-}
     shift
-    check_closed "$@"
-    exit
+    exec python3 "$here/check-assumptions.py" "$policy" "$@"
 fi
 
 cd "$here"
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/parkour-checks.XXXXXXXX")
+trap 'rm -rf "$tmp"' EXIT
 translator=(stack --allow-different-user exec hs-to-rocq --)
 args=(--strict --target-version 9.0 -N -e "$root/base/edits")
 required=(--require-origin Probe.keep=Probe.keep)
@@ -69,8 +60,31 @@ translate() {
     "${translator[@]}" "${args[@]}" -o "$out" "$@"
 }
 compile() {
-    rocq c -w +deprecated-dirpath-Coq -Q "$1" '' "$1/$2.v"
+    python3 "$here/parkour_rocq.py" -Q "$1" '' "$1/$2.v"
 }
+
+controls="$tmp/controls"
+cp -R "$tests/slice1" "$controls"
+cp "$tests/Alias.v" "$controls"
+compile "$controls" ExtraPremise
+check_closed "$controls" ExtraPremise.keep
+while IFS=$'\t' read -r name expected; do
+    if [[ $expected == pass ]]; then
+        compile "$controls" "$name"
+    elif [[ $name == ExtraType ]]; then
+        reject "$name" "$expected" 'False -> forall' 'while it is expected to have type' -- compile "$controls" "$name"
+    else
+        reject "$name" "$expected" -- compile "$controls" "$name"
+    fi
+done < "$controls/controls.tsv"
+compile "$controls" Alias
+compile "$controls" AliasType
+reject axiom-alias 'Assumption check failed for Alias.keep' 'Alias.opaqueKeep' -- check_closed "$controls" Alias.keep
+compile "$controls" Parkour/Runtime
+compile "$controls" Client
+client=(python3 "$here/check-assumptions.py" client "$controls")
+"${client[@]}" Client.allowed
+reject mixed-client 'Assumption check failed for Client.mixed: Constant Client.IO' -- "${client[@]}" Client.mixed
 
 ./test-vc1
 
@@ -114,9 +128,4 @@ missing handwritten "$tmp/manual-origin" "${required[@]}" -p "$tests/handwritten
 [[ -s "$good/Probe.vo" && -s "$good/Probe.v" && -s "$good/Probe.h2ci" ]]
 missing stale "$good" -e "$tests/allowed.edits" "${required[@]}" "$tests/missing/Probe.hs"
 
-cp "$tests/Alias.v" "$tmp/Alias.v"
-compile "$tmp" Alias
-printf 'Require Alias.\nCheck @Alias.keep : forall a : Type, a -> a.\n' > "$tmp/AliasType.v"
-compile "$tmp" AliasType
-reject axiom-alias 'Assumption check failed for Alias.keep' 'Alias.opaqueKeep' -- check_closed "$tmp" Alias.keep
 printf 'Parkour acceptance controls passed.\n'
