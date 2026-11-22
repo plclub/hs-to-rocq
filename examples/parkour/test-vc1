@@ -58,4 +58,8 @@ reject 'unexpected preamble contents' -p module-edits/Choreography/Location/prea
 printf '%s\n' 'data kinds Control.Monad.Signatures.Catch Type, Type, Type' \
     > "$tmp/examples/parkour/reader.edits"
 reject 'reader.edits [global]: forbidden DataKindEdit' -e reader.edits
+printf '%s\n' 'universe template Choreography.Choreo2.ChoreoSig' > "$tmp/examples/parkour/edits"
+reject 'edits [global]: forbidden UniverseTemplateEdit' -e edits
+printf '%s\n' 'in Main.main universe template Control.Monad.Tree.Tree' > "$tmp/examples/parkour/edits"
+reject 'edits [global > in Main.main]: forbidden UniverseTemplateEdit' -e edits
 echo 'VC1 controls passed'

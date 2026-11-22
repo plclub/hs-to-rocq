@@ -666,11 +666,15 @@ renderInductive kw bodies nots =
 -- is marked cumulative; if any requires polymorphism, the whole block is
 -- marked polymorphic.
 renderUnivPoly :: NonEmpty IndBody -> Doc
-renderUnivPoly bodies = case maximum (fmap indUnivStatus bodies) of
+renderUnivPoly bodies = renderUniverseStatus (maximum (fmap indUnivStatus bodies))
+  where indUnivStatus (IndBody _ _ _ _ us) = us
+
+renderUniverseStatus :: UniverseStatus -> Doc
+renderUniverseStatus = \case
+  UnivTemplate       -> "#[universes(template)]" <> line
   UnivPolyCumulative -> "#[universes(polymorphic, cumulative)]" <> line
   UnivPoly           -> "#[universes(polymorphic)]" <> line
   NotUnivPoly        -> mempty
-  where indUnivStatus (IndBody _ _ _ _ us) = us
 
 renderIndBody :: Doc -> IndBody -> Doc
 renderIndBody def (IndBody name params ty cons _univPoly) = nest 2 $ group $
@@ -741,8 +745,8 @@ instance Gallina ClassDefinition where
                                      <> spaceIf fields <> "}.")
 
 instance Gallina RecordDefinition where
-  renderGallina' _ (RecordDefinition cl params osort build fields) =
-    "Record" <+> renderGallina cl <> spaceIf params <> renderArgsOty H params (Sort <$> osort)
+  renderGallina' _ (RecordDefinition cl params osort build fields status) =
+    renderUniverseStatus status <> "Record" <+> renderGallina cl <> spaceIf params <> renderArgsOty H params (Sort <$> osort)
             <+> nest 2 (":=" </> maybe empty renderGallina build <+>
                                  "{" <> lineIf fields
                                      <> sepWith (<+>) (<!>) ";" (map (\(f,ty) -> renderGallina f <+> ":" <+> renderGallina ty) fields)

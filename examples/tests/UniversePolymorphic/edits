@@ -1,4 +1,5 @@
 universe polymorphic UniversePolymorphic.MyList
+universe template UniversePolymorphic.Template
 universe cumulative UniversePolymorphic.Tree
 # Both edits on the same type: when both present, cumulative subsumes polymorphic
 universe polymorphic UniversePolymorphic.Either_

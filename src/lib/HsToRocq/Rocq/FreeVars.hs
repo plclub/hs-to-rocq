@@ -177,7 +177,7 @@ instance HasBV Qualid ClassDefinition where
         mconcat [ binder field <> fvOf' ty | (field, ty) <- fields ]
 
 instance HasBV Qualid RecordDefinition where
-  bvOf (RecordDefinition name params _osort build fields) =
+  bvOf (RecordDefinition name params _osort build fields _) =
     binder name <> foldMap binder build <>
     foldTelescope bvOf params `telescope`
         mconcat [ binder field <> fvOf' ty| (field, ty) <- fields ]

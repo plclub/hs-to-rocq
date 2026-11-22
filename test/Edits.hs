@@ -92,6 +92,7 @@ editKind = \case
   ExceptInEdit{} -> "ExceptInEdit"
   PromoteEdit{} -> "PromoteEdit"
   PolyrecEdit{} -> "PolyrecEdit"
+  UniverseTemplateEdit{} -> "UniverseTemplateEdit"
   UniversePolymorphicEdit{} -> "UniversePolymorphicEdit"
   UniverseCumulativeEdit{} -> "UniverseCumulativeEdit"
   EquationsEdit{} -> "EquationsEdit"
@@ -178,6 +179,8 @@ grammarCases =
         (TerminationEdit (Qualified "Sample" "loop") Deferred))
   , ("promote", "promote Sample.f", PromoteEdit (Qualified "Sample" "f"))
   , ("polyrec", "polyrec Sample.f", PolyrecEdit (Qualified "Sample" "f"))
+  , ("universe template", "universe template Sample.Box",
+      UniverseTemplateEdit (Qualified "Sample" "Box"))
   , ("universe polymorphic", "universe polymorphic Sample.Box",
       UniversePolymorphicEdit (Qualified "Sample" "Box"))
   , ("universe cumulative", "universe cumulative Sample.Box",
@@ -403,6 +406,12 @@ rejectionChecks =
       "unexpected word `thing'"
   , checkRejected "skip method requires its method name" parseEditList "skip method Sample.Class\n"
       "unexpected newline"
+  , checkRejected "template targets must include their output module" parseEditList
+      "universe template Box\n" "requires a qualified declaration name"
+  , assertEqual "template cannot be scoped under in" (Left "universe template is a module-level edit")
+      (parseConfig "in Sample.outer universe template Sample.Box\n")
+  , assertEqual "template cannot be scoped under except in" (Left "universe template is a module-level edit")
+      (parseConfig "except in Sample.outer universe template Sample.Box\n")
   , checkRejected "indices cannot precede a parameters clause" parseEditList
       "data type arguments Sample.Box (indices: n) (parameters: a)\n" "unexpected opening"
   , checkRejected "struct requires a name or position" parseEditList "termination Sample.f {struct}\n"
@@ -490,6 +499,8 @@ duplicateCases =
       "Duplicate polymorphic recursion requests for Sample.f")
   , ("universe polymorphic", UniversePolymorphicEdit (Bare "T"), UniversePolymorphicEdit (Bare "T"),
       "Duplicate universe polymorphic requests for T")
+  , ("universe template", UniverseTemplateEdit (Qualified "M" "T"), UniverseTemplateEdit (Qualified "M" "T"),
+      "Duplicate universe template requests for M.T")
   , ("universe cumulative", UniverseCumulativeEdit (Bare "T"), UniverseCumulativeEdit (Bare "T"),
       "Duplicate universe cumulative requests for T")
   , ("equations", EquationsEdit (Bare "f"), EquationsEdit (Bare "f"), "Duplicate equations requests for f")
@@ -535,6 +546,7 @@ mappingConfig = buildEdits
   , PromoteEdit (Bare "lifted")
   , PolyrecEdit (Bare "polymorphicLoop")
   , UniversePolymorphicEdit (Bare "Poly")
+  , UniverseTemplateEdit (Qualified "Sample" "Dict")
   , UniversePolymorphicEdit (Bare "Cumulative")
   , UniverseCumulativeEdit (Bare "Cumulative")
   , EquationsEdit (Bare "equational")
@@ -596,6 +608,7 @@ mappingChecks =
   , check "equations requests" (S.singleton (Bare "equational")) _equations
   , check "universe status defaults to monomorphic" NotUnivPoly (lookupUniverseStatus (Bare "Unknown"))
   , check "universe status recognizes polymorphic" UnivPoly (lookupUniverseStatus (Bare "Poly"))
+  , check "template requests retain qualified target" (S.singleton (Qualified "Sample" "Dict")) _universeTemplate
   , check "cumulative status subsumes polymorphic" UnivPolyCumulative (lookupUniverseStatus (Bare "Cumulative"))
   , checkBuilt "a one-name order creates no dependency" [OrderEdit (Bare "single" :| [])] M.empty _orders
   , assertEqual "normalized case-pattern duplicates are rejected"
@@ -1036,7 +1049,7 @@ main = do
         [ assertEqual label (Right [expected]) (parseWith parseEditList (source <> "\n"))
         | (label, source, expected) <- grammarCases ++ grammarBranchCases
         ] ++
-        [ assertEqual "grammar inventory covers all 42 Edit constructors" 42
+        [ assertEqual "grammar inventory covers all 43 Edit constructors" 43
             (S.size (S.fromList [editKind expected | (_, _, expected) <- grammarCases]))
         ] ++
         [ assertEqual label (Right [RedefinitionEdit expected])

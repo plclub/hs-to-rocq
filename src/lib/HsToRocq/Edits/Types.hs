@@ -194,6 +194,7 @@ data Edit = TypeSynonymTypeEdit              Ident Ident
           | ExceptInEdit                     (NonEmpty Qualid) Edit
           | PromoteEdit                      Qualid
           | PolyrecEdit                      Qualid
+          | UniverseTemplateEdit             Qualid
           | UniversePolymorphicEdit          Qualid
           | UniverseCumulativeEdit           Qualid
           | EquationsEdit                    Qualid
@@ -268,6 +269,7 @@ data Edits = Edits { _typeSynonymTypes               :: !(Map Ident Ident)
                    , _exceptInEdits                  :: !(Map Qualid Edits)
                    , _promotions                     :: !(Set Qualid)
                    , _polyrecs                       :: !(Set Qualid)
+                   , _universeTemplate               :: !(Set Qualid)
                    , _universePolymorphic            :: !(Set Qualid)
                    , _universeCumulative             :: !(Set Qualid)
                    , _equations                      :: !(Set Qualid)
@@ -328,6 +330,7 @@ subtractEdits edits1 edits2 =
   , _exceptInEdits                  = edits1^.exceptInEdits
   , _promotions                     = edits1^.promotions
   , _polyrecs                       = (edits1^.polyrecs) S.\\ (edits2^.polyrecs)
+  , _universeTemplate               = edits1^.universeTemplate
   , _universePolymorphic            = edits1^.universePolymorphic
   , _universeCumulative             = edits1^.universeCumulative
   , _equations                      = (edits1^.equations) S.\\ (edits2^.equations)
@@ -412,6 +415,7 @@ descDuplEdit = \case
   ExceptInEdit                     _ _          -> error "ExceptIn Edits are never duplicates"
   PromoteEdit                      qid          -> duplicateQFor  "promotions"                                     qid
   PolyrecEdit                      qid          -> duplicateQFor  "polymorphic recursion requests"                 qid
+  UniverseTemplateEdit             qid          -> duplicateQFor  "universe template requests"                     qid
   UniversePolymorphicEdit          qid          -> duplicateQFor  "universe polymorphic requests"                  qid
   UniverseCumulativeEdit           qid          -> duplicateQFor  "universe cumulative requests"                   qid
   EquationsEdit                    qid          -> duplicateQFor  "equations requests"                              qid
@@ -460,12 +464,16 @@ addEdit e = case e of
   AddEdit                          mod def ph -> return . (additions.at mod.non mempty %~ addPhase ph (definitionSentence def))
   OrderEdit                        idents           -> return . appEndo (foldMap (Endo . addEdge orders . swap) (adjacents idents))
   RewriteEdit                      rewrite          -> return . (rewrites %~ (rewrite:))
+  InEdit _ UniverseTemplateEdit{}                   -> const (throwError "universe template is a module-level edit")
   InEdit                           qid edit         -> inEdits.at qid.non mempty %%~ addEdit edit
   PromoteEdit                      qid              -> addFresh e promotions                             qid                         ()
   PolyrecEdit                      qid              -> addFresh e polyrecs                               qid                         ()
+  UniverseTemplateEdit (Bare _)                     -> const (throwError "universe template requires a qualified declaration name")
+  UniverseTemplateEdit             qid              -> addFresh e universeTemplate                       qid                         ()
   UniversePolymorphicEdit          qid              -> addFresh e universePolymorphic                    qid                         ()
   UniverseCumulativeEdit           qid              -> addFresh e universeCumulative                     qid                         ()
   EquationsEdit                    qid              -> addFresh e equations                              qid                         ()
+  ExceptInEdit _ UniverseTemplateEdit{}             -> const (throwError "universe template is a module-level edit")
   ExceptInEdit                     qids edit        -> addExceptInEdit qids edit
   InvariantEdit                    mod qid binderList cName useSigmaQids def -> addInvariantEdit mod qid binderList cName useSigmaQids def
 

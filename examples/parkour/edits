@@ -1,6 +1,12 @@
 # The legacy Empty case has no payload. The Choreo2 API uses a separate,
 # evidence-based unwrap; Network needs only LocTm from the legacy module.
 skip Choreography.Location.unwrap
+universe template Control.Monad.Tree.Tree
+universe template Choreography.Location.@
+universe template Choreography.Network.NetworkSig
+universe template Choreography.Network.Backend__Dict
+universe template Choreography.Choreo2.At
+universe template Choreography.Choreo2.Epp
 data kinds Choreography.Location.@ Type, Parkour.Symbol.Symbol
 
 # The final argument is an index. Existentials in App, Bind, Send, Comm

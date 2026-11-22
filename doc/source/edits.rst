@@ -1037,6 +1037,26 @@ Examples:
     equations MyModule.myRecFunc
     termination MyModule.myRecFunc {measure (size arg_0__)}
 
+``universe template`` -- request template polymorphism for one declaration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Format:
+  | **universe template** *qualified_name*
+
+Effect:
+  Emits ``#[universes(template)]`` on the named standalone inductive or
+  generated dictionary record. Use the emitted name (for instance,
+  ``MyModule.Foo__Dict`` for the dictionary of a CPS-encoded class).
+  This makes Rocq's inferred template polymorphism explicit without switching
+  to full universe polymorphism. Check the compiler's ``auto-template``
+  diagnostic before applying the edit. A missing declaration in the selected
+  module, a mutual block, or a conflicting ``universe polymorphic`` or
+  ``universe cumulative`` edit is rejected. Names refer to declarations
+  after renaming. The edit is module-level: it cannot appear under ``in``
+  or ``except in``. The shared ``UniversePolymorphic`` fixture checks that
+  the annotated type can return ``Set`` after instantiation at ``Type``,
+  whereas an unannotated control cannot when inference is off.
+
 ``universe polymorphic`` -- make an inductive type universe polymorphic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

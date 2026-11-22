@@ -682,10 +682,36 @@ moduleDeclarations ConvertedModule{..} = do
   let sortedTyCls = topoSortByVariablesBy bvWithInfix orders $
         convModTyClDecls ++ convModAddedTyCls ++ ax_decls
   not_decls <- qualifiedNotations convModName (convModTyClDecls ++ sortedDecls)
+  es <- view edits
+  tyCls <- either throwProgramError pure $ applyTemplateEdits thisModule es sortedTyCls
   imported_modules <- view $ edits.importedModules
   pure . deQualifyLocalNames (convModName `S.insert` imported_modules)
-       $ ModuleDeclarations { moduleTypeDeclarations  = sortedTyCls
+       $ ModuleDeclarations { moduleTypeDeclarations  = tyCls
                             , moduleValueDeclarations = sortedDecls ++ not_decls }
+
+-- Resolve emitted declaration names after renaming and class dictionary
+-- generation, but before dequalification can lose their module identity.
+applyTemplateEdits :: T.Text -> Edits -> [Sentence] -> Either String [Sentence]
+applyTemplateEdits modName es ss
+  | S.null requested = Right ss
+  | null invalid = Right (map snd results)
+  | otherwise = Left $ "universe template: expected exactly one standalone inductive or dictionary record without a conflicting universe mode: "
+                    ++ show (map qualidToIdent invalid)
+  where
+    requested = S.filter belongsHere (_universeTemplate es)
+    -- A stale pre-renaming module name belongs to this translation too:
+    -- report it as unmatched rather than silently treating it as unrelated.
+    belongsHere (Qualified m _) = m == modName
+      || Just modName == (moduleNameText <$> M.lookup (mkModuleName (T.unpack m)) (_renamedModules es))
+    belongsHere (Bare _) = False
+    results = map annotate ss
+    matches = [q | (Just q, _) <- results]
+    invalid = [q | q <- S.toList requested, filter (== q) matches /= [q] || lookupUniverseStatus q es /= NotUnivPoly]
+    annotate (InductiveSentence (Inductive (IndBody q ps ty cs NotUnivPoly :| []) ns))
+      | S.member q requested = (Just q, InductiveSentence (Inductive (IndBody q ps ty cs UnivTemplate :| []) ns))
+    annotate (RecordSentence (RecordDefinition q ps ty build fields NotUnivPoly))
+      | S.member q requested = (Just q, RecordSentence (RecordDefinition q ps ty build fields UnivTemplate))
+    annotate s = (Nothing, s)
 
 -- | This un-qualifies all variable names in the current module.
 -- It should be called very late, just before pretty-printing.

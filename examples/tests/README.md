@@ -82,8 +82,8 @@ do not replace compiler tests.
 
 | Layer | Assertions |
 | --- | --- |
-| [Edits.hs](../../test/Edits.hs) | Currently 237 assertions through `parseEditList`, `parseTerm`, `buildEdits`, and related public APIs: exact ASTs, configuration fields, diagnostics, ordering, and precedence. |
-| [edits.sh](../../test/edits.sh) | 32 real-CLI cases per target, 64 for both. Success requires nonempty `.v` and `.h2ci` output plus selected source assertions; rejection requires a nonzero exit and a diagnostic substring. This script does not compile output. |
+| [Edits.hs](../../test/Edits.hs) | Currently 243 assertions through `parseEditList`, `parseTerm`, `buildEdits`, and related public APIs: exact ASTs, configuration fields, diagnostics, ordering, and precedence. |
+| [edits.sh](../../test/edits.sh) | 36 real-CLI cases per target, 72 for both. Success requires nonempty `.v` and `.h2ci` output plus selected source assertions; rejection requires a nonzero exit and a diagnostic substring. This script does not compile output. |
 | Shared compiler fixtures | Currently 70 `PASS` cases and 3 `TODO_PASS` cases per compiler. Generated proofs, type checks, and deliberate `Fail` commands distinguish selected edit effects from mere successful translation. |
 
 The compiler counts include 12 edit fixtures, the reactivated `Records` and
@@ -288,6 +288,7 @@ combination of edits has been tested.
 | `PromoteEdit` / `promote` | Record promotions and diagnose duplicates. | `PhaseEdits`: the promoted leaf and its dependency are visible before the midamble; ordinary values remain unavailable there. CLI also rejects duplicates. |
 | `PolyrecEdit` / `polyrec` | Record global/scoped requests and diagnose duplicates. | `StructuralEdits`: local `go` recurses at a changed element type and computes the expected result. CLI also rejects duplicates. |
 | `UniversePolymorphicEdit` / `universe polymorphic` | Distinguish default monomorphic and requested polymorphic status. | `UniversePolymorphic`: explicit universe instances work for edited, redefined, coinductive, and mutual types; an unedited control rejects them. |
+| `UniverseTemplateEdit` / `universe template` | Parse a qualified emitted declaration name. | `UniversePolymorphic`: with automatic inference off, the edited type returns `Set` after use at `Type`; the unannotated control cannot. Parkour also exercises generated dictionary records. |
 | `UniverseCumulativeEdit` / `universe cumulative` | Parse combined syntax and make cumulative status subsume polymorphic status. | `UniversePolymorphic`: constrained universe upcasts succeed for cumulative types and fail for a polymorphic-only list. |
 | `EquationsEdit` / `equations` | Record the request and reject duplicates. | `Equations` consumes generated equation lemmas for patterns, local helpers, recursion, and measured recursion; CLI rejects conflicting edits and incompatible termination modes. |
 | `InvariantEdit` / `add invariant` | Check all fields, raw-name renamings, selected exclusions, and generated predicate/sigma/notation additions for monomorphic and parameterized ASTs. | `InvariantEdits`: the raw representation admits `false`, an invalid sigma construction fails, a public value exposes validity evidence, and `keep` preserves its payload. |

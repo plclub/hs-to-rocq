@@ -154,6 +154,30 @@ for version in "${versions[@]}"; do
     require_text "$out/EditClassCli.v" 'Identity__Token_identityMethod'
     pass
 
+    begin_case template-renamed-record
+    write_edits template 'rename type EditClassCli.Identity = EditClassCli.Renamed' \
+        'universe template EditClassCli.Renamed__Dict'
+    expect_success EditClassCli -e "$work/template.edits"
+    require_source '#[universes(template)] Record Renamed__Dict'
+    pass
+
+    begin_case template-stale-name
+    write_edits template 'rename type EditClassCli.Identity = EditClassCli.Renamed' \
+        'universe template EditClassCli.Identity__Dict'
+    expect_error EditClassCli 'universe template: expected exactly one' -e "$work/template.edits"
+    pass
+
+    begin_case template-conflict
+    write_edits template 'universe template EditCli.Token' 'universe polymorphic EditCli.Token'
+    expect_error EditCli 'universe template: expected exactly one' -e "$work/template.edits"
+    pass
+
+    begin_case template-stale-module
+    write_edits template 'rename module EditClassCli NewModule' \
+        'universe template EditClassCli.Identity__Dict'
+    expect_error EditClassCli 'universe template: expected exactly one' -e "$work/template.edits"
+    pass
+
     begin_case duplicate-promote
     write_edits duplicate 'promote EditCli.value' 'promote EditCli.value'
     expect_error EditCli 'Duplicate promotions for EditCli.value' -e "$work/duplicate.edits"

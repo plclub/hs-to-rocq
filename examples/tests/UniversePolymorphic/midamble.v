@@ -10,6 +10,13 @@ Check @Just_@{Set}.
 
 Fail Check @MkPair@{Set Set}.
 
+(* The explicitly template type can still return Set after use at Type.
+   The unannotated control cannot. *)
+Check (Pair Type Type).
+Check (Template Type).
+Check (Template nat : Set).
+Fail Check (Pair nat nat : Set).
+
 (* === Cumulativity tests === *)
 (* Cumulative types allow universe-level subtyping (upcasts); polymorphic-only
    types do not.  The key is using a polymorphic Definition with explicit universe

@@ -1,4 +1,8 @@
 # Use the kinds from the package's declared Haskell2010 language.
+universe template Parkour.Contravariant.Contravariant__Dict
+universe template Control.Monad.IO.Class.MonadIO__Dict
+universe template Control.Monad.Trans.Class.MonadTrans__Dict
+universe template Control.Monad.Trans.Reader.ReaderT
 data kinds Control.Monad.Signatures.Catch Type, Type -> Type, Type
 data kinds Control.Monad.Signatures.CallCC Type -> Type, Type, Type
 data kinds Control.Monad.Trans.Reader.ReaderT Type, Type -> Type, Type

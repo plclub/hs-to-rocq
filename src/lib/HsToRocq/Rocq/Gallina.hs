@@ -380,7 +380,8 @@ data Inductive = Inductive   (NonEmpty IndBody) [NotationBinding]               
                deriving (Eq, Ord, Show, Read, Typeable, Data)
 
 -- |Universe polymorphism and cumulativity flags for inductive types.
-data UniverseStatus = NotUnivPoly         -- ^Monomorphic (default)
+data UniverseStatus = NotUnivPoly         -- ^No attribute; let the prover infer its default
+                    | UnivTemplate        -- ^@#[universes(template)]@ on a standalone declaration
                     | UnivPoly            -- ^@#[universes(polymorphic)]@
                     | UnivPolyCumulative  -- ^@#[universes(polymorphic, cumulative)]@
                     deriving (Eq, Show, Read, Typeable, Data)
@@ -394,6 +395,7 @@ instance Ord UniverseStatus where
           rank NotUnivPoly        = 0
           rank UnivPoly           = 1
           rank UnivPolyCumulative = 2
+          rank UnivTemplate       = 3 -- never merged: requires a standalone declaration
 
 -- |@/ind_body/ ::=@
 data IndBody = IndBody Qualid [Binder] Term [(Qualid, [Binder], Maybe Term)] UniverseStatus -- ^@/ident/ [/binders/] : /term/ := [[|] /ident/ [/binders/] [: /term/] | … | /ident/ [/binders/] [: /term/]]@; 'UniverseStatus' is an hs-to-rocq extension
@@ -445,7 +447,7 @@ data ClassDefinition = ClassDefinition Qualid [Binder] (Maybe Sort) [(Qualid, Te
                      -- TODO: field arguments (which become @forall@ed)
 
 -- |@/record_definition/ ::=@ /(extra)/
-data RecordDefinition = RecordDefinition Qualid [Binder] (Maybe Sort) (Maybe Qualid) [(Qualid, Term)]  -- ^@Record /ident/ [/binders/] [: /sort/] := /ident/ { [/ident/ : /term/ ; … ; /ident/ : /term/] } .
+data RecordDefinition = RecordDefinition Qualid [Binder] (Maybe Sort) (Maybe Qualid) [(Qualid, Term)] UniverseStatus
                      deriving (Eq, Ord, Show, Read, Typeable, Data)
 
 -- |@/instance_definition/ ::=@ /(extra)/

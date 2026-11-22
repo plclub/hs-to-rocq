@@ -366,6 +366,10 @@ Edit :: { Edit }
   | promote Qualid                                        { PromoteEdit                      $2                                    }
   | polyrec Qualid                                        { PolyrecEdit                      $2                                    }
   | universe polymorphic Qualid                            { UniversePolymorphicEdit          $3                                    }
+  | universe Word Qualid                                   {% case ($2, $3) of
+                                                               ("template", Qualified _ _) -> pure (UniverseTemplateEdit $3)
+                                                               ("template", _) -> parseError "universe template requires a qualified declaration name"
+                                                               _ -> parseError "unknown universe mode" }
   | universe cumulative Qualid                             { UniverseCumulativeEdit            $3                                    }
   | universe polymorphic cumulative Qualid                 { UniverseCumulativeEdit            $4                                    }
   | equations_kw Qualid                                    { EquationsEdit                    $2                                    }

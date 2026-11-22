@@ -321,7 +321,7 @@ cpsClassSentences (ClassBody (ClassDefinition name args ty methods) nots) = do
     dict_name = qualidExtendBase "__Dict" name
     dict_build = qualidExtendBase "__Dict_Build" name
     dict_methods = [ (qualidExtendBase "__" name, ty) | (name, ty) <- methods ]
-    dict_record  = RecordDefinition dict_name dict_args ty (Just dict_build) dict_methods
+    dict_record  = RecordDefinition dict_name dict_args ty (Just dict_build) dict_methods NotUnivPoly
     
     dict_args     = filter (\b -> binderGeneralizability b == Ungeneralizable) args
     impl_args     = filter (\b -> binderExplicitness b == Explicit) args

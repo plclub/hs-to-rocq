@@ -44,10 +44,24 @@ convertSynDecl name args def  = do
       annotate binder _ = binder
       params = zipWith annotate rawParams (maybe [] (map Just . NE.toList) kinds ++ repeat Nothing)
   rhs    <- convertLHsType def
+  version <- view rocqVersion
   let (params', rhs') = etaContract params rhs
+      body = case version of
+        Rocq_9_0 -> explicitProduct rhs'
+        Rocq_8_20 -> rhs'
   SynBody q params'
           <$> view (edits.typeSynonymTypes . at coqName . to (fmap Var))
-          <*> pure (rhs' `InScope` "type")
+          <*> pure (body `InScope` "type")
+
+-- A forall on the RHS denotes a type, not the signature of a constant.
+-- Rocq ignores implicit argument declarations here. Preserve the product
+-- and its binder types; signatures of terms using this synonym are separate.
+explicitProduct :: Term -> Term
+explicitProduct (Forall bs t) = Forall (bs >>= explicit) (explicitProduct t)
+  where explicit (ImplicitBinders ns) = fmap ExplicitBinder ns
+        explicit (Typed Ungeneralizable _ ns ty) = pure (Typed Ungeneralizable Explicit ns ty)
+        explicit b = pure b
+explicitProduct t = t
 
 -- Eta-contracting type synonyms allows Coq’s instance resolution mechanism
 -- to look though type synonym more easily.

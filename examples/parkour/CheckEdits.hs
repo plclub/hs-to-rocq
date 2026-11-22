@@ -102,6 +102,12 @@ exactKinds = either (error . unlines . map (prettyParseError "built-in kind poli
 libraryKinds :: [Edit]
 libraryKinds = exactKinds
   [ "data kinds Choreography.Location.@ Type, Parkour.Symbol.Symbol"
+  , "universe template Control.Monad.Tree.Tree"
+  , "universe template Choreography.Location.@"
+  , "universe template Choreography.Network.NetworkSig"
+  , "universe template Choreography.Network.Backend__Dict"
+  , "universe template Choreography.Choreo2.At"
+  , "universe template Choreography.Choreo2.Epp"
   , "data kinds Choreography.Network.NetworkSig (Type -> Type), Type"
   , "data kinds Choreography.Choreo2.ChoreoSig (Type -> Type), Parkour.Symbol.Symbol, Type"
   , "data kinds Choreography.Choreo2.At Type, Parkour.Symbol.Symbol, Parkour.Symbol.Symbol"
@@ -111,6 +117,10 @@ libraryKinds = exactKinds
 readerKinds :: [Edit]
 readerKinds = exactKinds
     [ "data kinds Control.Monad.Signatures.Catch Type, Type -> Type, Type"
+    , "universe template Parkour.Contravariant.Contravariant__Dict"
+    , "universe template Control.Monad.IO.Class.MonadIO__Dict"
+    , "universe template Control.Monad.Trans.Class.MonadTrans__Dict"
+    , "universe template Control.Monad.Trans.Reader.ReaderT"
     , "data kinds Control.Monad.Signatures.CallCC Type -> Type, Type, Type"
     , "data kinds Control.Monad.Trans.Reader.ReaderT Type, Type -> Type, Type" ]
 
