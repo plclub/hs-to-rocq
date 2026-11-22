@@ -34,8 +34,16 @@ observe (Perf (Recv Root src)) = ([ReceiveFrom src], Nothing)
 observe _ = error "unexpected action or non-Root session"
 
 main :: IO ()
-main = case (observe (runReaderT (unEpp (epp program (SSymbol @"A"))) Root),
-             observe (runReaderT (unEpp (epp program (SSymbol @"B"))) Root)) of
-  ((as@[SendTo "B" "()", Broadcast "True"], Just _), (bs@[ReceiveFrom "A"], Nothing))
-    | readMaybe @Bool "()" == Nothing -> print (as, bs)
-  _ -> fail "pinned endpoint observations changed"
+main = do
+  let owner = runReaderT (unEpp (epp program (SSymbol @"A"))) Root
+      peer  = runReaderT (unEpp (epp program (SSymbol @"B"))) Root
+  case owner of
+    App left right -> case (observe left, observe right) of
+      ((ls@[Broadcast "True"], Just _), (rs@[SendTo "B" "()"], Just _)) ->
+        putStrLn ("A: App { left = " ++ show ls ++ ", right = " ++ show rs ++ " }")
+      _ -> fail "unexpected branches of the owner's App"
+    _ -> fail "expected App at the root of A's projected endpoint"
+  case (observe owner, observe peer) of
+    ((as@[SendTo "B" "()", Broadcast "True"], Just _), (bs@[ReceiveFrom "A"], Nothing))
+      | readMaybe @Bool "()" == Nothing -> print (as, bs)
+    _ -> fail "pinned endpoint observations changed"
