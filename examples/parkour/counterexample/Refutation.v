@@ -1,11 +1,20 @@
 From Stdlib Require Import Lists.List Strings.String.
-From Counterexample Require Family Source Network Projection.
+From Counterexample Require Family Source Network Projection Local.
+From ITree Require Import ITreeDefinition.
 Import ListNotations.
 
 (* Even counting every housekeeping step as enabled (a more permissive
    readiness test) cannot make this residual ready. *)
 Definition network_ready n :=
   Projection.network_final n \/ exists n', Projection.nstep n n'.
+
+Lemma identity_result X (x : Family.Id X) (v : X) :
+  Projection.local_effect X x v <-> observe (Local.interpret x) = RetF v.
+Proof.
+  split; intro H.
+  - unfold Projection.local_effect in H. subst. reflexivity.
+  - cbn [Local.interpret] in H. injection H as H. symmetry; exact H.
+Qed.
 
 Lemma other_channels_empty k : k <> Projection.key ->
   Projection.buffers Projection.bad k = [].

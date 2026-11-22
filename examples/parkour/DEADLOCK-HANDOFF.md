@@ -81,9 +81,10 @@ compiled translations, each printed **`Closed under the global context`**:
 | --- | --- |
 | Generated `Choreography.Choreo2` | `epp` |
 | `Source` | `program_well_formed`, `source_deadlock_free` |
-| `History` | `no_send_first` |
+| `History` | `no_send_first`, `generated_history_has_no_source` |
 | `Projection` | `actual_projected_bad_run`, `no_network_step`, `bad_not_final`, `actual_projected_counterexample` |
-| `Refutation` | `two_role_counterexample`, `preservation_fails`, `reflection_fails` |
+| `Trace` | `projected_action_history` (two wire actions and seven finite bookkeeping steps) |
+| `Refutation` | `two_role_counterexample`, `preservation_fails`, `reflection_fails`, `identity_result`, `other_channels_empty` |
 
 `counterexample/check` is the strict replay command, from this directory,
 with the generated library and dependencies on disk. It uses the production

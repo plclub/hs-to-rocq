@@ -4,6 +4,11 @@ This example targets the upstream `explicit-parallel` choreography library
 and its quorum-voting protocol. The [specification](SPEC.md) lists the
 bindings, type contracts, and projection behavior that the port must preserve.
 
+The separate [deadlock-freedom investigation](DEADLOCK-HANDOFF.md) found
+a well-formed two-role `Cond` whose generated endpoints can deadlock under
+the specified parallel `App` and FIFO rules. See the handoff for the Rocq
+counterexample and the results of the stricter warning gate.
+
 Initialize the [HasChor submodule](upstream) from the repository root:
 
 ```sh
