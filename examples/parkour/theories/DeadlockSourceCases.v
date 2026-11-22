@@ -75,5 +75,5 @@ Proof. apply RAnnounce. Qed.
 
 Lemma separate_hear : separate_hear_contract.
 Proof.
-  eapply RHear; [discriminate | apply TakeHead].
+  eapply RHear; [discriminate | apply TakeAtHead].
 Qed.

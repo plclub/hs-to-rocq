@@ -42,6 +42,33 @@ Inductive take_pending {X} k o s d (x : X) :
     take_pending k o s d x q q' ->
     take_pending k o s d x (v :: q) (v :: q').
 
+(* Source receives select their own occurrence, not a transport frontier.
+   Role-local cursors impose source order. The stronger take_pending relation
+   above remains available to reason separately about FIFO correspondence. *)
+#[universes(template)]
+Inductive take_at {X} k o s d (x : X) :
+    list pending -> list pending -> Prop :=
+| TakeAtHead q : take_at k o s d x (Pending X k o s d x :: q) q
+| TakeAtOther v q q' :
+    take_at k o s d x q q' ->
+    take_at k o s d x (v :: q) (v :: q').
+
+Lemma take_pending_at {X} k o s d (x : X) q q' :
+  take_pending k o s d x q q' -> take_at k o s d x q q'.
+Proof.
+  induction 1; [apply TakeAtHead | apply TakeAtOther; assumption].
+Qed.
+
+Lemma take_at_split {X} k o s d (x : X) q q' :
+  take_at k o s d x q q' ->
+  exists front back,
+    q = front ++ Pending X k o s d x :: back /\ q' = front ++ back.
+Proof.
+  induction 1 as [q | v q q' Htake [front [back [Hq Hq']]]].
+  - exists [], q. split; reflexivity.
+  - exists (v :: front), back. subst. split; reflexivity.
+Qed.
+
 Definition off_at {X l p} (h : l <> p) : At X l p :=
   match @Parkour.Symbol.decide l p MkSSymbol MkSSymbol with
   | Proved e => False_rect _ (h e)
@@ -140,7 +167,7 @@ Inductive role_step {p} :
       (SendAction X o p d (unAt v eq_refl)) (Returned (off_at h)) s
       (q ++ [Pending X DataDelivery o p d (unAt v eq_refl)])
 | RReceive X l o sh rd kl kd sl v sd (h : l <> p) s q q' x :
-    take_pending DataDelivery o l p x q q' ->
+    take_at DataDelivery o l p x q q' ->
     role_step (At X p p)
       (Code o (Perf (@Comm M p X l p sh rd kl kd sl v sd))) s q
       (ReceiveAction X o l p x) (Returned (here_at x)) s q'
@@ -152,7 +179,7 @@ Inductive role_step {p} :
       (q ++ announcement X o p (unAt v eq_refl))
 | RHear X Y l o sh rd kl sl v (k : X -> Choreo M p Y)
     (h : l <> p) s q q' x :
-    take_pending ChoiceDelivery o l p x q q' ->
+    take_at ChoiceDelivery o l p x q q' ->
     role_step Y (Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) s q
       (HearAction X o l p x) (Code (child o ChoiceBody) (k x)) s q'
 | RSeq X Y o t t' (k : X -> Choreo M p Y) s q a s' q' :
@@ -249,4 +276,67 @@ Proof.
   - eapply IHrole_step; eassumption.
   - eapply IHrole_step; [exact Hq |].
     eapply silent_waiting; eassumption.
+Qed.
+
+Definition action_occurrence {E Store} (a : @source_action E Store) : occurrence :=
+  match a with
+  | LocalAction o _ | SendAction _ o _ _ _ | ReceiveAction _ o _ _ _
+  | AnnounceAction _ o _ _ | HearAction _ o _ _ _ => o
+  end.
+
+Definition acting_role {E Store} (a : @source_action E Store) : Symbol :=
+  match a with
+  | LocalAction _ (LocalEvent p _ _ _ _) => p
+  | SendAction _ _ p _ _ | ReceiveAction _ _ _ p _
+  | AnnounceAction _ _ p _ | HearAction _ _ _ p _ => p
+  end.
+
+Lemma role_step_actor {M E Store} (model : local_model M E Symbol Store)
+    roles p X (t t' : @cursor M E p X) s q a s' q' :
+  role_step model roles X t s q a t' s' q' -> acting_role a = p.
+Proof.
+  induction 1; try reflexivity; try assumption.
+  destruct H. reflexivity.
+Qed.
+
+Fixpoint waiting_at_code {M p X} (path : occurrence)
+    (t : Choreography.Choreo2.Choreo M p X) (o : occurrence) : Prop :=
+  match t with
+  | Perf e =>
+      match e with
+      | @Choreography.Choreo2.Comm _ _ _ l d _ _ _ _ _ _ _ =>
+          l <> p /\ d = p /\ path = o
+      | _ => False
+      end
+  | Bind t _ => waiting_at_code (child path BindPrefix) t o
+  | _ => False
+  end.
+
+Fixpoint waiting_at_cursor {M E p X} (t : @cursor M E p X)
+    (o : occurrence) : Prop :=
+  match t with
+  | Code path c => waiting_at_code path c o
+  | Seq _ t _ => waiting_at_cursor t o
+  | _ => False
+  end.
+
+Lemma silent_waiting_at {M E Store} (model : local_model M E Symbol Store)
+    p X (t u : @cursor M E p X) :
+  silent model X t u ->
+  forall o, waiting_at_cursor t o -> waiting_at_cursor u o.
+Proof.
+  intros H. induction H; intros pos Hw; cbn in *;
+    first [solve [intuition congruence] | eauto].
+Qed.
+
+Lemma waiting_action_at {M E Store} (model : local_model M E Symbol Store)
+    roles p X (t t' : @cursor M E p X) s q a s' q' :
+  role_step model roles X t s q a t' s' q' ->
+  forall o, waiting_at_cursor t o -> action_occurrence a = o.
+Proof.
+  intros H. induction H; intros pos Hw; cbn in Hw; try contradiction.
+  - destruct Hw as [H _]. exfalso. exact (H eq_refl).
+  - exact (proj2 (proj2 Hw)).
+  - apply IHrole_step. exact Hw.
+  - apply IHrole_step. eapply silent_waiting_at; eassumption.
 Qed.

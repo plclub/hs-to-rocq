@@ -206,7 +206,7 @@ Definition comm_effect {p X} (t : @cursor Id no_event p X) q q' : Prop :=
       (exists pf : l = p, r <> p /\
         q' = q ++ [Pending T DataDelivery o l r (unAt v pf)]) \/
       (l <> p /\ r = p /\
-        exists x : T, take_pending DataDelivery o l r x q q')
+        exists x : T, take_at DataDelivery o l r x q q')
   | _ => False
   end.
 
@@ -250,7 +250,7 @@ Lemma receiver_source_step u s q a s' q' :
   role_step model [A;B] (At unit B B)
     (Code [] (family B)) s q a u s' q' ->
   terminal u /\ exists x : unit,
-    take_pending DataDelivery [] A B x q q'.
+    take_at DataDelivery [] A B x q q'.
 Proof.
   intros H. apply step_comm_effect in H.
   - destruct H as [Ht [[pf _] | [_ [_ Hq]]]].
@@ -259,14 +259,13 @@ Proof.
   - split; [exact AB | auto].
 Qed.
 Lemma take_empty X k o s d (x : X) q' :
-  ~ take_pending k o s d x [] q'.
+  ~ take_at k o s d x [] q'.
 Proof. intro H; inversion H. Qed.
 Lemma take_singleton (x : unit) q' :
-  take_pending DataDelivery [] A B x [packet] q' -> q' = [].
+  take_at DataDelivery [] A B x [packet] q' -> q' = [].
 Proof.
   intros H. inversion H; subst; [reflexivity |].
-  match goal with Hbad : ~ same_channel _ _ _ _ _ |- _ =>
-    exfalso; apply Hbad; repeat split; reflexivity end.
+  exfalso. eapply take_empty; eassumption.
 Qed.
 
 Local Notation pos := (DeadlockSource.positions (fun p => At unit B p)).
@@ -352,7 +351,7 @@ Proof.
     rewrite HA. apply RSend with (h := BA).
   - right. exists (ReceiveAction unit [] A B tt).
     eapply commit with (p := B); [cbn; auto |].
-    rewrite HB, Hq. eapply RReceive; [exact AB | apply TakeHead].
+    rewrite HB, Hq. eapply RReceive; [exact AB | apply TakeAtHead].
   - left. split; [exact Hq |].
     intros p Hp. change (A = p \/ B = p \/ False) in Hp.
     destruct Hp as [Hp | [Hp | Hp]];

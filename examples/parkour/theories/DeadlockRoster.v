@@ -2,6 +2,16 @@ From Stdlib Require Import Lists.List Logic.Eqdep_dec.
 Require Import DeadlockNetwork DeadlockLocal.
 Import ListNotations.
 
+(* Stdlib's monomorphic in_split cannot instantiate the larger universe of
+   existentially packaged network endpoints. *)
+Polymorphic Lemma in_split_large {T : Type} (x : T) xs :
+  In x xs -> exists pre post, xs = pre ++ x :: post.
+Proof.
+  revert xs. fix IH 1. intros [|y ys] H; [contradiction|].
+  destruct H as [->|Hy]; [exists [], ys; reflexivity|].
+  specialize (IH ys Hy) as [pre [post ->]]. exists (y :: pre), post. reflexivity.
+Qed.
+
 Section Roster.
 Context {M E : Type -> Type} {Store : Type} (m : local_model M E role Store)
         (rs : list role) (A : role -> Type).

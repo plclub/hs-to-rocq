@@ -100,9 +100,11 @@ Proof.
   intro H. induction H.
   - apply RLocal. exact H.
   - rewrite map_app. cbn. apply RSend.
-  - apply RReceive; [exact h|]. eapply delivery_source. exact H.
+  - apply RReceive; [exact h|]. apply take_pending_at.
+    eapply delivery_source. exact H.
   - rewrite map_app, announcement_pending. apply RAnnounce.
-  - eapply RHear; [exact h|]. eapply delivery_source. exact H.
+  - eapply RHear; [exact h|]. apply take_pending_at.
+    eapply delivery_source. exact H.
   - apply RSeq. exact IHdecorated.
   - apply RLeft. exact IHdecorated.
   - apply RRight. exact IHdecorated.

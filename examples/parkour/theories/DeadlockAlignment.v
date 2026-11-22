@@ -501,7 +501,7 @@ Proof.
     destruct (Hco w ws x Hhead Hread) as [sq' Htake].
     exists (ReceiveAction X o l p x), (Returned (here_at x)), sq'.
     refine (conj _ (conj _ _)).
-    + eapply RReceive; eassumption.
+    + eapply RReceive; [exact neq | apply take_pending_at; exact Htake].
     + eapply MatchReceive. exact Hread.
     + constructor. apply AlignReturned.
       eapply AdminBind; apply AdminPure.
@@ -528,7 +528,7 @@ Proof.
       destruct (Hco w ws x Hhead Hread) as [sq' Htake].
       exists (HearAction X o l p x), (Code (child o ChoiceBody) (k x)), sq'.
       refine (conj _ (conj _ _)).
-      * eapply RHear; eassumption.
+      * eapply RHear; [exact neq | apply take_pending_at; exact Htake].
       * eapply MatchHear. exact Hread.
       * constructor. eapply AlignAdministrative; [apply AdminPure | apply Hcont].
     + apply returns_result in Hr. cbn [result_of] in Hr.
