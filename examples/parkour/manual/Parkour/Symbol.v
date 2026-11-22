@@ -1,4 +1,4 @@
-From Stdlib Require Import Lists.List NArith.BinNat.
+From Stdlib Require Lists.List NArith.BinNat.
 Require GHC.Base.
 
 (* A Symbol literal and the term-level result of symbolVal use the same
@@ -7,7 +7,7 @@ Definition Symbol := GHC.Base.String.
 Inductive SSymbol (s : Symbol) : Type := MkSSymbol.
 Arguments MkSSymbol {s}.
 
-Class KnownSymbol (s : Symbol) := knownSymbol : SSymbol s.
+#[mode="-"] Class KnownSymbol (s : Symbol) := knownSymbol : SSymbol s.
 #[global] Instance known (s : Symbol) : KnownSymbol s := MkSSymbol.
 Definition symbolVal {s : Symbol} {proxy : Symbol -> Type}
   `{KnownSymbol s} (_ : proxy s) : GHC.Base.String := s.
@@ -24,7 +24,7 @@ Arguments Disproved {P} _.
 
 Definition decide {s t : Symbol} (_ : SSymbol s) (_ : SSymbol t)
   : Decision (s = t) :=
-  match list_eq_dec N.eq_dec s t with
+  match List.list_eq_dec BinNat.N.eq_dec s t with
   | left pf => Proved pf
   | right dpf => Disproved (fun pf => False_rect _ (dpf pf))
   end.

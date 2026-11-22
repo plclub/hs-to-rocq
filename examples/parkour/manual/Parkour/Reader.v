@@ -4,7 +4,7 @@ Generalizable All Variables.
 (* mtl-2.3.1, Control.Monad.Reader.Class: the MonadReader API and its
    ReaderT instance. Every operation delegates to translated transformers.
    Epp's derived MonadReader instance belongs to generated Choreo2. *)
-Record MonadReader__Dict (r : Type) (m : Type -> Type) := {
+#[universes(template)] Record MonadReader__Dict (r : Type) (m : Type -> Type) := {
   ask__ : m r;
   local__ : forall {a}, (r -> r) -> m a -> m a;
   reader__ : forall {a}, (r -> a) -> m a
