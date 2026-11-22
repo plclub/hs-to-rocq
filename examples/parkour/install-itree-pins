@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Build the three Parkour libraries into a new private Rocq library root.
+set -euo pipefail
+if [[ $# != 1 ]]; then
+  echo "usage: $0 NEW_DIRECTORY" >&2
+  exit 2
+fi
+unset COQPATH ROCQPATH COQLIB ROCQLIB COQCORELIB ROCQRUNTIMELIB
+version=$(rocq c --print-version)
+[[ ${version%% *} == 9.0.1 ]] || { echo "need Rocq 9.0.1; got $version" >&2; exit 1; }
+base=$(rocq c -where)
+runtime=$(rocq c -config | sed -n 's/^COQCORELIB=//p')
+mkdir -- "$1"
+cd -- "$1"
+work=$PWD
+export ROCQLIB="$work/lib" ROCQRUNTIMELIB="$runtime"
+mkdir -p lib/user-contrib src
+ln -s "$base/theories" lib/theories
+for theory in Stdlib Ltac2; do
+  ln -s "$base/user-contrib/$theory" "lib/user-contrib/$theory"
+done
+
+cat > Before.v <<'EOF'
+Fail From ExtLib Require Import Structures.Monad.
+Fail From Paco Require Import paco.
+Fail From ITree Require Import ITree.
+EOF
+rocq c -q -w +all Before.v
+
+checkout() {
+  local repo=$1 pin=$2 dir="src/${1##*/}"
+  git init -q "$dir"
+  git -C "$dir" fetch --depth=1 "https://github.com/$repo.git" "$pin"
+  git -C "$dir" checkout -q --detach FETCH_HEAD
+  [[ $(git -C "$dir" rev-parse HEAD) == "$pin" ]]
+}
+checkout rocq-community/coq-ext-lib dd32f1c56f41d699ed2ffd4193a876c87fc44926
+checkout snu-sf/paco d0561bf7f0a96cac486ba3bd8ca0b72ce01fb9cf
+checkout DeepSpec/InteractionTrees a2bc2c38ad998dccadb932559c922139dd957c4f
+
+build() (
+  cd "$1"
+  make -f Makefile.coq -j"${JOBS:-4}"
+  make -f Makefile.coq "COQLIBINSTALL=$ROCQLIB/user-contrib" install
+)
+(cd src/coq-ext-lib && rocq makefile -f _CoqProject -o Makefile.coq)
+build src/coq-ext-lib
+make -C src/paco/src Makefile.coq
+build src/paco/src
+(cd src/InteractionTrees && rocq makefile -f _CoqProject.itree -o Makefile.coq)
+build src/InteractionTrees
+
+cat > Resume.v <<'EOF'
+From ITree Require Import ITree.
+Inductive request : Type -> Type := Get : request bool.
+Definition resume (t : itree request nat) : option (itree request nat) :=
+  match observe t with
+  | VisF e k =>
+      match e in request X return (X -> itree request nat) -> _ with
+      | Get => fun next => Some (next true)
+      end k
+  | _ => None
+  end.
+Example reply_resumes :
+  resume (Vis Get (fun b : bool => Ret (if b then 1 else 0))) = Some (Ret 1).
+Proof. reflexivity. Qed.
+EOF
+rocq c -q -w +all Resume.v
+echo "Installed and checked the three pins under $ROCQLIB/user-contrib"

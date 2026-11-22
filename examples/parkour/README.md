@@ -67,9 +67,14 @@ error here cannot be fixed by increasing typeclass search depth.
 The Rocq 9 base generator makes the bind selector (`GHC.Base.op_zgzgze__`)
 universe-polymorphic so `Tree` and `ReaderT` can instantiate it independently.
 
+For the deadlock-freedom investigation, [the ITree installation guide](ITREE-INSTALL.md)
+builds ExtLib, Paco and Interaction Trees from the three specified commits and
+checks a resumption against their freshly installed interfaces.
+
 ## Checking the translation
 
-**Validation:** The clean `check` above exited 0 on GHC 9.10.3 and Rocq
+**Translation baseline (`3e36e582`, before the all-warnings gate):** The clean
+`check` above exited 0 on GHC 9.10.3 and Rocq
 9.0.1 at upstream `8ff9fadc480ddbd0397db6c3a12240c39fd9b5fb`. Rocq
 reported `Choreography.Choreo2.epp` **Closed under the global context**,
 compiled all eight behavior assertions, and typechecked the generated
