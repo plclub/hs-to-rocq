@@ -1,11 +1,12 @@
 """Translate the pinned modules into an empty tree and check the compiled result."""
 
 import argparse
-import os
 import shutil
 import subprocess
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
+
+from itree_pins import pinned_environment, prefix_path
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--check-edits", action="store_true")
@@ -16,6 +17,7 @@ deps = out / "transformers"
 support = out / "manual"
 lib = Path("lib")
 contracts = out / "theories"
+local = out / "local"
 transformers = Path("../ghc/ghc/libraries/transformers")
 ghc_base_source = Path("../ghc/ghc/libraries/base/src")
 class_source = out / "class-source"
@@ -80,8 +82,9 @@ for directory in [out, lib]:
 for directory in [deps, lib, support, contracts]:
     directory.mkdir(parents=True, exist_ok=True)
 
-rocq_env = {k: v for k, v in os.environ.items() if k not in {"COQPATH", "ROCQPATH"}}
-load_deps: list[Arg] = [arg for path in (base, deps, support) for arg in ("-Q", path.resolve(), "")]
+run("python3", "tests/check-deadlock-local.py", "--output", local)
+rocq_env = pinned_environment(prefix_path())
+load_deps: list[Arg] = [arg for path in (base, deps, support, local) for arg in ("-Q", path.resolve(), "")]
 rocq: list[Arg] = ["python3", Path("parkour_rocq.py").resolve(), *load_deps, "-Q", lib.resolve(), ""]
 
 
@@ -121,3 +124,8 @@ run("bash", Path("test-checks.sh").resolve(), "--check-closed", lib.resolve(), "
     cwd=contracts, env=rocq_env)
 for name in ["Required", "Behavior", "OwnerCond", "Integration"]:
     check_theory(name)
+for theorem in ["owner_cond_sequential", "owner_cond_app", "owner_cond_false",
+                "peer_cond_false", "owner_cond_then_action"]:
+    run("python3", Path("check-assumptions.py").resolve(), "closed", contracts.resolve(),
+        f"OwnerCond.{theorem}", *load_deps, "-Q", lib.resolve(), "",
+        cwd=contracts, env=rocq_env)

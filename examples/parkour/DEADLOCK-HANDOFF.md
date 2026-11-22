@@ -29,6 +29,15 @@ repaired `epp` with the same semantics and assumption ceiling.
 `Bind` root as well as the session IDs inside a parallel continuation.
 These regressions distinguish the repair but do not prove preservation.
 
+**Repaired build (2026-11-22):** On GHC 9.10.3, Rocq 9.0.1 and Stdlib
+9.0.0, regenerating the shared base and then running `make clean` and
+`make check` in this example exited 0. Narrow arithmetic imports in the
+base avoid the deprecated transitive library. Explicit template-universe
+annotations preserve the declarations that Rocq previously inferred. No
+warning category was disabled. The run compiled the repaired projection and
+quorum client, obtained a closed report for `epp` and each of the five
+`OwnerCond` checks, and passed the 20 local-effect assumption checks.
+
 ## Why the original projection fails
 
 [`counterexample/EXPECTED.md`](counterexample/EXPECTED.md) fixes the inputs and
@@ -62,7 +71,7 @@ change the pinned object of the theorem and needs a separate decision.
 The [upstream Haskell diagnostic](counterexample/UPSTREAM.md) also observes
 the unit send before the Boolean broadcast without using the Rocq translation.
 
-## Build evidence
+## Historical build evidence before the warning fixes
 
 On GHC 9.10.3 and Rocq 9.0.1 with Stdlib 9.0.0, `make clean` in this
 example exited 0. The subsequent `make check` passed lint and the checker

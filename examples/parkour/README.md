@@ -81,12 +81,32 @@ applies the generated `ReaderT` and `Tree` dictionaries explicitly: a universe
 error here cannot be fixed by increasing typeclass search depth.
 The Rocq 9 base generator makes the bind selector (`GHC.Base.op_zgzgze__`)
 universe-polymorphic so `Tree` and `ReaderT` can instantiate it independently.
+The example's `universe template` edits name only declarations for which
+Rocq 9.0.1 reports `auto-template`, including the generated `Tree` inductive
+and `ReaderT` inductive. `ChoreoSig` has no such edit.
 
-For the deadlock-freedom investigation, [the ITree installation guide](ITREE-INSTALL.md)
-builds ExtLib, Paco and Interaction Trees from the three specified commits and
-checks a resumption against their freshly installed interfaces.
+`make -C examples/parkour check-deadlock-local` runs the local semantics gate
+on its own with Rocq 9.0.1. The first run uses [`install-itree-pins`](ITREE-INSTALL.md)
+to build ExtLib, Paco and Interaction Trees under `.itree-cache/pins`; this
+cache survives `make clean`. To reuse a prepared installation, set `ITREE_PREFIX`
+to the installer’s output directory. Each run verifies the source revisions
+and installed objects before compiling the [frozen contracts](tests/DEADLOCK-LOCAL-FREEZE.md)
+and checking 20 named exports. Focused compiler and assumption logs are under
+`build/deadlock-local/`.
+
+`check-required` (and thus `check`) runs the same gate under `build/run/local/`
+and uses that directory and private installation for subsequent compilations.
+`test-checks` and `check-edits` do not require the private installation.
 
 ## Checking the translation
+
+**Strict generator check (2026-11-22):** At upstream `872bb12f`,
+`build-example.py` regenerated the dependencies and the HasChor modules into
+empty scratch output directories. With the updated Rocq 9 base, all compiled
+on Rocq 9.0.1 under `rocq c -q -w +all`. The `epp` assumption check passed,
+as did `ReaderTree`, `Required`, `Behavior`, `OwnerCond`, `Integration`, and
+the five individual `OwnerCond` closure checks. Both shared compiler suites
+and the VC1 edit-policy controls also passed.
 
 **Translation baseline (`3e36e582`, before the all-warnings gate):** The clean
 `check` above exited 0 on GHC 9.10.3 and Rocq
