@@ -120,6 +120,32 @@ source deadlock-freedom hypothesis. These results yield
 generated four-role program using its checked well-formedness proof. Its
 source deadlock-freedom premise remains explicit.
 
+**Clean validation, 2026-11-22.** At the public-proof milestone
+`a04b598b`, `make -C examples/parkour clean` followed by
+`opam exec --switch=rocq9 -- make -C examples/parkour check` exited 0
+(GHC 9.10.3, Rocq 9.0.1, `-q -w +all`). The warning probes rejected both
+`arguments-assert` and the default-disabled `disj-pattern-notation`.
+`ExtraType`, the transparent axiom alias, the mixed client assumptions and
+both disabled parallel-branch mutants were rejected for their expected reasons.
+The [frozen library types](tests/DeadlockLibraryExpect.v), the
+[quorum type](tests/DeadlockQuorumFreedomExpect.v) and all five
+[direct witnesses](theories/DeadlockContract.v) compiled.
+
+| Individual assumption query | Result |
+| --- | --- |
+| `Choreography.Choreo2.epp` | Closed under the global context |
+| `DeadlockFreedom.network_run_has_source` | Closed under the global context |
+| `DeadlockFreedom.matched_ready` | Closed under the global context |
+| `DeadlockFreedom.epp_preserves_deadlock_freedom` | Closed under the global context |
+| `DeadlockFreedom.deadlock_reflection` | Closed under the global context |
+| `DeadlockQuorum.quorum_well_formed` | Exactly the 14 [permitted runtime constants](tests/slice1/client-allowlist) |
+| `DeadlockQuorum.quorum_deadlock_freedom` | Exactly the same 14 runtime constants |
+
+The clean build writes the individual reports under `build/run/semantics/`
+and `build/run/final/`. The HasChor pin and its parent are listed above;
+the checked Interaction Trees, Paco and ExtLib revisions are in the
+[pin verifier](itree_pins.py).
+
 ## Why the original projection fails
 
 [`counterexample/EXPECTED.md`](counterexample/EXPECTED.md) fixes the inputs and

@@ -124,6 +124,19 @@ conditional alignment and matching steps, and a nonempty matched prefix for
 a generated send. [`DeadlockExtraMatchCases.v`](tests/DeadlockExtraMatchCases.v)
 checks either projected `App` branch sending first, self-communication, and
 single- and multi-peer choices, including a peer still waiting to hear.
+The [independent wire-run expectations](tests/DeadlockWireRunsExpect.v)
+were frozen in `60653fa8` before their witnesses. One schedule leaves a
+single peer with both the announcement and data on `Root`; another puts
+self-communication and a real exchange in different `App` branches.
+One candidate negative in that file changed only the value inside a
+source `HearAction`, leaving the observed bytes and receiver state unchanged.
+The action hides its payload type. `invented_value_transport_obstruction`
+shows that a type equality transporting `true` to `false` would make that
+candidate incompatible with the positive run. The
+[wire-value control](tests/DeadlockWireValueExpect.v), frozen separately in
+`a85f7c51`, tests the peer actually receiving `"False"` after `"True"` was
+announced. The original candidate remains in the frozen file; the checker
+requires the observable rejection and the transport result separately.
 
 Two proofs explain how matching handles value-dependent code. In
 [`DeadlockPlayedPrefix.v`](theories/DeadlockPlayedPrefix.v),
