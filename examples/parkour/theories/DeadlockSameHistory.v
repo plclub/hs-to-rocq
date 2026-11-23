@@ -37,7 +37,7 @@ Lemma keep_sender_cut p o operand tc s a s' :
 Proof.
   intros [r act finish Member Step Frame] (cut & Hist & Eq & Rec).
   unfold at_sender_cut. rewrite actor_actions_snoc.
-  rewrite (role_step_actor sm R _ _ _ _ _ _ _ _ _ Step).
+  rewrite (DeadlockCoherence.role_step_actor sm R _ _ _ _ _ _ _ _ _ Step).
   destruct (List.list_eq_dec BinNat.N.eq_dec r p) as [->|Ne].
   - rewrite <- Eq in Step.
     destruct (cut_after_role_step sm R p _ _ _ _ _ _ _ _ _ _ Hist Step)
@@ -76,7 +76,7 @@ Proof.
     + rewrite actor_actions_snoc.
       pose proof (decorated_source sm R _ _ _ _ _ _ _ _ _ _ _ _
         (observed_decorated sm R _ _ _ _ _ _ _ _ _ _ _ _ _ Obs)) as S.
-      rewrite (role_step_actor sm R _ _ _ _ _ _ _ _ _ S).
+      rewrite (DeadlockCoherence.role_step_actor sm R _ _ _ _ _ _ _ _ _ S).
       destruct (List.list_eq_dec BinNat.N.eq_dec p p); [exact Hist|contradiction].
     + unfold recorded. do 8 eexists. exists Prim. split; eassumption.
 Qed.

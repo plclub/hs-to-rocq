@@ -63,6 +63,16 @@ subtrees. The remaining proof must connect those subtree witnesses to the
 **same** matched history and establish both facts from `well_formed`.
 The four library exports and the quorum preservation corollary remain open.
 
+`DeadlockSameHistory.queued_operand_at_receiver` follows a queued operand
+through intervening steps to the sender's current archive and exposes the
+receiver site at that same prefix. `DeadlockStaticOrigin.source_originals_static`
+proves the original-value and codec obligation whenever the receiver path
+uses only `AppFunction`, `AppArgument`, and `BindPrefix` (including the
+root). `DeadlockStaticPaths.static_receive_compares_to_queued` compares such a
+site with any same-key queued send, even one in a dynamically entered body.
+Comparison alone does not establish predecessor coverage. Sites inside
+`BindBody` or `ChoiceBody` also need the actual earlier result or choice.
+
 ## Why the original projection fails
 
 [`counterexample/EXPECTED.md`](counterexample/EXPECTED.md) fixes the inputs and
