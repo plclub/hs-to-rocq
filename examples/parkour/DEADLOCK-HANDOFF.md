@@ -75,7 +75,12 @@ successor requires a prior send at the static site on this same history.
 Together with receiver freshness and the FIFO ledger, this proves
 `DeadlockStaticHead.source_head_paths_static`. Both receive obligations are
 therefore proved at every static site. Sites inside `BindBody` or `ChoiceBody`
-still need the actual earlier result or choice.
+still need the actual earlier result or choice. For a path starting with
+`ChoiceBody` followed by static edges, `source_originals_choice_static`
+discharges the operand obligation from WF and the matched prefix alone.
+It uses `root_choice_actor_invariant`: the peer is still waiting or has an
+actual suffix history from the branch selected by the owner's announcement.
+It does not assume all peers entered together.
 
 ## Why the original projection fails
 
