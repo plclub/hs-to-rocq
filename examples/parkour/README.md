@@ -76,12 +76,12 @@ The build compiles `theories/` and `tests/` in place through `rocq makefile`
 with no flat file staging. To prepare the generated libraries, support models,
 and verified `build/run/pins` links for standalone `_CoqProject` builds or
 editor sessions, run `make -C examples/parkour deps` from the repository root,
-then invoke `rocq makefile` in either project directory:
+then build the theories and, optionally, the test fixtures:
 
 ```sh
 make -C examples/parkour deps
-cd examples/parkour/theories && rocq makefile -f _CoqProject -o Makefile.coq && make -f Makefile.coq
-cd ../tests && rocq makefile -f _CoqProject -o Makefile.coq && make -f Makefile.coq
+make -j2 -C examples/parkour/theories
+cd examples/parkour/tests && rocq makefile -f _CoqProject -o Makefile.coq && make -f Makefile.coq
 ```
 
 Run `make -C examples/parkour check-layout` ([`scripts/check_layout.py`](scripts/check_layout.py))
