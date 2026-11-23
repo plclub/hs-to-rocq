@@ -3,9 +3,6 @@
 -Q ../build/run/transformers ""
 -Q ../build/run/manual ""
 -Q ../lib ""
--Q ../build/run/pins/ExtLib ExtLib
--Q ../build/run/pins/Paco Paco
--Q ../build/run/pins/ITree ITree
 -docroot ParkourTheories
 -arg -q
 -arg -w

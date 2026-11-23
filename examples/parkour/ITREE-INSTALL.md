@@ -1,58 +1,71 @@
 # Install the Parkour ITree dependencies
 
-[`scripts/install-itree-pins`](scripts/install-itree-pins) builds all three libraries from
-fresh Git checkouts into a new directory. Run it from the repository root
-with Git, Bash, Python 3, GNU Make and Rocq 9.0.1 or 9.2.x on `PATH`. For
-example, with a prepared Rocq 9.2 opam switch:
+[`parkour-deps.opam`](parkour-deps.opam) pins `coq-ext-lib`, `coq-paco`, and
+`coq-itree` to immutable Git revisions in the compiler's opam switch (Rocq
+9.0.1 or Rocq 9.2.x). The switch must include the `rocq-released` opam
+repository (`https://rocq-prover.org/opam/released`) so opam can resolve
+`coq-paco` metadata, which is not in the pinned `paco` Git repository.
+
+From the repository root, select the target switch. Add the repository once
+if the switch does not already have it, then install the pins:
 
 ```sh
-dest="$PWD/parkour-itree-prefix"  # must not already exist
 switch=cs2-rocq92  # use rocq9 for the Rocq 9.0.1 switch
-opam exec --switch "$switch" -- examples/parkour/scripts/install-itree-pins "$dest"
+opam repo add --switch="$switch" rocq-released https://rocq-prover.org/opam/released  # if needed
+opam install --switch="$switch" --deps-only ./examples/parkour/parkour-deps.opam
 ```
 
-The build uses up to four jobs; set `JOBS` to override. The script checks the
-compiler version and reuses its core theories, Stdlib, Ltac2 and plugins.
-It creates a private `ROCQLIB`, clears ambient Rocq load-path overrides,
-and checks that imports of ExtLib, Paco and ITree all fail before installing
-anything. It does not install into or select an opam switch.
+| Package | Logical root | Source revision |
+| --- | --- | --- |
+| `coq-ext-lib.dev` | `ExtLib` | [`dd32f1c56f41d699ed2ffd4193a876c87fc44926`](https://github.com/rocq-community/coq-ext-lib/commit/dd32f1c56f41d699ed2ffd4193a876c87fc44926) |
+| `coq-paco.4.2.3` | `Paco` | [`d0561bf7f0a96cac486ba3bd8ca0b72ce01fb9cf`](https://github.com/snu-sf/paco/commit/d0561bf7f0a96cac486ba3bd8ca0b72ce01fb9cf) |
+| `coq-itree.dev` | `ITree` | [`a2bc2c38ad998dccadb932559c922139dd957c4f`](https://github.com/DeepSpec/InteractionTrees/commit/a2bc2c38ad998dccadb932559c922139dd957c4f) |
 
-Parkour builds this prefix automatically when `ITREE_PREFIX` is unset.
-Rocq 9.0.1 keeps the original `examples/parkour/.itree-cache/pins`;
-9.2 uses its sibling `pins-9.2` (or `pins-9.2.x` if the compiler prints a
-patch version). To reuse a manually built prefix, run `export ITREE_PREFIX="$dest"`.
-The verifier checks the compiler stamp, pinned source revisions, tracked source
-files, and exact installed `.vo` inventory and bytes against the build tree.
-An older, unstamped 9.0.1 prefix is accepted only on 9.0.1.
-
-| Logical root | Source revision |
-| --- | --- |
-| `ExtLib` | [`dd32f1c56f41d699ed2ffd4193a876c87fc44926`](https://github.com/rocq-community/coq-ext-lib/commit/dd32f1c56f41d699ed2ffd4193a876c87fc44926) |
-| `Paco` | [`d0561bf7f0a96cac486ba3bd8ca0b72ce01fb9cf`](https://github.com/snu-sf/paco/commit/d0561bf7f0a96cac486ba3bd8ca0b72ce01fb9cf) |
-| `ITree` | [`a2bc2c38ad998dccadb932559c922139dd957c4f`](https://github.com/DeepSpec/InteractionTrees/commit/a2bc2c38ad998dccadb932559c922139dd957c4f) |
-
-The script verifies each checkout's `HEAD`, compiles the upstream library
-targets to `.vo`, and installs them under `lib/user-contrib`. It uses the
-upstream library build settings; upstream sources emit deprecation warnings.
-The separate Parkour smoke test compiles `Resume.v` with `rocq c -q -w +all`.
-It observes a visible event with a Boolean reply and proves that replying
-`true` resumes its continuation at `Ret 1`.
-
-To repeat that check using only the staged libraries and the same compiler:
+Parkour builds use the installed packages directly. Run the full check in
+the same switch:
 
 ```sh
-opam exec --switch "$switch" -- bash -c '
-  cd "$1"
-  unset COQPATH ROCQPATH COQLIB ROCQLIB COQCORELIB ROCQRUNTIMELIB
-  runtime=$(rocq c -config | sed -n "s/^COQCORELIB=//p")
-  ROCQLIB="$PWD/lib" ROCQRUNTIMELIB="$runtime" rocq c -q -w +all Resume.v
-' _ "$dest"
+opam exec --switch="$switch" --set-switch -- make -C examples/parkour check
 ```
 
-**Validation (2026-11-22).** A fresh private root on macOS with Rocq 9.0.1,
+The [build check](scripts/itree_pins.py) clears Rocq load-path overrides,
+checks that the compiler uses the switch's libraries, and rejects missing,
+different, or pending pins. Rerun the installation command if a pin is stale.
+
+If an editor still uses the old `build/run/pins` load paths, close its Rocq
+session, run `make -C examples/parkour` in your switch, and reopen the project.
+You can then delete `examples/parkour/.itree-cache/`.
+
+## Local resumption and assumption checks
+
+`make -C examples/parkour check-deadlock-local`
+([`scripts/check-deadlock-local.py`](scripts/check-deadlock-local.py)) and
+`make -C examples/parkour check-required` verify the [frozen local resumption
+contracts](tests/DEADLOCK-LOCAL-FREEZE.md) and check that all 20 local exports
+are closed under the global context:
+
+```sh
+opam exec --switch="$switch" --set-switch -- make -C examples/parkour check-deadlock-local
+```
+
+This gate compiles [`theories/Semantics/LocalEffects.v`](theories/Semantics/LocalEffects.v)
+and the four modules under [`tests/Semantics/`](tests/Semantics/)
+(`LocalEffectContracts.v`, `LocalEffectWitnesses.v`, `ExactObservations.v`, and
+`ObservationEquivalences.v`), where `LocalEffectWitnesses.finite_action` and
+`ObservationEquivalences.step_exact` exercise ITree reply continuation
+resumption against the installed switch libraries.
+
+**Opam validation (2026-11-22).** Opam 2.5.1 rebuilt all three pinned packages
+in both the Rocq 9.0.1 and Rocq 9.2 (`rocq-core.9.2.0`) switches. In each
+switch, `Locate Library` found `ExtLib.Structures.Monad`, `Paco.paco`, and
+`ITree.ITree` in that switch's `user-contrib`. The full
+`make -C examples/parkour check SCRATCH=1` passed on both compilers, including
+the local and public theorem assumption checks.
+
+**Historical private-prefix validation (2026-11-22).** A fresh private root on macOS with Rocq 9.0.1,
 Stdlib 9.0.0 and OCaml 4.14.2 passed the initial missing-import checks and
 the final resumption check. The installation contained 117 ExtLib, 41 Paco
-and 68 ITree `.vo` files. The repeat command exited 0 without diagnostics;
+and 68 ITree `.vo` files. Recompiling `Resume.v` exited 0 without diagnostics;
 a separate `Print Assumptions Resume.reply_resumes.` reported
 `Closed under the global context`.
 

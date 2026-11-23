@@ -437,7 +437,3 @@ Proof.
   split; [exact BodyAt|exact BodyRet].
 Qed.
 End ChoiceFamily.
-
-Print Assumptions replay_cond_logged_strong.
-Print Assumptions replay_cond_logged.
-Print Assumptions replay_cond_logged_partition.

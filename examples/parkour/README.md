@@ -10,6 +10,16 @@ continuation could send on `Root` before the announcement on the same FIFO.
 The receiver expected the announcement first. The handoff records both
 this checked counterexample and the matching run after the fix.
 
+With the dependencies below installed, run these commands from the repository root:
+
+```sh
+make -C examples/parkour        # Translate the library and compile its theories
+make -C examples/parkour check  # Run the tests and audit theorem assumptions
+```
+
+`make check` works from clean outputs. It rebuilds the library with edit and
+origin checks before compiling the fixtures and querying the resulting proofs.
+
 ### Theory source layout and `_CoqProject` workflow
 
 [`theories/_CoqProject`](theories/_CoqProject) maps the 83 modules under
@@ -17,9 +27,10 @@ this checked counterexample and the matching run after the fix.
 [`tests/_CoqProject`](tests/_CoqProject) maps the 51 positive fixtures and
 contracts under [`tests/`](tests/) to `ParkourTheories.Tests` while importing
 `ParkourTheories` from `../theories`. Both project files pass
-`-arg -q -arg -w -arg +all` and bind the Rocq 9 base, generated `transformers`
-modules, manual support models, translated HasChor library, and pinned
-`ExtLib`, `Paco`, and `ITree` installations.
+`-arg -q -arg -w -arg +all` and map the Rocq 9 base, generated `transformers`
+modules, manual support models, and translated HasChor library with `-Q`.
+They do not map switch packages with `-Q`: `rocq` loads `ExtLib`, `Paco`, and
+`ITree` from the active opam switch.
 
 The 83 `.v` sources under [`theories/`](theories/) are organized by domain:
 
@@ -72,11 +83,11 @@ From ParkourTheories Require Tests.Projection.RunCorrespondenceTypes
   Tests.Protocols.QuorumProgress.
 ```
 
-The build compiles `theories/` and `tests/` in place through `rocq makefile`
-with no flat file staging. To prepare the generated libraries, support models,
-and verified `build/run/pins` links for standalone `_CoqProject` builds or
-editor sessions, run `make -C examples/parkour deps` from the repository root,
-then build the theories and, optionally, the test fixtures:
+The default build compiles `theories/` in place through `rocq makefile`;
+`make check` also compiles `tests/`. For a standalone `_CoqProject` build
+or editor session, `deps` prepares the generated libraries and support models.
+From the repository root, build the theories first, then the fixtures if
+needed:
 
 ```sh
 make -C examples/parkour deps
@@ -136,24 +147,32 @@ whose parent is `8ff9fadc480ddbd0397db6c3a12240c39fd9b5fb`.
 rejects extra files in the source directories. The checkout also supplies the
 `mkLoc` Template Haskell splices used by the upstream protocol.
 
-Use the repository's Stack build (GHC 9.10.3) and put Rocq 9.0.1 or Rocq 9.2
-on `PATH`. Initialize the GHC and `transformers` submodules:
+Use GHC 9.10.3 and an opam switch with Rocq 9.0.1 or 9.2. Install the
+[pinned ITree dependencies](ITREE-INSTALL.md) in that switch and prepare
+the Haskell sources:
 
 ```sh
+switch=cs2-rocq92  # use rocq9 for the Rocq 9.0.1 switch
+opam install --switch="$switch" --deps-only ./examples/parkour/parkour-deps.opam
 git submodule update --init examples/ghc/ghc
 git -C examples/ghc/ghc submodule update --init libraries/transformers
 stack build
 examples/parkour/scripts/check-ghc
-make -C examples/rocq9.0 base    # only with Rocq 9.0.1
-make -C examples/parkour
 ```
 
-Rocq 9.2 dependency setup skips the `examples/rocq9.0 base` command. Parkour
-compiles the same base sources under `build/run/base`, leaving the 9.0.1
-objects untouched. Both compilers use the translator's `9.0` output format.
-Run `make -C examples/parkour` after switching compilers to rebuild the
-generated modules and proofs. `make -C examples/parkour check` also runs lint,
-the Haskell comparison, and the harness controls.
+With **Rocq 9.0.1**, first run `opam exec --switch="$switch" -- make -C examples/rocq9.0 base`.
+Rocq 9.2 builds those sources under `build/run/base`, leaving the 9.0.1 objects
+untouched. Then, with either compiler:
+
+```sh
+opam exec --switch="$switch" --set-switch -- make -C examples/parkour
+opam exec --switch="$switch" --set-switch -- make -C examples/parkour check
+```
+
+Both compilers use the translator's `9.0` output format. Rebuild the
+generated modules and proofs after switching compilers. `make check` also
+runs `check-layout`, `lint`, the Haskell comparison, and the harness controls
+before `check-required`.
 
 The Parkour compiler driver enables all warnings on both versions. On 9.0.1
 every warning is fatal. On 9.2 exactly three diagnostic categories remain
@@ -208,24 +227,20 @@ and `ReaderT` inductive. `ChoreoSig` has no such edit.
 
 `make -C examples/parkour check-deadlock-local`
 ([`scripts/check-deadlock-local.py`](scripts/check-deadlock-local.py)) runs the
-local semantics gate on its own with either supported compiler. The first run uses
-[`scripts/install-itree-pins`](ITREE-INSTALL.md) to build ExtLib, Paco, and
-Interaction Trees under `.itree-cache/` in a compiler-specific directory;
-these installations survive `make clean`.
-To reuse a prepared installation, set `ITREE_PREFIX` to the installer’s output
-directory. Each run verifies the source revisions, installed objects, and
-[frozen local contracts](tests/DEADLOCK-LOCAL-FREEZE.md) before compiling
-[`theories/Semantics/LocalEffects.v`](theories/Semantics/LocalEffects.v) and
-the four local test modules in [`tests/Semantics/`](tests/Semantics/) under
-their canonical `ParkourTheories` / `ParkourTheories.Tests` roots and checking
-20 named exports. Focused compiler and assumption logs are under
+local semantics gate on its own with either supported compiler.
+[`scripts/itree_pins.py`](scripts/itree_pins.py) verifies the active switch
+against [`parkour-deps.opam`](parkour-deps.opam).
+Each run checks the [frozen local resumption contracts](tests/DEADLOCK-LOCAL-FREEZE.md),
+compiles [`theories/Semantics/LocalEffects.v`](theories/Semantics/LocalEffects.v)
+and the four local test modules in [`tests/Semantics/`](tests/Semantics/) under
+their canonical `ParkourTheories` / `ParkourTheories.Tests` roots, and checks
+all 20 named assumption reports. Focused compiler and assumption logs are under
 `build/deadlock-local/`.
 
-`check-required` (and thus `check`) symlinks the verified private `user-contrib`
-tree at `build/run/pins`, compiles `theories/` and `tests/` through their
-`_CoqProject` files, and runs the local assumption checks under
-`build/run/local/`. `test-checks` and `check-edits` do not require the private
-installation.
+`check-required` (and thus `check`) compiles `theories/` and `tests/` through
+their `_CoqProject` files and runs the same frozen local contract and 20-export
+assumption checks under `build/run/local/`. `check-edits` does not require the
+Rocq switch packages.
 
 ## Checking deadlock freedom
 
@@ -299,11 +314,11 @@ proof makes this target fail. `check-final` is an alias for the same checks.
 Normal `make check` runs `check-required` once after `check-layout`, `lint`,
 the Haskell comparison, and harness controls.
 
-For an isolated clean run while another process uses the generated libraries,
-run `make -C examples/parkour check-required SCRATCH=1`. The command prints
-a fresh directory under `build/` containing its own `parkour/` tree (`lib/`,
-`build/run/`, and clean copies of `theories/` and `tests/` from their
-`_CoqProject` files).
+For clean outputs while another process uses the generated libraries, pass
+`SCRATCH=1` to the build or check target. Each run prints its fresh directory
+under `build/`. `make -C examples/parkour SCRATCH=1` builds `lib/`, `build/run/`
+and `theories/` there; `make -C examples/parkour check SCRATCH=1` also builds
+`tests/` and writes the assumption reports.
 
 ## Checking the translation
 
@@ -353,17 +368,16 @@ right answer, then checks that the translator refuses to credit it as a source
 definition. Another control typechecks an alias to an axiom and checks that the
 assumptions test rejects it.
 
+Both build targets verify the pinned source bytes, regenerate the HasChor
+modules in an empty `lib/`, and compile the support models and `transformers`
+dependencies on separate load paths under `build/run/`. Edit external models
+in [`manual/Parkour/`](manual/Parkour/).
+
 `check-edits` audits the exact translator arguments used by `check-required`.
 [`scripts/CheckEdits.hs`](scripts/CheckEdits.hs) parses each input before
 merging edits and checks the SHA-256 of the shared base edits. The translator's
 `--require-origin` option checks the source and emitted names listed in
-[`required.tsv`](required.tsv). Plain `make -C examples/parkour` runs
-`check-required` ([`scripts/build-example.py`](scripts/build-example.py)). It
-verifies the source bytes, runs the checked Stack-built translator, regenerates
-the HasChor modules in an empty `lib/`, and compiles the independent Rocq
-projects in [`theories/`](theories/) and [`tests/`](tests/). Edit external
-models in [`manual/Parkour/`](manual/Parkour/). The build compiles copies of
-those models and the `transformers` dependencies on separate load paths under
-`build/run/`. `clean` cleans the generated `Makefile.coq` files in `theories/`
-and `tests/` and removes `lib/` and `build/`, preserving the pinned source,
-models, theories, and tests.
+[`required.tsv`](required.tsv) during checked translation.
+
+`make clean` removes the compiled theories and fixtures, their generated
+Makefiles, and the `lib/` and `build/` directories.

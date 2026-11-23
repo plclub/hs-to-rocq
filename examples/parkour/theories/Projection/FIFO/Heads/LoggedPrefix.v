@@ -152,8 +152,3 @@ Proof.
   exact (Assemble past ar Archives).
 Qed.
 End PrefixHead.
-
-Print Assumptions produced_cut_reached.
-Print Assumptions tracked_layout_head.
-Print Assumptions source_head_paths_from_tracked.
-Print Assumptions source_head_paths_matched_from_tracked.

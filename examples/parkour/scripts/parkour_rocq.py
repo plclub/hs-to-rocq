@@ -6,7 +6,7 @@ import subprocess
 import sys
 from collections.abc import Sequence
 
-from itree_pins import rocq_version
+from itree_pins import rocq_environment, rocq_version
 
 COMPAT_WARNINGS = ("notation-for-abbreviation", "bad-template-constraint", "register-all")
 
@@ -23,7 +23,7 @@ def unexpected_warning(output: str, allowed: Sequence[str]) -> bool:
 
 
 def compile_file(args: Sequence[str]) -> subprocess.CompletedProcess[str]:
-    env = {k: v for k, v in os.environ.items() if k not in {"COQPATH", "ROCQPATH"}}
+    env = rocq_environment()
     allowed = COMPAT_WARNINGS if rocq_version().split(".")[:2] == ["9", "2"] else ()
     flags = ",".join(("+all", *allowed))
     result = subprocess.run(["rocq", "c", *args, "-q", "-w", flags],
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     if args[:1] == ["--driver"]:
         if args[1:2] != ["compile"]:
-            os.execvp("rocq", ["rocq", *args[1:]])
+            os.execvpe("rocq", ["rocq", *args[1:]], rocq_environment())
         args = args[2:]
     result = compile_file(args)
     sys.stdout.write(result.stdout)

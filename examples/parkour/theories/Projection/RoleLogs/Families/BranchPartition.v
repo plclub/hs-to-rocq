@@ -573,8 +573,3 @@ Proof.
   split; [exact PR|]. split; [exact BG|]. split; assumption.
 Qed.
 End Branches.
-
-Print Assumptions logged_replay_app.
-Print Assumptions logged_replay_bind.
-Print Assumptions concrete_replay_app.
-Print Assumptions concrete_replay_bind.

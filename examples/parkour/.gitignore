@@ -1,4 +1,5 @@
 /build/
+# Older checkouts may still have a private ITree installation.
 /.itree-cache/
 /lib/
 !Makefile

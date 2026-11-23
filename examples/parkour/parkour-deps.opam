@@ -1,0 +1,19 @@
+opam-version: "2.0"
+synopsis: "Rocq dependencies for the Parkour example"
+maintainer: "hs-to-rocq maintainers"
+authors: "hs-to-rocq contributors"
+license: "MIT"
+homepage: "https://github.com/plclub/hs-to-rocq"
+bug-reports: "https://github.com/plclub/hs-to-rocq/issues"
+dev-repo: "git+https://github.com/plclub/hs-to-rocq.git"
+depends: [
+  "rocq-core" {= "9.0.1" | (>= "9.2" & < "9.3~")}
+  "coq-ext-lib"
+  "coq-paco"
+  "coq-itree"
+]
+pin-depends: [
+  ["coq-ext-lib.dev" "git+https://github.com/rocq-community/coq-ext-lib.git#dd32f1c56f41d699ed2ffd4193a876c87fc44926"]
+  ["coq-paco.4.2.3" "git+https://github.com/snu-sf/paco.git#d0561bf7f0a96cac486ba3bd8ca0b72ce01fb9cf"]
+  ["coq-itree.dev" "git+https://github.com/DeepSpec/InteractionTrees.git#a2bc2c38ad998dccadb932559c922139dd957c4f"]
+]

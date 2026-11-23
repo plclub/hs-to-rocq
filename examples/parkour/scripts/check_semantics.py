@@ -12,12 +12,15 @@ CLOSED = {
     "ParkourTheories.Projection.FIFO.ChannelLedger": "decorated_ledger prefix_ledger reachable_head_from_coverage",
     "ParkourTheories.Choreography.Histories.CursorHistories": "initial_actor_history history_bind_receive run_completed_partial_histories",
     "ParkourTheories.Choreography.Histories.TransitionArchive": "code_history_has_syntax_cut syntax_cut_role_step",
-    "ParkourTheories.Choreography.Results.OperandObservations": "received_original_value owner_locally_actual_result",
+    "ParkourTheories.Choreography.Results.OperandObservations": """received_original_value comm_recorded_original
+        comm_observed_value choice_observed_value app_completed_values partial_app_results partial_bind_results
+        owner_locally_actual_result receive_actual_result""",
     "ParkourTheories.Choreography.Results.CutFamilySoundness": "structural_cut_family_results",
     "ParkourTheories.Projection.Matching.PayloadHistory": "matched_has_actual_past production_recorded_in_replay",
     "ParkourTheories.Projection.Payloads.SenderProvenance": "production_at_current_sender queued_operand_at_receiver",
     "ParkourTheories.Projection.Payloads.RootPackets": "packet_from_root_program root_queued_operand source_originals_root",
-    "ParkourTheories.Projection.FIFO.ConsumedOccurrences": "matched_received_safe matched_future_unreceived",
+    "ParkourTheories.Projection.FIFO.ConsumedOccurrences": """cursor_history_scoped cursor_history_consumed_safe
+        received_member_action matched_received_safe matched_future_unreceived""",
     "ParkourTheories.Projection.Payloads.StaticPackets": "syntactic_packet source_originals_static",
     "ParkourTheories.Projection.Occurrences.PossiblePaths": "sampled_send_site static_receive_compares_to_queued",
     "ParkourTheories.Projection.FIFO.FirstEmission": "static_no_predecessor head_key_path first_send_prefix head_from_first_send",
@@ -25,24 +28,33 @@ CLOSED = {
     "ParkourTheories.Projection.Occurrences.SenderBarrier": "static_sender_barrier",
     "ParkourTheories.Projection.FIFO.Heads.StaticPath": "first_send_at_or_after source_head_paths_static",
     "ParkourTheories.Choreography.Histories.PureBindDescent": "pure_cut_returned pure_bind_actual_descent",
-    "ParkourTheories.Projection.Payloads.ChoiceSelection": "root_choice_delivery_selected observed_root_choice_selected root_choice_actor_invariant",
+    "ParkourTheories.Projection.Payloads.ChoiceSelection": """root_choice_delivery_selected observed_root_choice_selected
+        archived_actual_root_choice_selected root_choice_actor_invariant""",
     "ParkourTheories.Projection.Occurrences.EnteredCode": "entered_history_origin entered_focus_original before_choice_no_child",
     "ParkourTheories.Projection.Payloads.SelectedBranch": "choice_body_originals source_originals_choice_static",
-    "ParkourTheories.Projection.Matching.ObservationArchive": """matched_has_observed_cuts observed_subarchive_receive observed_subarchive_same_trace
-        past_receive_sender_entry past_receive_sender_present observed_region_roles_nodup""",
+    "ParkourTheories.Projection.Matching.ObservationArchive": """observed_primitive_focus matched_has_observed_archives
+        observed_archives_syntax observed_archives_trace observed_subarchive_same_past observed_subarchive_receive
+        observed_subarchive_same_trace observed_past_event_archived matched_has_observed_cuts branch_items_iff
+        subarchive_iff entry_produced_site past_receive_sender_entry observed_region_roles_nodup
+        observed_region_roles_spec observed_region_roles_descends past_receive_sender_worked past_receive_sender_present""",
     "ParkourTheories.Projection.Occurrences.SubtreeGuards": "subtree_predecessor_history subtree_predecessor_cstep subtree_predecessor_poised",
-    "ParkourTheories.Projection.FIFO.Heads.ChoiceBranch": "root_choice_balance source_head_paths_choice_static",
+    "ParkourTheories.Projection.FIFO.Heads.ChoiceBranch": """guarded_action_session guarded_history_front
+        root_choice_balance choice_body_head_paths source_head_paths_choice_static""",
     "ParkourTheories.Projection.Payloads.PureBind": "source_originals_pure_bind_static",
     "ParkourTheories.Projection.RoleLogs.ArchiveOrder": "archive_role_log",
     "ParkourTheories.Choreography.Histories.LogDecomposition": "local_log_app_cases local_log_bind_cases log_shuffle_member",
-    "ParkourTheories.Projection.RoleLogs.ChoiceExecution": "actor_log_cond_replay",
+    "ParkourTheories.Projection.RoleLogs.ChoiceExecution": "actor_log_cond actor_log_cond_replay",
     "ParkourTheories.Projection.RoleLogs.Families.RegionOwnership": "root_log_family owns_sender_present expose_logged_receivers",
-    "ParkourTheories.Projection.RoleLogs.OccurrenceScope": "actor_log_scope actor_log_produced_here",
+    "ParkourTheories.Projection.RoleLogs.OccurrenceScope": "actor_log_scope actor_log_produced_here actor_log_message_here",
     "ParkourTheories.Projection.Payloads.OwnedPackets": "owned_original_operand owned_outgoing_packet owned_node_codec",
-    "ParkourTheories.Projection.RoleLogs.PrimitiveObservations": "comm_log_observed pure_log_returned",
-    "ParkourTheories.Projection.FIFO.SendChronology": "matched_sent_nodup matched_sent_sorted matched_head_identity",
-    "ParkourTheories.Projection.RoleLogs.Families.ChoicePartition": "replay_cond_logged_strong replay_cond_logged",
-    "ParkourTheories.Projection.RoleLogs.Families.BranchPartition": "logged_replay_app logged_replay_bind",
+    "ParkourTheories.Projection.RoleLogs.PrimitiveObservations": """comm_log_observed comm_log_original_tokens
+        comm_log_observed_in_archive comm_log_recorded_sender comm_log_original_operand pure_log_returned""",
+    "ParkourTheories.Projection.FIFO.SendChronology": """matched_sent_chronology matched_sent_nodup matched_sent_sorted
+        matched_head_from_layout matched_head_identity""",
+    "ParkourTheories.Projection.RoleLogs.Families.ChoicePartition": """replay_cond_logged_strong replay_cond_logged
+        replay_cond_logged_partition""",
+    "ParkourTheories.Projection.RoleLogs.Families.BranchPartition": """logged_replay_app logged_replay_bind
+        concrete_replay_app concrete_replay_bind""",
     "ParkourTheories.Projection.Matching.ReturnedValues": "actual_replay_laws matched_partial_results",
     "ParkourTheories.Projection.FIFO.PayloadAccounting": "sent_has_production receive_has_consumption",
     "ParkourTheories.Tests.FIFO.InvalidQueueOrder": "reject_lost_pending reject_swapped_fifo",
@@ -50,22 +62,29 @@ CLOSED = {
     "ParkourTheories.Tests.FIFO.ParallelExchanges": "app_self_completed app_reject_root_tag",
     "ParkourTheories.Tests.FIFO.InvalidSourceTraces": "reject_invented_bytes reject_wrong_occurrence invented_value_transport_obstruction",
     "ParkourTheories.Projection.CommunicationTree.ObservationCoverage": "realized_receive_site realized_past_sites realized_returned_trace",
-    "ParkourTheories.Projection.CommunicationTree.PredecessorCoverage": "tracked_parallel tracked_sequence tracked_choice tracked_predecessor_trace",
+    "ParkourTheories.Projection.CommunicationTree.PredecessorCoverage": """tracked_parallel tracked_sequence tracked_choice
+        tracked_predecessor_token tracked_predecessor_trace""",
     "ParkourTheories.Projection.FIFO.Heads.PredecessorCriterion": "layout_head",
-    "ParkourTheories.Projection.FIFO.Heads.LoggedPrefix": "source_head_paths_matched_from_tracked",
-    "ParkourTheories.Projection.Payloads.ReceiverCodec": "structural_logged_readers matched_receiver_packet_codec matched_source_originals_from_head",
-    "ParkourTheories.Projection.CommunicationTree.AtomicNodes": "tracked_atomic_node",
+    "ParkourTheories.Projection.FIFO.Heads.LoggedPrefix": """produced_cut_reached tracked_layout_head
+        source_head_paths_from_tracked source_head_paths_matched_from_tracked""",
+    "ParkourTheories.Projection.Payloads.ReceiverCodec": """structural_logged_readers observed_source_originals_present
+        matched_receiver_packet_codec matched_source_originals_from_head""",
+    "ParkourTheories.Projection.CommunicationTree.AtomicNodes": "realized_atomic tracked_atomic tracked_atomic_node",
     "ParkourTheories.Projection.CommunicationTree.ForkAndBind": "app_layout_children bind_layout_children",
-    "ParkourTheories.Projection.CommunicationTree.ChoiceNodes": "coherent_choice_layout",
+    "ParkourTheories.Projection.CommunicationTree.ChoiceNodes": "logged_choice_layout coherent_choice_layout",
     "ParkourTheories.Projection.CommunicationTree.Construction": "structural_tracked_layout structural_root_layout",
     "ParkourTheories.Projection.Matching.MatchedReceiveSafety": "matched_receive_frontiers matched_prefix_frontiers",
-    "ParkourTheories.Choreography.Histories.SyntaxDecomposition": "replay_app_actual replay_bind_actual replay_cond_actual archived_cut_actual_syntax",
+    "ParkourTheories.Choreography.Histories.SyntaxDecomposition": """actual_history_decomposition app_cut_children
+        bind_cut_completed_prefix choice_cut_completed_body actual_app_children actual_bind_completed_prefix
+        bind_cut_prefix initial_role_actual_decomposition replay_app_actual replay_bind_actual replay_cond_actual
+        archived_cut_actual_syntax""",
     "ParkourTheories.Projection.CommunicationTree.CompletedSubtrees": "shared_node_paths returned_cut_completed completed_subtree_coverage",
     "ParkourTheories.Choreography.ReceiveSites": "replay_receive_site",
     "ParkourTheories.Projection.Matching.ReceiveConditions": "aligned_cut_receive_safety aligned_cut_delivery_available covered_residuals",
     "ParkourTheories.Projection.FIFO.HeadDecoding": """nonempty_channel_first removal_has_key queued_key_nonempty head_bytes exact_receive_at
         source_removal_exposes_wire""",
-    "ParkourTheories.Choreography.Histories.RoleChronology": "role_history_chronology code_history_chronology history_scoped",
+    "ParkourTheories.Choreography.Histories.RoleChronology": """silent_future silent_scoped role_future role_scoped
+        role_consumes role_history_chronology code_history_chronology history_scoped""",
     "ParkourTheories.Choreography.Observations": """silent_result silent_live source_returns_result result_source_returns cursor_result_exact
         source_step_live live_source_step cursor_live_exact silent_returns_iff silent_actions_iff""",
     "ParkourTheories.Projection.Matching.CursorAlignment": "initial_alignment aligned_returns network_action_reflects",

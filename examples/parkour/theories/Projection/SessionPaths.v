@@ -210,6 +210,3 @@ Proof.
 Qed.
 
 End ForkSessions.
-
-Print Assumptions scoped_fork_disjoint.
-Print Assumptions code_history_fork_disjoint.

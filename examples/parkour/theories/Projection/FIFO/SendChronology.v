@@ -297,9 +297,3 @@ Proof.
   - now apply SenderPast.
 Qed.
 End Prefixes.
-
-Print Assumptions matched_sent_chronology.
-Print Assumptions matched_sent_nodup.
-Print Assumptions matched_sent_sorted.
-Print Assumptions matched_head_from_layout.
-Print Assumptions matched_head_identity.

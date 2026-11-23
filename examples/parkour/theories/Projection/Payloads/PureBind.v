@@ -293,5 +293,3 @@ Proof.
   exact (@on_roster_member (fun r => Choreo M r (A r)) R
     (fun r d => k r d (value r d)) c r d ND).
 Qed.
-
-Print Assumptions source_originals_pure_bind_static.

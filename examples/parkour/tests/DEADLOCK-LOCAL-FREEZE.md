@@ -26,25 +26,33 @@ both directions. The expectation files contain no proof bodies.
 
 ## Standalone gate
 
-From the repository root, with a private installation made by
-`examples/parkour/scripts/install-itree-pins`:
+From the repository root, with the three Git pins (`coq-ext-lib`, `coq-paco`,
+`coq-itree`) installed in the compiler's opam switch via
+[`../parkour-deps.opam`](../parkour-deps.opam) (see
+[`../ITREE-INSTALL.md`](../ITREE-INSTALL.md)):
 
 ```sh
-opam exec --switch rocq9 -- python3 examples/parkour/scripts/check-deadlock-local.py \
-  --itree-prefix "$ITREE_PREFIX" --output "$NEW_EVIDENCE_DIRECTORY"
+opam exec --switch="$switch" --set-switch -- make -C examples/parkour check-deadlock-local
+opam exec --switch="$switch" --set-switch -- python3 examples/parkour/scripts/check-deadlock-local.py \
+  --output "$NEW_EVIDENCE_DIRECTORY"
 ```
 
-The gate requires Rocq 9.0.1, checks all three source revisions, checks that
-installed `.vo` bytes match those pinned builds, verifies both active digest
-manifests through [`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)
+Ordinary `opam exec --switch="$switch" -- ...` also works (`switch=rocq9` for
+Rocq 9.0.1 or `switch=cs2-rocq92` for Rocq 9.2). The gate does not install
+packages. It checks the active compiler (Rocq 9.0.1 or 9.2.x) and verifies that
+all three `pin-depends` entries from [`../parkour-deps.opam`](../parkour-deps.opam)
+are installed in the active switch without pending rebuilds, verifies both
+active digest manifests through [`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)
 and [`namespace-migration.tsv`](namespace-migration.tsv), copies the five
 canonical modules into `$NEW_EVIDENCE_DIRECTORY/project`, and compiles them
 through production [`../scripts/parkour_rocq.py`](../scripts/parkour_rocq.py)
-under `-Q .../theories ParkourTheories` and `-Q .../tests ParkourTheories.Tests`.
-Thus every acceptance compile uses `rocq c -q -w +all`. Each compiler/checker
-invocation has a 120-second timeout. Each of the 20 independently named exports,
-including helpers, receives its own fresh assumption query through
-[`../scripts/check-assumptions.py`](../scripts/check-assumptions.py);
+under `-Q .../theories ParkourTheories` and `-Q .../tests ParkourTheories.Tests`
+(`ExtLib`, `Paco`, and `ITree` load from the switch without `-Q` mappings).
+Every acceptance compile uses `parkour_rocq.py`'s warning policy (`rocq c -q -w +all`
+on 9.0.1, with the three nonfatal compatibility categories on 9.2). Each
+compiler/checker invocation has a 120-second timeout. Each of the 20
+independently named exports, including helpers, receives its own fresh
+assumption query through [`../scripts/check-assumptions.py`](../scripts/check-assumptions.py);
 the entire output must be exactly `Closed under the global context`.
 The output directory retains the copied inputs and full compiler/query logs.
 

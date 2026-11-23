@@ -262,9 +262,6 @@ Proof.
 Qed.
 End AllOrigins.
 
-Print Assumptions structural_logged_readers.
-Print Assumptions observed_source_originals_present.
-
 From ParkourTheories.Projection.Matching Require Import ReturnedValues.
 
 (* The public clause requires no family witness, no global cut assumption,
@@ -310,6 +307,3 @@ Proof.
     + destruct First as (pre & post & Eq & Skip & Key). exact Key.
     + exact (Head X kind o sender rd Site g First).
 Qed.
-
-Print Assumptions matched_receiver_packet_codec.
-Print Assumptions matched_source_originals_from_head.

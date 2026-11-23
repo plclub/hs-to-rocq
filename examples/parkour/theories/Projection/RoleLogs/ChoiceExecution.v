@@ -194,6 +194,3 @@ Proof.
       * destruct Delivery; assumption.
 Qed.
 End StampedChoice.
-
-Print Assumptions actor_log_cond.
-Print Assumptions actor_log_cond_replay.

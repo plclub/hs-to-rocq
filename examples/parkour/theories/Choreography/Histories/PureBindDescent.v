@@ -97,6 +97,3 @@ Proof.
   split; [exact BodyAt|exact BodyRet].
 Qed.
 End PureBind.
-
-Print Assumptions pure_cut_returned.
-Print Assumptions pure_bind_actual_descent.

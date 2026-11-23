@@ -212,9 +212,6 @@ Proof.
   eapply subtree_predecessor_history; eassumption.
 Qed.
 
-Print Assumptions subtree_predecessor_history.
-Print Assumptions subtree_predecessor_cstep.
-
 Lemma mandatory_plug_future {M E p B A}
     (C : @cursor_context M E p B A) (t : @cursor M E p B) b :
   future t b -> future (plug C t) b.
@@ -290,5 +287,3 @@ Proof.
   exact (mandatory_not_before_focus R sending p peer site B (A p) C b sig root
     BoundEnd GuardEnd Before).
 Qed.
-
-Print Assumptions subtree_predecessor_poised.

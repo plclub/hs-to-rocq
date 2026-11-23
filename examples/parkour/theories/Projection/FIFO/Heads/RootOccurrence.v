@@ -258,5 +258,3 @@ Proof.
   split; [reflexivity|exact Receiver].
 Qed.
 End RootHead.
-
-Print Assumptions source_head_paths_root.

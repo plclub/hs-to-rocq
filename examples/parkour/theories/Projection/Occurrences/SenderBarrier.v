@@ -220,5 +220,3 @@ Proof.
   - eapply emission_consuming; exact Emitted.
   - rewrite <- (emitted_path _ _ _ _ Emitted). exact Before.
 Qed.
-
-Print Assumptions static_sender_barrier.

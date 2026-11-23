@@ -190,6 +190,3 @@ Proof.
     intros p d. rewrite <- (Common p d). apply BodyAt.
 Qed.
 End ChoiceLayout.
-
-Print Assumptions logged_choice_layout.
-Print Assumptions coherent_choice_layout.

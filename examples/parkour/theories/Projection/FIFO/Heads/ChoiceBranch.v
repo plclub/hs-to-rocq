@@ -424,9 +424,3 @@ Proof.
     intros r h. rewrite Base. unfold cont.
     rewrite (on_roster_member _ _ _ _ h ND). reflexivity.
 Qed.
-
-Print Assumptions guarded_action_session.
-Print Assumptions guarded_history_front.
-Print Assumptions root_choice_balance.
-Print Assumptions choice_body_head_paths.
-Print Assumptions source_head_paths_choice_static.

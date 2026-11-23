@@ -664,22 +664,3 @@ Proof.
 Qed.
 
 End MatchedArchives.
-
-Print Assumptions observed_primitive_focus.
-Print Assumptions matched_has_observed_archives.
-Print Assumptions observed_archives_syntax.
-Print Assumptions observed_archives_trace.
-Print Assumptions observed_subarchive_same_past.
-Print Assumptions observed_subarchive_receive.
-Print Assumptions observed_subarchive_same_trace.
-Print Assumptions observed_past_event_archived.
-Print Assumptions matched_has_observed_cuts.
-Print Assumptions branch_items_iff.
-Print Assumptions subarchive_iff.
-Print Assumptions entry_produced_site.
-Print Assumptions past_receive_sender_entry.
-Print Assumptions observed_region_roles_nodup.
-Print Assumptions observed_region_roles_spec.
-Print Assumptions observed_region_roles_descends.
-Print Assumptions past_receive_sender_worked.
-Print Assumptions past_receive_sender_present.

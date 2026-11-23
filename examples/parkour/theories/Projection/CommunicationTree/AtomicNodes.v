@@ -285,7 +285,3 @@ Proof.
   intros p d. apply atomic_layout_tree; [apply Atoms|apply Trees].
 Qed.
 End AtomicLog.
-
-Print Assumptions realized_atomic.
-Print Assumptions tracked_atomic.
-Print Assumptions tracked_atomic_node.

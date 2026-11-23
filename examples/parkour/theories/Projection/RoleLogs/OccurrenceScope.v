@@ -193,7 +193,3 @@ Proof.
     Hist Member Produced)).
 Qed.
 End Scope.
-
-Print Assumptions actor_log_scope.
-Print Assumptions actor_log_produced_here.
-Print Assumptions actor_log_message_here.

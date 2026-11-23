@@ -1,88 +1,57 @@
-"""Select and verify the private Rocq installation used by the local model."""
+"""Use the Parkour dependencies installed in the active Rocq opam switch."""
 
 import os
 import re
 import subprocess
-import tempfile
 from pathlib import Path
 
 PARKOUR = Path(__file__).resolve().parents[1]
-CACHE = PARKOUR / ".itree-cache"
-PINS = (
-    ("coq-ext-lib", "dd32f1c56f41d699ed2ffd4193a876c87fc44926", "theories", "ExtLib", 117),
-    ("paco", "d0561bf7f0a96cac486ba3bd8ca0b72ce01fb9cf", "src", "Paco", 41),
-    ("InteractionTrees", "a2bc2c38ad998dccadb932559c922139dd957c4f", "theories", "ITree", 68),
-)
+
+
+def rocq_environment() -> dict[str, str]:
+    return {k: v for k, v in os.environ.items() if k not in {
+        "COQLIB", "ROCQLIB", "COQCORELIB", "ROCQRUNTIMELIB", "COQPATH", "ROCQPATH"}}
 
 
 def rocq_version() -> str:
-    version = subprocess.check_output(["rocq", "c", "--print-version"], text=True).split()[0]
+    version = subprocess.check_output(["rocq", "c", "--print-version"], env=rocq_environment(),
+                                      text=True).split()[0]
     if version != "9.0.1" and not re.fullmatch(r"9\.2(?:\.\d+)?", version):
         raise SystemExit(f"need Rocq 9.0.1 or 9.2.x; got {version}")
     return version
 
 
-def default_prefix() -> Path:
-    version = rocq_version()
-    return CACHE / ("pins" if version == "9.0.1" else f"pins-{version}")
+def switch_environment() -> dict[str, str]:
+    env = rocq_environment()
+    # `opam exec --switch=...` sets the prefix but need not set OPAMSWITCH
+    # for nested opam commands. Local switches live in <directory>/_opam.
+    if prefix := env.get("OPAM_SWITCH_PREFIX"):
+        path = Path(prefix)
+        env["OPAMSWITCH"] = str(path.parent) if path.name == "_opam" else path.name
+
+    def opam(*args: str) -> str:
+        return subprocess.check_output(["opam", *args, "--color=never"], env=env, text=True).strip()
+
+    lib = Path(opam("var", "lib")).resolve()
+    where = subprocess.check_output(["rocq", "c", "-where"], env=env, text=True).strip()
+    if not Path(where).resolve().is_relative_to(lib):
+        raise SystemExit(f"Rocq uses {where}, outside the active opam switch's {lib}")
+
+    manifest = PARKOUR / "parkour-deps.opam"
+    field = opam("show", "--just-file", "--normalise", "--field=pin-depends", str(manifest))
+    pins = dict(re.findall(r'\["([^"]+)" "([^"]+)"\]', field))
+    if not pins:
+        raise SystemExit(f"no pin-depends in {manifest}")
+    installed = {tuple(line.split(maxsplit=1)) for line in opam(
+        "list", "--installed", "--pinned", "--short", "--columns=package,pin", *pins).splitlines()}
+    # `opam pin --no-action` can change the URL without rebuilding an installed version.
+    pending = set(opam("reinstall", "--list-pending").splitlines())
+    missing = [pkg for pkg, url in pins.items() if (pkg, url) not in installed or pkg in pending]
+    if missing:
+        raise SystemExit(f"missing or stale Parkour pins: {', '.join(missing)}\n"
+                         f"Install them in this switch with: opam install --deps-only {manifest}")
+    return env
 
 
-def prefix_path() -> Path:
-    return Path(os.environ.get("ITREE_PREFIX") or default_prefix()).resolve()
-
-
-def ensure_prefix(prefix: Path) -> None:
-    if prefix.is_dir():
-        return
-    if prefix != default_prefix() or os.environ.get("ITREE_PREFIX"):
-        raise SystemExit(f"missing prepared ITree installation: {prefix}")
-    CACHE.mkdir(exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=CACHE) as tmp:
-        stage = Path(tmp, "pins")
-        subprocess.run([PARKOUR / "scripts/install-itree-pins", stage], check=True)
-        verify_prefix(stage)
-        # Publish only a complete build. A concurrent successful build wins.
-        if not prefix.exists():
-            try:
-                stage.rename(prefix)
-            except OSError:
-                if not prefix.is_dir():
-                    raise
-
-
-def pinned_environment(prefix: Path) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if k not in {
-        "COQLIB", "ROCQLIB", "COQCORELIB", "ROCQRUNTIMELIB", "COQPATH", "ROCQPATH"}}
-    config = subprocess.check_output(["rocq", "c", "-config"], env=env, text=True)
-    runtime, = [line.removeprefix("COQCORELIB=") for line in config.splitlines()
-                if line.startswith("COQCORELIB=")]
-    if not Path(runtime).is_absolute() or not Path(runtime).is_dir():
-        raise SystemExit(f"invalid Rocq runtime: {runtime!r}")
-    return {**env, "ROCQLIB": str(prefix / "lib"), "ROCQRUNTIMELIB": runtime}
-
-
-def verify_prefix(prefix: Path) -> None:
-    version = rocq_version()
-    stamp = prefix / "rocq-version"
-    # Only the original 9.0.1 installer produced unstamped installations.
-    built_with = stamp.read_text().strip() if stamp.exists() else "9.0.1"
-    if version != built_with:
-        raise SystemExit(f"{prefix}: built with Rocq {built_with}; active compiler is {version}")
-    for repo, pin, relative, logical, count in PINS:
-        source = prefix / "src" / repo
-        git = ["git", "-C", str(source)]
-        if subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip() != pin:
-            raise SystemExit(f"{repo}: expected revision {pin}")
-        subprocess.run([*git, "diff", "--exit-code", pin, "--"], check=True)
-        installed = prefix / "lib/user-contrib" / logical
-        built = source / relative
-        objects = {obj.relative_to(installed) for obj in installed.rglob("*.vo")}
-        if len(objects) != count or objects != {obj.relative_to(built) for obj in built.rglob("*.vo")}:
-            raise SystemExit(f"{logical}: installed/pinned inventories must match ({count} objects)")
-        tracked = subprocess.check_output([*git, "ls-tree", "-rz", "--name-only", pin], text=True)
-        inputs = set(tracked.split("\0"))
-        for path in sorted(objects):
-            if str(relative / path.with_suffix(".v")) not in inputs:
-                raise SystemExit(f"{logical}/{path}: no source at {pin}")
-            if (installed / path).read_bytes() != (built / path).read_bytes():
-                raise SystemExit(f"{logical}/{path}: installed object differs from pinned build")
+if __name__ == "__main__":
+    switch_environment()

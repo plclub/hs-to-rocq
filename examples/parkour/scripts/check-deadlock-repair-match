@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+unset COQLIB ROCQLIB COQCORELIB ROCQRUNTIMELIB COQPATH ROCQPATH
+python3 scripts/itree_pins.py
 out="$PWD/build/repair-match-cases"
 mkdir -p "$out"
 build() (
@@ -14,7 +16,6 @@ build tests Projection/ChoicePayloadMatching.vo
 flags=(-Q "$PWD/build/run/base" '' -Q "$PWD/build/run/manual" ''
        -Q "$PWD/build/run/transformers" '' -Q "$PWD/lib" ''
        -Q "$PWD/theories" ParkourTheories -Q "$PWD/tests" ParkourTheories.Tests)
-for pin in ExtLib Paco ITree; do flags+=(-Q "$PWD/build/run/pins/$pin" "$pin"); done
 library=ParkourTheories.Tests.Projection.ChoicePayloadMatching
 for export in complete_repaired_match actual_machine_four_actions source_final \
   positive_between_sends_and_receives positive_after_choice_receive \

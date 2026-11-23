@@ -111,9 +111,3 @@ Proof.
 Qed.
 
 End Prefixes.
-
-Print Assumptions cursor_history_scoped.
-Print Assumptions cursor_history_consumed_safe.
-Print Assumptions received_member_action.
-Print Assumptions matched_received_safe.
-Print Assumptions matched_future_unreceived.

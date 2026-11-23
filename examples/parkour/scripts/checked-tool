@@ -2,12 +2,14 @@
 set -eu
 cd "$(dirname "$0")/.."
 case "${1:-}" in
-    check|translate) mode=$1; shift ;;
-    *) echo "usage: $0 {check|translate} hs-to-rocq-arguments..." >&2; exit 2 ;;
+    check|translate|translate-only) mode=$1; shift ;;
+    *) echo "usage: $0 {check|translate|translate-only} hs-to-rocq-arguments..." >&2; exit 2 ;;
 esac
 
-# Parse precisely the argv that the locally built translator will receive.
-stack --allow-different-user exec --package crypton -- runghc -package=hs-to-rocq -package=crypton scripts/CheckEdits.hs "$@"
-if [[ "$mode" = translate ]]; then
+# Acceptance checks the exact argv used for translation; ordinary builds only translate.
+if [[ "$mode" != translate-only ]]; then
+    stack --allow-different-user exec --package crypton -- runghc -package=hs-to-rocq -package=crypton scripts/CheckEdits.hs "$@"
+fi
+if [[ "$mode" != check ]]; then
     exec stack --allow-different-user exec -- "$(stack --allow-different-user path --local-install-root)/bin/hs-to-rocq" "$@"
 fi

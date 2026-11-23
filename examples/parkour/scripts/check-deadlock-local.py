@@ -6,13 +6,7 @@ from pathlib import Path
 
 from audit_project import assumptions, compile_v, project_loads
 from frozen_inputs import verify_local_inputs
-from itree_pins import (
-    PARKOUR,
-    ensure_prefix,
-    pinned_environment,
-    prefix_path,
-    verify_prefix,
-)
+from itree_pins import PARKOUR, switch_environment
 
 SOURCES = ("theories/Semantics/LocalEffects.v", "tests/Semantics/LocalEffectContracts.v",
            "tests/Semantics/LocalEffectWitnesses.v", "tests/Semantics/ExactObservations.v",
@@ -31,17 +25,13 @@ EXPORTS = {
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--itree-prefix", type=Path, help="prepared private installation")
     parser.add_argument("--output", type=Path, required=True, help="fresh evidence directory")
     parser.add_argument("--project-root", type=Path, help="reuse compiled canonical theories/ and tests/")
     args = parser.parse_args()
     root = args.project_root.resolve() if args.project_root else PARKOUR
     verify_local_inputs(root)
 
-    prefix = args.itree_prefix.resolve() if args.itree_prefix else prefix_path()
-    ensure_prefix(prefix)
-    verify_prefix(prefix)
-    env = pinned_environment(prefix)
+    env = switch_environment()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
 

@@ -125,9 +125,12 @@ Key lemmas: `bin_Desc0` (combine Desc0), `Desc_outside` (f=None outside range), 
 
 For Parkour theory imports, `_CoqProject` builds, source pinning, edit policy,
 origin checks, or local-effect semantics, follow the
-[Parkour build and checks](examples/parkour/README.md). Validate with a clean
-`make -C examples/parkour check`: fixture closure is separate from the required
-assumption report for the generated `Choreography.Choreo2.epp`.
+[Parkour build and checks](examples/parkour/README.md). `make -C examples/parkour`
+builds the library and theories. Keep assumption queries in `make check`;
+validate with a clean `make -C examples/parkour check`, including the separate
+closure report for the generated `Choreography.Choreo2.epp`.
+For missing or stale Parkour ITree pins, use the
+[opam switch setup](examples/parkour/ITREE-INSTALL.md).
 For Parkour matching, FIFO ordering, or deadlock-freedom proofs, use the
 [independent contracts and acceptance gates](examples/parkour/DEADLOCK-FREEDOM-SPEC.md).
 The [handoff](examples/parkour/DEADLOCK-HANDOFF.md) distinguishes the original

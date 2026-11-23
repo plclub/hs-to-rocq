@@ -279,5 +279,3 @@ Proof.
 Qed.
 
 End Families.
-
-Print Assumptions structural_cut_family_results.

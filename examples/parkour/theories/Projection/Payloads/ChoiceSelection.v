@@ -140,9 +140,6 @@ Proof.
     exact (conj After (or_intror (conj Different Act))).
 Qed.
 
-Print Assumptions root_choice_delivery_selected.
-Print Assumptions observed_root_choice_selected.
-
 Section ArchivedRoot.
 Context {M E : Type -> Type} {Store Input : Type}.
 Variable model : local_model M E role (Store * Input).
@@ -218,8 +215,6 @@ Proof.
     net gs' ev History Obs).
 Qed.
 End ArchivedRoot.
-
-Print Assumptions archived_actual_root_choice_selected.
 
 Section ActorInvariant.
 Context {M E : Type -> Type} {Store Input : Type}.
@@ -351,5 +346,3 @@ Proof.
         apply Frame. congruence.
 Qed.
 End ActorInvariant.
-
-Print Assumptions root_choice_actor_invariant.

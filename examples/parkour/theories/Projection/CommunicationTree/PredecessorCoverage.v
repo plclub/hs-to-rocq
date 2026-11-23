@@ -457,9 +457,3 @@ Theorem tracked_same_tree F active root (cuts : family cut F active) tree :
     (cut_covered p (F p) (cuts p d)).
 Proof. intros [Layout Order]; auto. Qed.
 End Tracked.
-
-Print Assumptions tracked_parallel.
-Print Assumptions tracked_sequence.
-Print Assumptions tracked_choice.
-Print Assumptions tracked_predecessor_token.
-Print Assumptions tracked_predecessor_trace.

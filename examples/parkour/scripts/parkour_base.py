@@ -1,10 +1,11 @@
 """Prepare Parkour's compiler-specific base from the shared Rocq 9 sources."""
 
-import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
+
+from itree_pins import rocq_environment
 
 # The translator can read these interfaces even when checking edits without Rocq.
 SOURCE_BASE = Path(__file__).resolve().parents[2] / "rocq9.0/base"
@@ -32,8 +33,7 @@ def prepare_base(version: str, destination: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(interface, target)
 
-    env = {k: v for k, v in os.environ.items() if k not in {
-        "COQLIB", "ROCQLIB", "COQCORELIB", "ROCQRUNTIMELIB", "COQPATH", "ROCQPATH"}}
+    env = rocq_environment()
     subprocess.run(["rocq", "makefile", "-f", "_CoqProject", "-o", "Makefile.coq"],
                    cwd=destination, env=env, check=True)
     subprocess.run(["make", "-j2", "-f", "Makefile.coq"],

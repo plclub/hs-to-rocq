@@ -198,8 +198,10 @@ exports under `build/run/semantics/` and `build/run/final/`:
 | `ParkourTheories.Protocols.QuorumVoting.quorum_well_formed` | Exactly the 14 [permitted runtime constants](tests/slice1/client-allowlist) |
 | `ParkourTheories.Protocols.QuorumVoting.quorum_deadlock_freedom` | Exactly the same 14 runtime constants |
 
-The HasChor pin and its parent are listed above; the checked Interaction Trees,
-Paco, and ExtLib revisions are in the [pin verifier](scripts/itree_pins.py).
+The HasChor pin and its parent are listed above; the pinned Interaction Trees,
+Paco, and ExtLib revisions are in [`parkour-deps.opam`](parkour-deps.opam) and
+checked by [`scripts/itree_pins.py`](scripts/itree_pins.py) (see
+[`ITREE-INSTALL.md`](ITREE-INSTALL.md)).
 
 **Historical clean validation, 2026-11-22 (`a04b598b`, pre-migration names).**
 At the public-proof milestone `a04b598b`, `make -C examples/parkour clean`

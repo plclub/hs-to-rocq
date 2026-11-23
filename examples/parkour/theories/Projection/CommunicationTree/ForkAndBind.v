@@ -337,6 +337,3 @@ Proof.
   intros pt bt. eapply tracked_bind_logged; eassumption.
 Qed.
 End BranchLayout.
-
-Print Assumptions app_layout_children.
-Print Assumptions bind_layout_children.

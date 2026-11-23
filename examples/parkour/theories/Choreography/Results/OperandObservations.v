@@ -266,14 +266,6 @@ Proof.
   - intros p d. exact (proj2 (proj2 (Valid p d))).
 Qed.
 
-Print Assumptions received_original_value.
-Print Assumptions comm_recorded_original.
-Print Assumptions comm_observed_value.
-Print Assumptions choice_observed_value.
-Print Assumptions app_completed_values.
-Print Assumptions partial_app_results.
-Print Assumptions partial_bind_results.
-
 Section ActualLocalResults.
 Context {M E : Type -> Type} {Store : Type}.
 Variable model : LocalEffects.local_model M E Symbol Store.
@@ -352,6 +344,3 @@ Proof.
 Qed.
 
 End ActualLocalResults.
-
-Print Assumptions owner_locally_actual_result.
-Print Assumptions receive_actual_result.

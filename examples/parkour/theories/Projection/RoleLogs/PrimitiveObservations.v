@@ -355,10 +355,3 @@ Proof.
 Qed.
 
 End StampedAtoms.
-
-Print Assumptions comm_log_observed.
-Print Assumptions comm_log_original_tokens.
-Print Assumptions comm_log_observed_in_archive.
-Print Assumptions comm_log_recorded_sender.
-Print Assumptions comm_log_original_operand.
-Print Assumptions pure_log_returned.

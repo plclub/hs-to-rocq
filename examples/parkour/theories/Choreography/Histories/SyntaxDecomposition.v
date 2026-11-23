@@ -205,15 +205,6 @@ Qed.
 
 End ActualCuts.
 
-Print Assumptions actual_history_decomposition.
-Print Assumptions app_cut_children.
-Print Assumptions bind_cut_completed_prefix.
-Print Assumptions choice_cut_completed_body.
-Print Assumptions actual_app_children.
-Print Assumptions actual_bind_completed_prefix.
-Print Assumptions bind_cut_prefix.
-Print Assumptions initial_role_actual_decomposition.
-
 (* Bridge for SenderProvenance.at_sender_cut: this conclusion concerns
    exactly the supplied archived cut, not another history with the same
    endpoint. Its archive is neither replaced nor existentially reselected. *)
@@ -552,8 +543,3 @@ Proof.
 Qed.
 
 End ConcreteFamilies.
-
-Print Assumptions replay_app_actual.
-Print Assumptions replay_bind_actual.
-Print Assumptions replay_cond_actual.
-Print Assumptions archived_cut_actual_syntax.

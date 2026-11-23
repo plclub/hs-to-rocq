@@ -271,12 +271,3 @@ Proof.
 Qed.
 
 End Chronology.
-
-Print Assumptions silent_future.
-Print Assumptions silent_scoped.
-Print Assumptions role_future.
-Print Assumptions role_scoped.
-Print Assumptions role_consumes.
-Print Assumptions role_history_chronology.
-Print Assumptions code_history_chronology.
-Print Assumptions history_scoped.

@@ -157,8 +157,9 @@ for the edits files.
 
 All examples target **GHC 9.10.3**. Large examples use **Coq 8.20**;
 `examples/rocq9.0/` mirrors `base/` and `examples/tests/` for **Rocq 9.0**.
-The [Parkour example](examples/parkour/README.md) targets the Choreo2
-projection and upstream quorum-voting protocol on Rocq 9.0.1.
+The [Parkour example](examples/parkour/README.md) builds the Choreo2 projection
+and quorum-voting protocol on Rocq 9.0.1 and 9.2. Use `make -C examples/parkour`
+to build it and `make -C examples/parkour check` to run its tests and axiom audits.
 The table below records earlier example builds, not post-rebase validation.
 
 ## Dependency Chain

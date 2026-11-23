@@ -1,4 +1,4 @@
-"""Translate the pinned modules into an empty tree and check the compiled result."""
+"""Build the pinned Parkour library and theories, optionally running the acceptance checks."""
 
 import argparse
 import os
@@ -10,13 +10,7 @@ import tempfile
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 
-from itree_pins import (
-    ensure_prefix,
-    pinned_environment,
-    prefix_path,
-    rocq_version,
-    verify_prefix,
-)
+import itree_pins
 from parkour_base import SOURCE_BASE, prepare_base
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -24,9 +18,10 @@ PARKOUR = SCRIPTS.parent
 os.chdir(PARKOUR)
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--check-edits", action="store_true")
-parser.add_argument("--deps-only", action="store_true", help="prepare the generated libraries and verified private pins")
-parser.add_argument("--final", action="store_true", help="also require the independent public theorem contract")
+mode = parser.add_mutually_exclusive_group()
+mode.add_argument("--check-edits", action="store_true")
+mode.add_argument("--deps-only", action="store_true", help="prepare the generated libraries for standalone builds")
+mode.add_argument("--check", "--final", action="store_true", help="check the translation, fixtures and theorem assumptions")
 parser.add_argument("--scratch", action="store_true", help="use a fresh build directory and leave lib/ and build/run/ alone")
 args = parser.parse_args()
 project = Path(".")
@@ -47,7 +42,9 @@ ghc_base_source = Path("../ghc/ghc/libraries/base/src")
 class_source = out / "class-source"
 upstream = Path("upstream/src")
 protocol = Path("upstream/examples/explicit-parallel/quorum-voting-choreo2")
-origins = [line.split("\t") for line in Path("required.tsv").read_text().splitlines()]
+checked_translation = args.check or args.check_edits
+origins = ([line.split("\t") for line in Path("required.tsv").read_text().splitlines()]
+           if checked_translation else [])
 packages = Path("upstream-packages.txt").read_text().split()
 
 
@@ -91,14 +88,18 @@ def run(*command: Arg, cwd: Path | None = None, env: Mapping[str, str] | None = 
         raise SystemExit(status)
 
 
-for module in modules():
-    run(SCRIPTS / "checked-tool", "check", *invocation(*module))
-if args.check_edits:
-    raise SystemExit(0)
+if checked_translation:
+    for module in modules():
+        run(SCRIPTS / "checked-tool", "check", *invocation(*module))
+    if args.check_edits:
+        raise SystemExit(0)
 
-version = rocq_version()
+# Check the switch before replacing any build outputs.
+rocq_env = itree_pins.switch_environment()
+run("python3", SCRIPTS / "verify-source.py", "--dependencies", env=rocq_env)
+version = itree_pins.rocq_version()
 if subprocess.check_output(["stack", "exec", "--", "ghc", "--numeric-version"],
-                           text=True).strip() != "9.10.3":
+                           text=True, env=rocq_env).strip() != "9.10.3":
     raise SystemExit("expected GHC 9.10.3")
 for directory in [out, lib]:
     if directory.exists():
@@ -107,11 +108,6 @@ for directory in [deps, lib, support]:
     directory.mkdir(parents=True, exist_ok=True)
 
 prepare_base(version, base)
-prefix = prefix_path()
-ensure_prefix(prefix)
-verify_prefix(prefix)
-(out / "pins").symlink_to(prefix / "lib/user-contrib", target_is_directory=True)
-rocq_env = pinned_environment(prefix)
 load_deps: list[Arg] = [arg for path in (base, deps, support) for arg in ("-Q", path.resolve(), "")]
 rocq: list[Arg] = ["python3", SCRIPTS / "parkour_rocq.py", *load_deps, "-Q", lib.resolve(), ""]
 
@@ -141,7 +137,7 @@ def build_project(directory: str) -> None:
                 shutil.copyfile(source / line, target / line)
     run("rocq", "makefile", "-f", "_CoqProject", "-o", "Makefile.coq", cwd=target.resolve(), env=rocq_env)
     if not args.scratch:
-        # Acceptance must observe diagnostics even for modules compiled earlier in an editor.
+        # Existing objects may come from a different compiler. Acceptance also needs fresh diagnostics.
         run("make", "-f", "Makefile.coq", "clean", cwd=target.resolve(), env=rocq_env)
     # The project compiler checks warnings before parallel output is interleaved.
     log = out / f"make-{directory}.log"
@@ -163,12 +159,12 @@ def build_project(directory: str) -> None:
         raise SystemExit(f"Rocq dependency warning: see {log}")
 
 
-run("python3", SCRIPTS / "extract-contravariant.py", class_source / "Parkour/Contravariant.hs")
+run("python3", SCRIPTS / "extract-contravariant.py", class_source / "Parkour/Contravariant.hs", env=rocq_env)
 for model in ["Symbol", "Codec", "TH", "Runtime", "Functions"]:
     build_support(model)
 for module in modules():
     name, target = module[0], module[2]
-    run(SCRIPTS / "checked-tool", "translate", *invocation(*module))
+    run(SCRIPTS / "checked-tool", "translate" if args.check else "translate-only", *invocation(*module), env=rocq_env)
     vfile = target / (name.replace(".", "/") + ".v")
     run(*rocq, vfile.resolve(), cwd=out, env=rocq_env)
     if name == "Control.Monad.Trans.Reader":
@@ -180,9 +176,13 @@ if args.deps_only:
     raise SystemExit(0)
 
 build_project("theories")
+if not args.check:
+    raise SystemExit(0)
+
+# LocalEffectWitnesses.finite_action exercises the installed ITree reply continuation.
 build_project("tests")
 run("python3", SCRIPTS / "check-deadlock-local.py", "--output", out / "local",
-    "--project-root", project.resolve())
+    "--project-root", project.resolve(), env=rocq_env)
 run("bash", SCRIPTS / "test-checks.sh", "--check-closed", lib.resolve(), "Choreography.Choreo2.epp",
     *load_deps,
     cwd=out, env=rocq_env)
@@ -193,6 +193,6 @@ for theorem in ["owner_cond_sequential", "owner_cond_app", "owner_cond_false",
         "-Q", (project / "theories").resolve(), "ParkourTheories",
         "-Q", (project / "tests").resolve(), "ParkourTheories.Tests", cwd=out, env=rocq_env)
 
-run("python3", SCRIPTS / "check_semantics.py", out / "semantics", *(["--final"] if args.final else []),
+run("python3", SCRIPTS / "check_semantics.py", out / "semantics", "--final",
     "--generated", lib, "--project-root", project.resolve(), "--", base, deps, support,
     env=rocq_env)
