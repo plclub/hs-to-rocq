@@ -51,6 +51,7 @@ MODULES = ("theories/DeadlockRuns", "tests/DeadlockRunsExpect", "tests/DeadlockR
            "theories/DeadlockPartialValues", "theories/DeadlockRoster",
            "theories/DeadlockAlignment", "theories/DeadlockSourceView", "theories/DeadlockAlignmentProgress",
            "tests/DeadlockAlignmentProgressCases", "theories/DeadlockMatch",
+           "tests/DeadlockWireRunsExpect",
            "theories/DeadlockMatchStep", "tests/DeadlockMatchStepExpect", "tests/DeadlockExtraMatchCases",
            "theories/DeadlockHead",
             "theories/DeadlockFrontiers", "tests/DeadlockRepairMatchCases", "theories/DeadlockReadyInputs",
@@ -352,6 +353,7 @@ def check(output: Path, loads: list[str], generated: Path, *, final: bool = Fals
         "DeadlockMatchStepExpect": "b845b79ebb8939b5c622cb5a750a401f94eb2321235eba8ed08d5ca00c21c0e2",
         "DeadlockRepairMatchCases": "a672d0bf4470181fbc4b0be869e0da74dc4404839b309b0c89c0b20010a0a1d5",
         "DeadlockExtraMatchCases": "9658a221b45bc64ffd29254eb5f543b54b40256da13e66cd53ccd8937d92d204",
+        "DeadlockWireRunsExpect": "4b37bb9b4a72a247d55ce94043052c86919f0300566db1d23176058d3ea7b9cf",
     }.items():
         digest(PARKOUR / "tests" / (fixture + ".v"), anchor)
     for module in MODULES:
