@@ -2,10 +2,10 @@ From Stdlib Require Import Lists.List.
 Require Import DeadlockLocalLog DeadlockLocal DeadlockSource DeadlockCoherence
   Parkour.Symbol Choreography.Choreo2 Control.Monad.Tree.
 Import ListNotations.
+Set Universe Polymorphism.
 
 (* A shuffle retains the order in each child, without sorting the parent's
    actual chronological log into a function-then-argument concatenation. *)
-#[universes(template)]
 Inductive log_shuffle {L : Type} : list L -> list L -> list L -> Prop :=
 | ShuffleEmpty : log_shuffle [] [] []
 | ShuffleLeft xs ys zs e :
@@ -13,13 +13,35 @@ Inductive log_shuffle {L : Type} : list L -> list L -> list L -> Prop :=
 | ShuffleRight xs ys zs e :
     log_shuffle xs ys zs -> log_shuffle xs (ys ++ [e]) (zs ++ [e]).
 
+(* The stamped token type quantifies over program types and can inhabit a
+   higher universe than the monomorphic Stdlib list theorems. *)
+Lemma log_append_member {L} (e : L) (xs ys : list L) :
+  In e (xs ++ ys) <-> In e xs \/ In e ys.
+Proof.
+  revert xs; fix IH 1; intros [|x xs]; cbn; [tauto|].
+  specialize (IH xs). tauto.
+Qed.
+
+Lemma log_app_nil_r {L} (xs : list L) : xs ++ [] = xs.
+Proof.
+  revert xs; fix IH 1; intros [|a xs]; cbn;
+    [reflexivity|apply f_equal; apply IH].
+Qed.
+
+Lemma log_app_assoc {L} (xs ys zs : list L) :
+  xs ++ ys ++ zs = (xs ++ ys) ++ zs.
+Proof.
+  revert xs; fix IH 1; intros [|a xs]; cbn;
+    [reflexivity|apply f_equal; apply IH].
+Qed.
+
 Lemma log_shuffle_member {L} (xs ys zs : list L) :
   log_shuffle xs ys zs -> forall e, In e zs <-> In e xs \/ In e ys.
 Proof.
   induction 1; intro a; cbn.
   - tauto.
-  - repeat rewrite in_app_iff. cbn. rewrite IHlog_shuffle. tauto.
-  - repeat rewrite in_app_iff. cbn. rewrite IHlog_shuffle. tauto.
+  - repeat rewrite log_append_member. cbn. rewrite IHlog_shuffle. tauto.
+  - repeat rewrite log_append_member. cbn. rewrite IHlog_shuffle. tauto.
 Qed.
 
 Section Decompose.
@@ -87,7 +109,6 @@ Proof.
   - cbn. right. left. eexists. split; [eassumption|reflexivity].
 Qed.
 
-#[universes(template)]
 Inductive bind_log_cut {X Y} (o : occurrence)
     (a : Choreo M p X) (k : X -> Choreo M p Y) :
     list L -> cur Y -> Prop :=
@@ -110,11 +131,11 @@ Proof.
     cbn. apply BindInPrefix. constructor.
   - destruct (micro_shape_correct _ _ _ _ Step)
       as [(x & -> & Eq & ->)|(v & Move & ->)].
-    + subst t. cbn. rewrite <- (app_nil_r tr).
+    + subst t. cbn. rewrite <- (log_app_nil_r tr).
       eapply BindInBody; [eassumption|constructor].
     + apply BindInPrefix. eapply LogStep; eassumption.
   - destruct tok; cbn.
-    + rewrite <- app_assoc. eapply BindInBody; [eassumption|].
+    + rewrite <- log_app_assoc. eapply BindInBody; [eassumption|].
       exact (LogStep _ _ _ _ _ _ _ _ _ H0 Step).
     + eapply BindInBody; [eassumption|].
       exact (LogStep _ _ _ _ _ _ _ _ _ H0 Step).
@@ -160,7 +181,6 @@ Proof.
     as [[_ Bad]|[(ct & _ & Bad)|Done]]; try discriminate; exact Done.
 Qed.
 
-#[universes(template)]
 Inductive app_log_cut {X Y} (o : occurrence)
     (f : Choreo M p (X -> Y)) (x : Choreo M p X) :
     list L -> cur Y -> Prop :=

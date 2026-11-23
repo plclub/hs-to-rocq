@@ -1,6 +1,7 @@
 From Stdlib Require Import Lists.List.
 Require Import DeadlockLocal DeadlockState DeadlockMatch DeadlockRoster.
 Require DeadlockAlignmentProgress.
+Require DeadlockReadyInputs.
 Require DeadlockMatchStep DeadlockRuns.
 Require DeadlockSource DeadlockNetwork DeadlockAlignment Choreography.Network
   Choreography.Choreo2 Parkour.Symbol.
@@ -67,14 +68,7 @@ Qed.
 Definition inputs_available (s : @DeadlockSource.configuration M E
     ((Parkour.Symbol.Symbol -> Store) * Input) A)
     (n : @DeadlockNetwork.configuration M E ((Parkour.Symbol.Symbol -> Store) * Input)) :=
-  forall p, In p R ->
-    exists (t : @DeadlockNetwork.control M E (A p))
-      (h : DeadlockAlignment.aligned sm Choreography.Network.Root p (A p)
-        (DeadlockSource.positions s p) t),
-      In (DeadlockNetwork.Endpoint (A p) p t) (DeadlockNetwork.endpoints n) /\
-      DeadlockAlignmentProgress.delivery_available sm Choreography.Network.Root
-        p (A p) (DeadlockSource.positions s p) t h
-        (DeadlockNetwork.mailboxes n) (DeadlockSource.deliveries s).
+  DeadlockReadyInputs.inputs_available model R A s n.
 
 Lemma initial_inputs_available : inputs_available C0 N0.
 Proof.

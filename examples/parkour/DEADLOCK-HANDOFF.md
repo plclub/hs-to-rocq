@@ -87,6 +87,14 @@ before comparing sends inside the body. `source_originals_pure_bind_static`
 also handles an initial `Bind` of `Pure`, using its actual returned value.
 These results do not cover general nested value-dependent continuations.
 
+`DeadlockPlayedPrefix.matched_partial_results` handles the value premise of
+general `Bind`: for any matched prefix, the roles that have returned satisfy
+the source well-formedness certificate's result relation on their actual
+values. Other roles need not have returned. `actual_replay_laws` proves
+this using the paired steps from that prefix; `entered_choices_agree`
+identifies the common argument when at least one role entered a choice.
+Neither result alone identifies the FIFO head at an arbitrary nested receive.
+
 ## Why the original projection fails
 
 [`counterexample/EXPECTED.md`](counterexample/EXPECTED.md) fixes the inputs and

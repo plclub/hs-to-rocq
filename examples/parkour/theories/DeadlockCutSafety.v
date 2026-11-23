@@ -3,7 +3,7 @@ Require Import DeadlockSource DeadlockCoherence DeadlockReplay DeadlockHead
   DeadlockNetwork DeadlockMessages DeadlockOrder DeadlockAlignment
   DeadlockAlignmentProgress DeadlockMatchStep DeadlockWellFormed
   Parkour.Symbol Parkour.Codec Control.Monad.Tree.
-Require Choreography.Choreo2 Choreography.Network DeadlockFreedom.
+Require Choreography.Choreo2 Choreography.Network DeadlockReadyInputs.
 Import ListNotations.
 Local Arguments ContextHole {M E p X}.
 Local Arguments ContextSeq {M E p X Y Z} _ _ _.
@@ -275,7 +275,7 @@ Theorem covered_residuals s n gs :
     source_head_paths sm p (A p) (positions s p) gs /\
     source_originals sm p (A p) (positions s p) gs) ->
   safe_residuals model R A s n gs /\
-  DeadlockFreedom.inputs_available model R A s n.
+  DeadlockReadyInputs.inputs_available model R A s n.
 Proof.
   intros [_ [Rep [f [Es Align]]]] Cover. split.
   - exists f. split; [exact Es|]. intros p Hin.
@@ -283,7 +283,8 @@ Proof.
     destruct (Cover p Hin). eapply aligned_cut_receive_safety; try eassumption.
     exact (proj2 Rep).
   - intros p Hin. destruct (Align p Hin) as [Ha]. exists (f p), Ha. split.
-    + rewrite Es. clear -Hin. induction R as [|r rest IH]; cbn in *; [contradiction|].
+    + refine (eq_ind_r (fun es => In (Endpoint (A p) p (f p)) es) _ Es).
+      clear -Hin. induction R as [|r rest IH]; cbn in *; [contradiction|].
       destruct Hin as [->|Hin]; [now left|right; auto].
     + destruct (Cover p Hin). eapply aligned_cut_delivery_available; eassumption.
 Qed.
