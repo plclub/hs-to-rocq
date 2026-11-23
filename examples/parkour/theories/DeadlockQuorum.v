@@ -1,5 +1,6 @@
 From Stdlib Require Import Lists.List Strings.String.
 Require Import Main DeadlockWellFormed.
+Require DeadlockFreedom DeadlockState DeadlockSource DeadlockNetwork DeadlockMatch.
 Require Import Choreography.Choreo2 Control.Monad.Tree Parkour.Codec Parkour.Symbol.
 Import ListNotations.
 
@@ -47,3 +48,31 @@ Proof.
       GHC.Base.op_zlztzg__ GHC.Base.fmap GHC.Base.op_zlzd__].
     quorum_structure.
 Qed.
+
+(* Local effects may block. The corollary transfers source deadlock freedom;
+   it does not assume that STM, or any other local effect, is total. *)
+Theorem quorum_deadlock_freedom :
+  forall (E : Type -> Type) (Store Input : Type)
+    (model : DeadlockLocal.local_model Parkour.Runtime.IO E Symbol (Store * Input))
+    (stores : Symbol -> Store) (input : Input),
+  (forall tc s,
+    DeadlockSource.crun (DeadlockState.shared_model model) quorum_roles
+      (DeadlockSource.initial (@Main.quorumVoting) (stores, input)) tc s ->
+    DeadlockSource.cfinal (DeadlockState.shared_model model) quorum_roles s \/
+      exists a s',
+        DeadlockSource.cstep (DeadlockState.shared_model model) quorum_roles s a s') ->
+  forall tn n,
+    DeadlockNetwork.run (DeadlockState.shared_model model) quorum_roles
+      (@DeadlockMatch.network_initial Parkour.Runtime.IO E Store Input
+        stores input quorum_roles (fun _ => unit) (@Main.quorumVoting)) tn n ->
+    DeadlockNetwork.nfinal (DeadlockState.shared_model model) n \/
+      exists b n',
+        DeadlockNetwork.nstep (DeadlockState.shared_model model) quorum_roles n b n'.
+Proof.
+  intros E Store Input model stores input.
+  exact (DeadlockFreedom.epp_preserves_deadlock_freedom
+    model stores input quorum_roles (fun _ => unit) (@Main.quorumVoting)
+    quorum_well_formed).
+Qed.
+
+Print Assumptions quorum_deadlock_freedom.

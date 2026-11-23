@@ -73,6 +73,8 @@ MODULES = ("theories/DeadlockRuns", "tests/DeadlockRunsExpect", "tests/DeadlockR
             "theories/DeadlockRealized", "theories/DeadlockLayoutOrder",
             "theories/DeadlockLayoutHead", "theories/DeadlockPrefixHead",
             "theories/DeadlockAllOrigins",
+            "theories/DeadlockAtomicLayout", "theories/DeadlockBranchLayout", "theories/DeadlockChoiceLayout",
+            "theories/DeadlockStructuralLayout", "theories/DeadlockFrontierProofs",
             "theories/DeadlockFreedom",
            "tests/DeadlockLibraryExpect", "tests/DeadlockMatchExpect",
            "tests/DeadlockQuorumFreedomExpect", "tests/DeadlockContractParametric",
@@ -121,6 +123,11 @@ CLOSED = {
     "DeadlockLayoutHead": "layout_head",
     "DeadlockPrefixHead": "source_head_paths_matched_from_tracked",
     "DeadlockAllOrigins": "structural_logged_readers matched_receiver_packet_codec matched_source_originals_from_head",
+    "DeadlockAtomicLayout": "tracked_atomic_node",
+    "DeadlockBranchLayout": "app_layout_children bind_layout_children",
+    "DeadlockChoiceLayout": "coherent_choice_layout",
+    "DeadlockStructuralLayout": "structural_root_layout",
+    "DeadlockFrontierProofs": "matched_receive_frontiers matched_prefix_frontiers",
     "DeadlockPlayedActual": "replay_app_actual replay_bind_actual replay_cond_actual archived_cut_actual_syntax",
     "DeadlockCoverage": "shared_node_paths returned_cut_completed completed_subtree_coverage",
     "DeadlockCutSafety": "replay_receive_site aligned_cut_receive_safety aligned_cut_delivery_available covered_residuals",
@@ -335,13 +342,16 @@ def check(output: Path, loads: list[str], generated: Path, *, final: bool = Fals
             digest(path, expected)
     # Direct fixture anchors: State and Enabled were committed separately
     # from their witnesses; Messages and Match use their independently
-    # compiled literal fixtures. The latter are not pre-proof freezes.
+    # compiled literal fixtures. The repair and extra match cases pin the
+    # checked runs and their rejections. These are not pre-proof freezes.
     for fixture, anchor in {
         "DeadlockStateExpect": "405818a74c3f68f1c3e2e0e015482a5d41f1edd0e81db2f2fc1b8b54f52d98dc",
         "DeadlockEnabledExpect": "39702217b967299a2c40eed0252acc6f0019b28b7a2acebcf1e352ddf06e378f",
         "DeadlockMessagesExpect": "fbc4c4f8c71f830d29c1924344f0d3cc19ca4adb6b4f4dfdc534329db7b2266a",
         "DeadlockMatchExpect": "7ae72daa2a26b15539226f7c86c4432961f40d0a4e33329a791bc8f88b53ec37",
         "DeadlockMatchStepExpect": "b845b79ebb8939b5c622cb5a750a401f94eb2321235eba8ed08d5ca00c21c0e2",
+        "DeadlockRepairMatchCases": "a672d0bf4470181fbc4b0be869e0da74dc4404839b309b0c89c0b20010a0a1d5",
+        "DeadlockExtraMatchCases": "9658a221b45bc64ffd29254eb5f543b54b40256da13e66cd53ccd8937d92d204",
     }.items():
         digest(PARKOUR / "tests" / (fixture + ".v"), anchor)
     for module in MODULES:

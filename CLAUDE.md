@@ -127,6 +127,10 @@ For Parkour source pinning, edit policy, origin checks, or local-effect semantic
 [Parkour build and checks](examples/parkour/README.md). Validate with a clean
 `make -C examples/parkour check`: fixture closure is separate from the required
 assumption report for the generated `Choreography.Choreo2.epp`.
+For Parkour matching, FIFO ordering, or deadlock-freedom proofs, use the
+[independent contracts and acceptance gates](examples/parkour/DEADLOCK-FREEDOM-SPEC.md).
+The [handoff](examples/parkour/DEADLOCK-HANDOFF.md) distinguishes the original
+projection counterexample from proofs about the repaired HasChor pin.
 
 - `test/` holds the Cabal suites `edits`, `rocq-version`, and `ci-catalog`, plus shell integration runners. Run the Haskell suites with `stack test` or `cabal test all`; they require no Coq/Rocq compiler or generated base. `CiCatalog` runs its complete self-tests by default; `--self-test` remains accepted for direct compatibility. For focused commands, dependencies, or shell integration checks, read [test/README.md](test/README.md). Shell runners and compiler checks remain separate from the Cabal suites.
 - `examples/tests/` and `examples/rocq9.0/tests/` share `examples/tests/test-rules.mk` and the same fixtures, compiled with `coqc` and `rocq c -w +deprecated-dirpath-Coq` respectively. For class resolution, GADT binders, or nested fold changes, run the [shared compiler fixtures](examples/tests/README.md). The Rocq warning flag rejects unrewritten root `Coq.*` paths while permitting user-qualified and relative `Coq` components.

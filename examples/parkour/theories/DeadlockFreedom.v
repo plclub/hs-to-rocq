@@ -2,6 +2,7 @@ From Stdlib Require Import Lists.List.
 Require Import DeadlockLocal DeadlockState DeadlockMatch DeadlockRoster.
 Require DeadlockAlignmentProgress.
 Require DeadlockReadyInputs.
+Require DeadlockFrontierProofs DeadlockWellFormed.
 Require DeadlockMatchStep DeadlockRuns.
 Require DeadlockSource DeadlockNetwork DeadlockAlignment Choreography.Network
   Choreography.Choreo2 Parkour.Symbol.
@@ -183,3 +184,106 @@ Proof.
     (Available _ _ _ _ H)).
 Qed.
 End Schedules.
+
+(* These public contracts have no frontier, realization, or receive-safety
+   premise. Those facts come from the structural proof for the actual prefix. *)
+Section Contracts.
+Context {M E : Type -> Type} {Store Input : Type}.
+Variable model : local_model M E Parkour.Symbol.Symbol (Store * Input).
+Variable stores : Parkour.Symbol.Symbol -> Store.
+Variable input : Input.
+Variable R : list Parkour.Symbol.Symbol.
+Variable A : Parkour.Symbol.Symbol -> Type.
+Variable c : forall p, Choreography.Choreo2.Choreo M p (A p).
+Local Notation sm := (shared_model model).
+Local Notation C0 := (@source_initial M E Store Input stores input A c).
+Local Notation N0 := (@network_initial M E Store Input stores input R A c).
+Local Notation paired := (matches model stores input R A c).
+Local Notation WF := (DeadlockWellFormed.well_formed R M A c).
+
+Lemma well_formed_safe_residuals :
+  WF ->
+  forall tc s tn n gs, matched_prefix model stores input R A c tc s tn n gs ->
+    DeadlockMatchStep.safe_residuals model R A s n gs.
+Proof.
+  intros Formed tc s tn n gs Prefix.
+  exact (proj1 (DeadlockFrontierProofs.matched_prefix_frontiers
+    model stores input R A c tc s tn n gs Formed Prefix)).
+Qed.
+
+Lemma well_formed_inputs_available :
+  WF ->
+  forall tc s tn n, paired tc s tn n -> inputs_available model R A s n.
+Proof.
+  intros Formed tc s tn n [gs Prefix].
+  exact (proj2 (DeadlockFrontierProofs.matched_prefix_frontiers
+    model stores input R A c tc s tn n gs Formed Prefix)).
+Qed.
+
+Theorem network_run_has_source :
+  WF ->
+  forall tn n, DeadlockNetwork.run sm R N0 tn n ->
+    exists tc s, DeadlockSource.crun sm R C0 tc s /\ paired tc s tn n.
+Proof.
+  intro Formed.
+  apply schedule_from_safe_receives.
+  - exact (proj1 Formed).
+  - exact (well_formed_safe_residuals Formed).
+Qed.
+
+Theorem matched_ready :
+  WF ->
+  forall tc s tn n,
+    DeadlockSource.crun sm R C0 tc s ->
+    DeadlockNetwork.run sm R N0 tn n ->
+    paired tc s tn n ->
+    (DeadlockSource.cfinal sm R s \/
+      exists a s', DeadlockSource.cstep sm R s a s') ->
+    DeadlockNetwork.nfinal sm n \/
+      exists b n', DeadlockNetwork.nstep sm R n b n'.
+Proof.
+  intros Formed tc s tn n Source Network Match Ready.
+  eapply matched_ready_from_inputs.
+  - exact Match.
+  - exact (well_formed_inputs_available Formed tc s tn n Match).
+  - exact Ready.
+Qed.
+
+Theorem epp_preserves_deadlock_freedom :
+  WF ->
+  (forall tc s, DeadlockSource.crun sm R C0 tc s ->
+    DeadlockSource.cfinal sm R s \/
+      exists a s', DeadlockSource.cstep sm R s a s') ->
+  forall tn n, DeadlockNetwork.run sm R N0 tn n ->
+    DeadlockNetwork.nfinal sm n \/
+      exists b n', DeadlockNetwork.nstep sm R n b n'.
+Proof.
+  intros Formed Source.
+  apply preservation_from_frontiers.
+  - exact (proj1 Formed).
+  - exact (well_formed_safe_residuals Formed).
+  - exact (well_formed_inputs_available Formed).
+  - exact Source.
+Qed.
+
+Theorem deadlock_reflection :
+  WF ->
+  forall tn n, DeadlockNetwork.run sm R N0 tn n ->
+    (~ DeadlockNetwork.nfinal sm n /\
+      forall b n', ~ DeadlockNetwork.nstep sm R n b n') ->
+    exists tc s, DeadlockSource.crun sm R C0 tc s /\ paired tc s tn n /\
+      (~ DeadlockSource.cfinal sm R s /\
+        forall a s', ~ DeadlockSource.cstep sm R s a s').
+Proof.
+  intro Formed.
+  apply reflection_from_frontiers.
+  - exact (proj1 Formed).
+  - exact (well_formed_safe_residuals Formed).
+  - exact (well_formed_inputs_available Formed).
+Qed.
+End Contracts.
+
+Print Assumptions network_run_has_source.
+Print Assumptions matched_ready.
+Print Assumptions epp_preserves_deadlock_freedom.
+Print Assumptions deadlock_reflection.

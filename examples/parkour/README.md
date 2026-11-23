@@ -106,8 +106,7 @@ well-formedness and network contracts. It checks the repaired four-action
 network run and the initial well-formedness of generated `Main.quorumVoting`
 against its independently typed client contract. Single-export assumption
 reports, declarative dependency queries and the disabled-left/right network
-controls are in `build/run/semantics/`. These checks do not prove a general
-source/network simulation or quorum deadlock freedom.
+controls are in `build/run/semantics/`.
 
 The same gate checks generated projection equations, network enabledness
 and step views, and literal typed-message/FIFO cases. A single-message
@@ -122,8 +121,9 @@ depending on readiness.
 
 The slice gate also checks finite role-value selection, endpoint scheduling,
 conditional alignment and matching steps, and a nonempty matched prefix for
-a generated send. `DeadlockFreedom` contributes partial lemmas on empty runs,
-final states and readiness under an input-availability premise.
+a generated send. [`DeadlockExtraMatchCases.v`](tests/DeadlockExtraMatchCases.v)
+checks either projected `App` branch sending first, self-communication, and
+single- and multi-peer choices, including a peer still waiting to hear.
 
 Two proofs explain how matching handles value-dependent code. In
 [`DeadlockPlayedPrefix.v`](theories/DeadlockPlayedPrefix.v),
@@ -132,8 +132,11 @@ finished a prefix; a blocked peer need not supply a value. In
 [`DeadlockAllOrigins.v`](theories/DeadlockAllOrigins.v),
 `matched_receiver_packet_codec` connects an exposed receiver to the typed
 packet its sender actually produced, even inside nested continuations. It
-applies to packets at that occurrence. Showing that the **first** packet on
-the FIFO has that occurrence is a separate ordering obligation.
+applies to packets at that occurrence. The
+[frontier proof](theories/DeadlockFrontierProofs.v) shows that the **first**
+packet on the FIFO has that occurrence. The [handoff](DEADLOCK-HANDOFF.md)
+traces these two results through to preservation, scheduling, readiness,
+deadlock reflection and their quorum client.
 
 `make -C examples/parkour check-final SCRATCH=1` additionally compiles the
 [public witnesses](theories/DeadlockContract.v) against the independent

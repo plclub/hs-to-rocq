@@ -44,7 +44,7 @@ corrected in `31f66d00`. On the spec axis, the reviewers found no
 discrepancy between the local effect rules and their finite-view
 contracts. Neither review covers the choreography/network correspondence.
 
-### Repaired projection: correspondence checkpoint
+### Repaired projection: correspondence proof
 
 `DeadlockFrontiers.prefix_ledger` counts occurrence paths on each real wire
 key. On every matched prefix the sends are exactly the receives followed by
@@ -59,9 +59,10 @@ that occurrence has the original sender's operand and compatible codec.
 The second fact requires no witness value when the channel is empty.
 `DeadlockPast.matched_has_actual_past` traces queued messages to actual sends;
 `DeadlockCoverage.completed_subtree_coverage` finds peer actions in completed
-subtrees. The remaining proof must connect those subtree witnesses to the
-**same** matched history and establish both facts from `well_formed`.
-The four library exports and the quorum preservation corollary remain open.
+subtrees. `DeadlockStructuralLayout.structural_root_layout` connects those
+witnesses to the **same** matched history. For a given receiver the proof
+advances only silent steps to expose its current occurrence, then constructs
+one tree containing both that occurrence and the recorded sends.
 
 `DeadlockSameHistory.queued_operand_at_receiver` follows a queued operand
 through intervening steps to the sender's current archive and exposes the
@@ -101,6 +102,23 @@ occurrence and wire key, it has the original value and writer, and the
 receiver's dictionary decodes that writer. It makes no claim that the first
 message on the key has that occurrence. `matched_source_originals_from_head`
 combines this theorem with exactly that FIFO-head fact.
+
+`DeadlockPrefixHead.tracked_layout_head` rules out a different head on
+the same key. If the head occurs earlier in source order, the receiver
+already consumed it. If it occurs later, the sender already sent at the
+waiting site first. The per-key FIFO ledger and occurrence freshness rule
+out both alternatives. `DeadlockFrontierProofs.matched_receive_frontiers`
+therefore proves **both** obligations for every matched prefix of a
+well-formed choreography, including arbitrary mixed nesting.
+
+`DeadlockFreedom.network_run_has_source` uses receive safety to extend a
+matching prefix by the actual next network action. `matched_ready`
+transfers readiness for each reachable match, independently of a global
+source deadlock-freedom hypothesis. These results yield
+`epp_preserves_deadlock_freedom` and `deadlock_reflection`.
+`DeadlockQuorum.quorum_deadlock_freedom` applies preservation to the
+generated four-role program using its checked well-formedness proof. Its
+source deadlock-freedom premise remains explicit.
 
 ## Why the original projection fails
 
