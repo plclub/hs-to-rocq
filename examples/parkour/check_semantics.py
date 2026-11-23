@@ -56,6 +56,7 @@ MODULES = ("theories/DeadlockRuns", "tests/DeadlockRunsExpect", "tests/DeadlockR
             "theories/DeadlockCoherence", "theories/DeadlockReplay", "theories/DeadlockPlayedValues",
             "theories/DeadlockPlayedFamily", "theories/DeadlockPast",
             "theories/DeadlockCoverage", "theories/DeadlockCutSafety",
+            "theories/DeadlockSameHistory", "theories/DeadlockRootOrigin", "theories/DeadlockFrontierCoverage",
            "tests/DeadlockLibraryExpect", "tests/DeadlockMatchExpect",
            "tests/DeadlockQuorumFreedomExpect", "tests/DeadlockContractParametric",
            "tests/DeadlockMutationExpect", "theories/DeadlockMutationCases",
@@ -68,6 +69,9 @@ CLOSED = {
     "DeadlockPlayedValues": "received_original_value owner_locally_actual_result",
     "DeadlockPlayedFamily": "structural_played_family",
     "DeadlockPast": "matched_has_actual_past production_recorded_in_replay",
+    "DeadlockSameHistory": "production_at_current_sender queued_operand_at_receiver",
+    "DeadlockRootOrigin": "packet_from_root_program root_queued_operand source_originals_root",
+    "DeadlockFrontierCoverage": "matched_received_safe matched_future_unreceived",
     "DeadlockCoverage": "shared_node_paths returned_cut_completed completed_subtree_coverage",
     "DeadlockCutSafety": "replay_receive_site aligned_cut_receive_safety aligned_cut_delivery_available covered_residuals",
     "DeadlockHead": """nonempty_channel_first removal_has_key queued_key_nonempty head_bytes exact_receive_at
