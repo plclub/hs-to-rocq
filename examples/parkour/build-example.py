@@ -9,6 +9,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 
 from itree_pins import pinned_environment, prefix_path
+from theory_sources import theory_source
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--check-edits", action="store_true")
@@ -110,9 +111,9 @@ def build_support(module: str) -> None:
 
 
 def check_theory(name: str) -> None:
-    source = Path("theories", name + ".v")
-    shutil.copyfile(source, contracts / source.name)
-    run(*rocq, source.name, cwd=contracts, env=rocq_env)
+    filename = name + ".v"
+    shutil.copyfile(theory_source(name), contracts / filename)
+    run(*rocq, filename, cwd=contracts, env=rocq_env)
 
 
 run("python3", "extract-contravariant.py", class_source / "Parkour/Contravariant.hs")

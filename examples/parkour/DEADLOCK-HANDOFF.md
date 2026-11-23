@@ -25,7 +25,7 @@ original revision; the requested preservation result now concerns the
 repaired `epp` with the same semantics and assumption ceiling.
 
 `make check-cond-haskell` tests both revisions. The generated-Rocq
-[OwnerCond assertions](theories/OwnerCond.v) check the repaired tree's
+[OwnerCond assertions](theories/contracts/OwnerCond.v) check the repaired tree's
 `Bind` root as well as the session IDs inside a parallel continuation.
 These regressions distinguish the repair but do not prove preservation.
 
@@ -129,7 +129,7 @@ source deadlock-freedom premise remains explicit.
 both disabled parallel-branch mutants were rejected for their expected reasons.
 The [frozen library types](tests/DeadlockLibraryExpect.v), the
 [quorum type](tests/DeadlockQuorumFreedomExpect.v) and all five
-[direct witnesses](theories/DeadlockContract.v) compiled.
+[direct witnesses](theories/contracts/Contract.v) compiled.
 
 | Individual assumption query | Result |
 | --- | --- |

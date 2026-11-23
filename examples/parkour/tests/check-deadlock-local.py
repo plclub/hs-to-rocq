@@ -11,6 +11,7 @@ PARKOUR = Path(__file__).resolve().parents[1]
 ROOT = PARKOUR.parents[1]
 sys.path.insert(0, str(PARKOUR))
 from itree_pins import ensure_prefix, pinned_environment, prefix_path, verify_prefix
+from theory_sources import theory_source
 
 MANIFESTS = {
     "deadlock-local-v1.sha256": "26cf0649672d228a135bd086088ac17727678e17585afe3281b81dbe303e6826",
@@ -60,11 +61,11 @@ def main() -> None:
         if proc.returncode:
             raise SystemExit(f"{log}: compiler or assumption check failed ({proc.returncode})")
 
-    for relative in ("theories/DeadlockLocal.v", "tests/DeadlockLocalExpect.v",
-                     "tests/DeadlockLocalCases.v", "tests/DeadlockLocalExactExpect.v",
-                     "tests/DeadlockLocalExactCases.v"):
-        target = output / Path(relative).name
-        shutil.copyfile(PARKOUR / relative, target)
+    for name in ("DeadlockLocal", "DeadlockLocalExpect", "DeadlockLocalCases",
+                 "DeadlockLocalExactExpect", "DeadlockLocalExactCases"):
+        target = output / (name + ".v")
+        source = theory_source(name) if name == "DeadlockLocal" else PARKOUR / "tests" / target.name
+        shutil.copyfile(source, target)
         run(target.stem + ".log", sys.executable, PARKOUR / "parkour_rocq.py",
             "-Q", output, "", target)
 

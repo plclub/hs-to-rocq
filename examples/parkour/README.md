@@ -10,6 +10,19 @@ continuation could send on `Root` before the announcement on the same FIFO.
 The receiver expected the announcement first. The handoff records both
 this checked counterexample and the matching run after the fix.
 
+### Theory source layout
+
+Run `make -C examples/parkour check-layout` from the repository root to
+check the `.v` sources under `theories/`. Each directory may hold up to 10
+such files. No two `.v` filenames in the same directory may share their
+first four characters. Each file may contain up to 1,000 physical lines,
+including comments and blank lines, with up to 80 characters per line
+excluding the newline. Compiler outputs do not count.
+
+The build uses [`theory_sources.py`](theory_sources.py) to stage these files
+under their original Rocq module names. Use that mapping to locate a flat
+`theories/` path cited by the frozen specification or digest manifests.
+
 The [HasChor submodule](upstream) includes an unpublished, one-commit fix:
 the choice owner binds its broadcast before running the continuation.
 [`cond-order.bundle`](cond-order.bundle) carries just that commit on top of
@@ -77,7 +90,7 @@ The one example-owned skip is `Choreography.Location.unwrap`: its legacy
 The evidence-based `Choreography.Choreo2.unwrap` is translated without a
 `Default` constraint.
 
-[`ReaderTree.v`](theories/ReaderTree.v) checks the interface between the
+[`ReaderTree.v`](theories/contracts/ReaderTree.v) checks the interface between the
 Rocq 9 base and the generated libraries. `Tree.Bind` hides an intermediate
 type, so a tree lives in a larger universe than its result index. This check
 applies the generated `ReaderT` and `Tree` dictionaries explicitly: a universe
@@ -141,20 +154,20 @@ announced. The original candidate remains in the frozen file; the checker
 requires the observable rejection and the transport result separately.
 
 Two proofs explain how matching handles value-dependent code. In
-[`DeadlockPlayedPrefix.v`](theories/DeadlockPlayedPrefix.v),
+[`DeadlockPlayedPrefix.v`](theories/replay/Prefix.v),
 `matched_partial_results` recovers the return values of the roles that
 finished a prefix; a blocked peer need not supply a value. In
-[`DeadlockAllOrigins.v`](theories/DeadlockAllOrigins.v),
+[`DeadlockAllOrigins.v`](theories/origins/AllOrigins.v),
 `matched_receiver_packet_codec` connects an exposed receiver to the typed
 packet its sender actually produced, even inside nested continuations. It
 applies to packets at that occurrence. The
-[frontier proof](theories/DeadlockFrontierProofs.v) shows that the **first**
+[frontier proof](theories/frontiers/Proofs.v) shows that the **first**
 packet on the FIFO has that occurrence. The [handoff](DEADLOCK-HANDOFF.md)
 traces these two results through to preservation, scheduling, readiness,
 deadlock reflection and their quorum client.
 
 `make -C examples/parkour check-required` compiles the
-[public witnesses](theories/DeadlockContract.v) against the independent
+[public witnesses](theories/contracts/Contract.v) against the independent
 library and quorum types, then audits the actual exports. A missing proof
 makes this target fail. `check-final` is an alias for the same checks.
 Normal `make check` runs `check-required` once after lint, the Haskell

@@ -9,10 +9,33 @@ import sys
 from pathlib import Path
 
 from itree_pins import PARKOUR
+from theory_sources import theory_source
 
-# Amendment reviewed in d3da6461. The historical manifest and every public
-# proposition in it retain their original bytes.
+# Amendment reviewed in d3da6461, before the theory layout change.
 REVIEWED_SOURCE = "224836b4f55e3c45dbca506c31965ff293d280c2db26806a74f701bf295e14eb"
+
+# Exact before/after SHA-256 pairs for line wrapping. The left sides are the
+# frozen manifest entries and match the flat theory files at a7b4d73a.
+# Only these exact rewrappings are approved; other inputs remain byte-pinned.
+WRAPPED = {
+    # DeadlockContract
+    "25f2563b945a3a02b4831902396ef3751206a34e2b988e21aa39a61991e24d06":
+        "212da6e9c3eab190b9efe237a44cc25fd3d7014e0bdce19f4b8ee8b29b77ddb3",
+    # DeadlockSource
+    REVIEWED_SOURCE: "be5be21820daedd4ff619f18cdb87e9cbd24dd28b7d93036fb941e2398d9d034",
+    # DeadlockSourceExpect
+    "b6e242c5fb15f53c0ad0c494ac8df97f6e79666f6266301d8dc416f065c889aa":
+        "71bbea07ee32e4db4eee757574118691f3f57d85f80eb9e8ff0060816ead8fc4",
+    # DeadlockWellFormed
+    "9d39c5ad88adb91b52d0bd30bfac26bce2444c74924773ac3ee7b15417b9b646":
+        "4e19193af70b59cdcc328d71733ae29b769a257059d59e337d249e9ae31aaea1",
+    # DeadlockProjectionExpect
+    "1222990a7cdbe115b146f3cdf545c363e35b1659e58e3e97016c00242bdb628e":
+        "abf78b8d9a699a880fca251f7ac3c0bcf475b5484ce044a265f6b2ad6614be81",
+    # DeadlockNetwork
+    "25171dde8f4fcfdb3442e0db2985fbb68729602d12c50335c935d1666acd71ce":
+        "74171d43859dc1fbdd129270164dd64540e8dd6a4b772081c2d3b4e6039aef04",
+}
 
 MANIFESTS = {
     "DeadlockConcreteContract.sha256": "8996f8d5c8167285255418f402fadddccf50ae0f82e44ab913bbbec1a072977d",
@@ -235,8 +258,15 @@ NESTED = {
 }
 
 
+def source_path(logical: Path) -> Path:
+    """Resolve the flat theory names used by the build lists and frozen manifests."""
+    if logical.parent == PARKOUR / "theories" and logical.suffix == ".v":
+        return theory_source(logical.stem)
+    return logical
+
+
 def digest(path: Path, expected: str) -> None:
-    if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+    if hashlib.sha256(path.read_bytes()).hexdigest() != WRAPPED.get(expected, expected):
         raise SystemExit(f"changed frozen input: {path}")
 
 
@@ -261,7 +291,7 @@ def mutants(output: Path, loads: list[str]) -> None:
         directory.mkdir()
         for module in NETWORK:
             source = directory / (Path(module).name + ".v")
-            text = (PARKOUR / (module + ".v")).read_text()
+            text = source_path(PARKOUR / (module + ".v")).read_text()
             if module == NETWORK[0]:
                 if text.count(premise) != 1:
                     raise SystemExit("mutation target changed")
@@ -347,7 +377,7 @@ def check(output: Path, loads: list[str], generated: Path, *, final: bool = Fals
                 path = PARKOUR / filename
             else:
                 path = PARKOUR.parents[1] / filename
-            digest(path, expected)
+            digest(source_path(path), expected)
     # Direct fixture anchors: State and Enabled were committed separately
     # from their witnesses; Messages and Match use their independently
     # compiled literal fixtures. The repair and extra match cases pin the
@@ -367,7 +397,7 @@ def check(output: Path, loads: list[str], generated: Path, *, final: bool = Fals
         digest(PARKOUR / "tests" / (fixture + ".v"), anchor)
     for module in MODULES:
         target = output / (Path(module).name + ".v")
-        shutil.copyfile(PARKOUR / (module + ".v"), target)
+        shutil.copyfile(source_path(PARKOUR / (module + ".v")), target)
         if module == "theories/DeadlockSource":
             digest(target, REVIEWED_SOURCE)
         report = compile_v(output, loads, target)
@@ -394,7 +424,7 @@ def check(output: Path, loads: list[str], generated: Path, *, final: bool = Fals
 def check_final(output: Path, loads: list[str]) -> None:
     output.mkdir(exist_ok=False)
     target = output / "DeadlockContract.v"
-    shutil.copyfile(PARKOUR / "theories" / target.name, target)
+    shutil.copyfile(theory_source(target.stem), target)
     digest(target, "25f2563b945a3a02b4831902396ef3751206a34e2b988e21aa39a61991e24d06")
     compile_v(output, loads, target)
     for policy, library, names in (
