@@ -160,6 +160,16 @@ Record observed_entry (p : role) : Type := ObservedEntry {
 
 Definition entry_site p (e : observed_entry p) : occurrence :=
   event_route p (entry_context p e) (entry_before p e).
+
+Lemma entry_produced_site p (e : observed_entry p) kind site sender recipient operand :
+  In (Produced kind site sender recipient operand) (entry_batch p e) ->
+  sender = p /\ entry_site p e = site.
+Proof.
+  intro Produced.
+  destruct (entry_production_origin p e _ _ _ _ _ Produced) as [Actor Site].
+  split; [exact Actor|]. unfold entry_site, event_route. now rewrite Site.
+Qed.
+
 Definition located p := (occurrence * observed_entry p)%type.
 Definition actor_archive := forall p, list (located p).
 
@@ -425,6 +435,13 @@ Lemma subarchive_iff p route items path e :
   In (path,e) (subarchive p route items) <-> In (route ++ path,e) items.
 Proof. split; [apply subarchive_origin|apply subarchive_complete]. Qed.
 
+Lemma subarchive_app p left right :
+  forall items, subarchive p (left ++ right) items =
+    subarchive p right (subarchive p left items).
+Proof.
+  induction left as [|edge left IH]; intro items; cbn; [reflexivity|apply IH].
+Qed.
+
 Lemma subarchive_valid p past route :
   forall root items, branch_valid p past root items ->
     branch_valid p past (root ++ route) (subarchive p route items).
@@ -471,6 +488,104 @@ Proof.
   intros Archives Member.
   apply subarchive_origin in Member.
   exact (observed_archives_trace _ _ _ _ _ _ _ Archives p _ e Member).
+Qed.
+
+Theorem past_receive_sender_entry tc s tn n gs past archives
+    kind route path sender recipient wire :
+  observed_archives tc s tn n gs past archives ->
+  past_receive past kind (route ++ path) sender recipient wire ->
+  exists operand (e : observed_entry sender),
+    In (path,e) (subarchive sender route (archives sender)) /\
+    In (Produced kind (route ++ path) sender recipient operand) (entry_batch sender e) /\
+    entry_site sender e = route ++ path /\
+    wire = operand_wire operand.
+Proof.
+  intros Archives (operand & before & between & after & Past & Wire).
+  assert (Produced : In (Produced kind (route ++ path) sender recipient operand) past).
+  { rewrite Past. apply in_or_app. right. now left. }
+  destruct (observed_past_event_archived _ _ _ _ _ _ _ Archives _ Produced)
+    as (p & site & e & Member & Batch).
+  destruct (entry_produced_site p e _ _ _ _ _ Batch) as [Actor Site].
+  subst p.
+  destruct (observed_archives_valid _ _ _ _ _ _ _ Archives sender site e Member)
+    as [Location _].
+  rewrite Site in Location. subst site.
+  exists operand,e. split; [now apply subarchive_complete|].
+  split; [exact Batch|]. split; assumption.
+Qed.
+
+(* The worked roster is decidable and minimal: a role belongs exactly when
+   its branch archive is nonempty. Deduplication makes NoDup unconditional;
+   membership in R comes from the actual recorded actor certificate. *)
+Definition worked_roster (archives : actor_archive) route : list role :=
+  filter (fun p =>
+    match subarchive p route (archives p) with [] => false | _ => true end)
+    (nodup role_eq_dec R).
+
+Lemma worked_roster_nodup archives route : NoDup (worked_roster archives route).
+Proof. apply NoDup_filter. apply NoDup_nodup. Qed.
+
+Lemma worked_roster_included archives route p :
+  In p (worked_roster archives route) -> In p R.
+Proof.
+  intro Member. apply filter_In in Member. destruct Member as [InRoster _].
+  now apply nodup_In in InRoster.
+Qed.
+
+Lemma worked_roster_spec archives route p :
+  In p (worked_roster archives route) <->
+  subarchive p route (archives p) <> [].
+Proof.
+  split.
+  - intro Member. apply filter_In in Member.
+    intro Empty. rewrite Empty in Member. discriminate (proj2 Member).
+  - intro Nonempty. apply filter_In.
+    destruct (subarchive p route (archives p)) as [|[path e] tail] eqn:Items;
+      [contradiction|].
+    split; [apply nodup_In; exact (entry_actor p e)|reflexivity].
+Qed.
+
+Lemma worked_roster_minimal archives route active :
+  (forall p, subarchive p route (archives p) <> [] -> In p active) ->
+  forall p, In p (worked_roster archives route) -> In p active.
+Proof.
+  intros Covers p Member. apply Covers. now apply worked_roster_spec.
+Qed.
+
+Lemma worked_roster_descends archives route rest p :
+  In p (worked_roster archives (route ++ rest)) ->
+  In p (worked_roster archives route).
+Proof.
+  rewrite !worked_roster_spec.
+  rewrite subarchive_app. intros Nonempty Empty.
+  rewrite Empty in Nonempty.
+  assert (Nil : forall r, subarchive p r [] = []).
+  { induction r; cbn; assumption || reflexivity. }
+  rewrite Nil in Nonempty. contradiction.
+Qed.
+
+Theorem past_receive_sender_worked tc s tn n gs past archives
+    kind route path sender recipient wire :
+  observed_archives tc s tn n gs past archives ->
+  past_receive past kind (route ++ path) sender recipient wire ->
+  In sender (worked_roster archives route).
+Proof.
+  intros Archives Receive.
+  destruct (past_receive_sender_entry _ _ _ _ _ _ _ _ _ _ _ _ _ Archives Receive)
+    as (operand & e & Member & Batch & Site & Wire).
+  apply worked_roster_spec. intro Empty. rewrite Empty in Member. contradiction.
+Qed.
+
+Corollary past_receive_sender_present tc s tn n gs past archives
+    route active kind sender recipient wire :
+  observed_archives tc s tn n gs past archives ->
+  (forall p, In p (worked_roster archives route) -> In p active) ->
+  past_receive past kind route sender recipient wire ->
+  In sender active.
+Proof.
+  intros Archives Covers Receive. apply Covers.
+  eapply past_receive_sender_worked with (path := []); [exact Archives|].
+  rewrite app_nil_r. exact Receive.
 Qed.
 
 Theorem matched_has_observed_archives tc s tn n gs :
@@ -522,3 +637,12 @@ Print Assumptions observed_subarchive_receive.
 Print Assumptions observed_subarchive_same_trace.
 Print Assumptions observed_past_event_archived.
 Print Assumptions matched_has_observed_cuts.
+Print Assumptions branch_items_iff.
+Print Assumptions subarchive_iff.
+Print Assumptions entry_produced_site.
+Print Assumptions past_receive_sender_entry.
+Print Assumptions worked_roster_nodup.
+Print Assumptions worked_roster_spec.
+Print Assumptions worked_roster_descends.
+Print Assumptions past_receive_sender_worked.
+Print Assumptions past_receive_sender_present.

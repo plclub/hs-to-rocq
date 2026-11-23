@@ -81,6 +81,11 @@ discharges the operand obligation from WF and the matched prefix alone.
 It uses `root_choice_actor_invariant`: the peer is still waiting or has an
 actual suffix history from the branch selected by the owner's announcement.
 It does not assume all peers entered together.
+`source_head_paths_choice_static` proves the corresponding FIFO-head result:
+on a reused key it accounts for the earlier root announcement and receipt
+before comparing sends inside the body. `source_originals_pure_bind_static`
+also handles an initial `Bind` of `Pure`, using its actual returned value.
+These results do not cover general nested value-dependent continuations.
 
 ## Why the original projection fails
 
