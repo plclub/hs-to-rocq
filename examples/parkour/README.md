@@ -101,6 +101,8 @@ and checking 20 named exports. Focused compiler and assumption logs are under
 and uses that directory and private installation for subsequent compilations.
 `test-checks` and `check-edits` do not require the private installation.
 
+## Checking deadlock freedom
+
 `check-required` also builds the run, shared-state, source, source-order,
 well-formedness and network contracts. It checks the repaired four-action
 network run and the initial well-formedness of generated `Main.quorumVoting`

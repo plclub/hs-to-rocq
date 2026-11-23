@@ -146,6 +146,19 @@ and `build/run/final/`. The HasChor pin and its parent are listed above;
 the checked Interaction Trees, Paco and ExtLib revisions are in the
 [pin verifier](itree_pins.py).
 
+**Review follow-up.** `04927678` made the public type and assumption
+checks mandatory for `check-required` as well as `check`. New
+[wire-run expectations](tests/DeadlockWireRunsExpect.v) were committed
+before the queue rejections and positive matched runs. The
+[wire-value expectation](tests/DeadlockWireValueExpect.v) was likewise
+committed before its witness. For the distinction between an observable
+invented value and equality of source actions with hidden payload types,
+see the [fixture notes](README.md#checking-deadlock-freedom).
+The final clean run at `0b2edd3b` exited 0 through `check-required`,
+including the independent wire-run witnesses. All four library reports
+were closed again, and both quorum reports matched the 14-name ceiling
+exactly.
+
 ## Why the original projection fails
 
 [`counterexample/EXPECTED.md`](counterexample/EXPECTED.md) fixes the inputs and
