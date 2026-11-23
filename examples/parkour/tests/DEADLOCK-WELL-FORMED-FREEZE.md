@@ -72,4 +72,12 @@ modules report `Closed under the global context` for exactly these 19 lemmas:
 
 Production compiler logs, individual assumption logs, and the exact export list
 are in `build/well-formed-import-repair/`. This focused check does not claim that
-the full Parkour build or the generated EPP assumption audit ran.
+the full Parkour build or the generated EPP assumption audit ran. In the
+`ParkourTheories` migration ([`namespace-migration.tsv`](namespace-migration.tsv)
+and [`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)), these modules
+live at [`../theories/Choreography/WellFormedness.v`](../theories/Choreography/WellFormedness.v),
+[`Choreography/RoleAgreement.v`](Choreography/RoleAgreement.v),
+[`Choreography/PartialContinuations.v`](Choreography/PartialContinuations.v),
+and [`Choreography/StructuralWitnesses.v`](Choreography/StructuralWitnesses.v),
+audited via [`../scripts/parkour_rocq.py`](../scripts/parkour_rocq.py) and
+[`../scripts/check-assumptions.py`](../scripts/check-assumptions.py).

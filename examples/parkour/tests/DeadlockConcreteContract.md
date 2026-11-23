@@ -93,3 +93,13 @@ No fake module or preservation proof was supplied.
 `make -C examples/parkour check-final SCRATCH=1` now runs the independent
 gate after all slice checks. `check-required` compiles the positive type
 validation without treating its binder-only definitions as public proofs.
+Under the `ParkourTheories` migration ([`namespace-migration.tsv`](namespace-migration.tsv)
+and [`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)), the four
+files in `DeadlockConcreteContract.sha256` live at
+[`Projection/RunCorrespondenceTypes.v`](Projection/RunCorrespondenceTypes.v),
+[`Protocols/QuorumProgress.v`](Protocols/QuorumProgress.v),
+[`Projection/RunAndProgressTypes.v`](Projection/RunAndProgressTypes.v), and
+[`Projection/QuantifiedGuarantees.v`](Projection/QuantifiedGuarantees.v),
+checking `ParkourTheories.Projection.RunCorrespondence.network_run_has_source`,
+`ParkourTheories.Projection.Progress.{epp_preserves_deadlock_freedom,matched_ready,deadlock_reflection}`,
+and `ParkourTheories.Protocols.QuorumVoting.quorum_deadlock_freedom`.

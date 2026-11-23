@@ -25,4 +25,10 @@ The cases therefore distinguish:
 - a different but decodable payload, which does not block readiness.
 
 The same-lane cases also check that source readiness uses occurrence-only
-`take_at`, while the stronger `take_pending` helper retains its FIFO rejection.
+`take_at_occurrence` (`take_at` before the `ParkourTheories` migration), while
+the stronger `take_first_on_source_channel` (`take_pending`) helper retains its
+FIFO rejection. In the migrated layout, `delivery_available_at` lives in
+[`../theories/Projection/Matching/RoleReadiness.v`](../theories/Projection/Matching/RoleReadiness.v)
+(`ParkourTheories.Projection.Matching.RoleReadiness`), and the cases live in
+[`Projection/ProjectedRoleReadiness.v`](Projection/ProjectedRoleReadiness.v)
+(`ParkourTheories.Tests.Projection.ProjectedRoleReadiness`).

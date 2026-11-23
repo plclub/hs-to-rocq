@@ -1,0 +1,67 @@
+-Q . ParkourTheories.Tests
+-Q ../theories ParkourTheories
+-Q ../../rocq9.0/base ""
+-Q ../build/run/transformers ""
+-Q ../build/run/manual ""
+-Q ../lib ""
+-Q ../build/run/pins/ExtLib ExtLib
+-Q ../build/run/pins/Paco Paco
+-Q ../build/run/pins/ITree ITree
+-docroot ParkourTheories.Tests
+-arg -q
+-arg -w
+-arg +all
+# Keep the full warning policy; use the compiler's native-code default.
+COQFLAGS = "$(OTHERFLAGS) $(COQFILTEREDEXTRAFLAGS)"
+
+Choreography/AsynchronousSteps.v
+Choreography/ChoiceAndSelfCommunication.v
+Choreography/CommunicationOrder.v
+Choreography/OccurrenceDelivery.v
+Choreography/PartialContinuations.v
+Choreography/RoleAgreement.v
+Choreography/StructuralWitnesses.v
+FIFO/InvalidQueueOrder.v
+FIFO/InvalidSourceTraces.v
+FIFO/ParallelExchanges.v
+FIFO/PartialDelivery.v
+FIFO/QueueRepresentation.v
+FIFO/ScheduledTraceContracts.v
+FIFO/ScheduledTraceWitnesses.v
+FIFO/SessionPrecedence.v
+FIFO/WrongAnnouncementValue.v
+Network/CommunicationRules.v
+Network/EnablednessContracts.v
+Network/EnablednessWitnesses.v
+Network/SchedulingAndDelivery.v
+Network/SharedStoreScheduling.v
+Network/SilentEndpoints.v
+Projection/AnnouncementBeforePayload.v
+Projection/CheckConstructorEquations.v
+Projection/ChoicePayloadMatching.v
+Projection/ConstructorEquationTypes.v
+Projection/FaultyEndpointContracts.v
+Projection/ParallelAndChoiceMatches.v
+Projection/PrefixExtensionContracts.v
+Projection/PrefixRelationContracts.v
+Projection/ProjectedRoleReadiness.v
+Projection/QuantifiedGuarantees.v
+Projection/RunAndProgressTypes.v
+Projection/RunCorrespondenceTypes.v
+Projection/WrongSessionAndMissingSend.v
+Protocols/QuorumProgress.v
+Protocols/QuorumWellFormedness.v
+Protocols/QuorumWitnesses.v
+Semantics/ExactObservations.v
+Semantics/FiniteRunContracts.v
+Semantics/FiniteRunWitnesses.v
+Semantics/LocalEffectContracts.v
+Semantics/LocalEffectWitnesses.v
+Semantics/ObservationEquivalences.v
+Semantics/RoleStoreContract.v
+Semantics/StoreUpdateWitnesses.v
+Translation/ChoiceBroadcastOrder.v
+Translation/EndpointTraces.v
+Translation/GeneratedBindingTypes.v
+Translation/QuorumEndpoints.v
+Translation/ReaderTreeUniverses.v

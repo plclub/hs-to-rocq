@@ -1,0 +1,99 @@
+-Q . ParkourTheories
+-Q ../../rocq9.0/base ""
+-Q ../build/run/transformers ""
+-Q ../build/run/manual ""
+-Q ../lib ""
+-Q ../build/run/pins/ExtLib ExtLib
+-Q ../build/run/pins/Paco Paco
+-Q ../build/run/pins/ITree ITree
+-docroot ParkourTheories
+-arg -q
+-arg -w
+-arg +all
+# Use the compiler's native-code default. Rocq 9.0's makefile otherwise adds
+# a deprecated flag and suppresses its warning after our -w +all.
+COQFLAGS = "$(OTHERFLAGS) $(COQFILTEREDEXTRAFLAGS)"
+
+Choreography/Execution.v
+Choreography/Histories/CursorHistories.v
+Choreography/Histories/LabelledSteps.v
+Choreography/Histories/LogDecomposition.v
+Choreography/Histories/PureBindDescent.v
+Choreography/Histories/RoleChronology.v
+Choreography/Histories/SyntaxDecomposition.v
+Choreography/Histories/TransitionArchive.v
+Choreography/Observations.v
+Choreography/Occurrences.v
+Choreography/PendingDeliveries.v
+Choreography/Precedence.v
+Choreography/ReceiveSites.v
+Choreography/Results/CutFamilySoundness.v
+Choreography/Results/FiniteSelection.v
+Choreography/Results/OperandObservations.v
+Choreography/Results/SilentReturns.v
+Choreography/RoleSteps.v
+Choreography/WellFormedness.v
+Network/Enabledness.v
+Network/Endpoints.v
+Network/Execution.v
+Network/Mailboxes.v
+Network/Scheduling.v
+Network/StepInversion.v
+Projection/CommunicationTree/AtomicNodes.v
+Projection/CommunicationTree/ChoiceNodes.v
+Projection/CommunicationTree/CompletedSubtrees.v
+Projection/CommunicationTree/Construction.v
+Projection/CommunicationTree/ForkAndBind.v
+Projection/CommunicationTree/ObservationCoverage.v
+Projection/CommunicationTree/PredecessorCoverage.v
+Projection/ConstructorEquations.v
+Projection/EndpointRunner.v
+Projection/FIFO/ChannelLedger.v
+Projection/FIFO/ConsumedOccurrences.v
+Projection/FIFO/FirstEmission.v
+Projection/FIFO/HeadDecoding.v
+Projection/FIFO/Heads/ChoiceBranch.v
+Projection/FIFO/Heads/LoggedPrefix.v
+Projection/FIFO/Heads/PredecessorCriterion.v
+Projection/FIFO/Heads/RootOccurrence.v
+Projection/FIFO/Heads/StaticPath.v
+Projection/FIFO/MessageRepresentation.v
+Projection/FIFO/PayloadAccounting.v
+Projection/FIFO/SendChronology.v
+Projection/Matching/ActionReflection.v
+Projection/Matching/CursorAlignment.v
+Projection/Matching/DeliveryAvailability.v
+Projection/Matching/MatchedReceiveSafety.v
+Projection/Matching/ObservationArchive.v
+Projection/Matching/PayloadHistory.v
+Projection/Matching/PrefixRelation.v
+Projection/Matching/ReceiveConditions.v
+Projection/Matching/ReturnedValues.v
+Projection/Matching/RoleReadiness.v
+Projection/Occurrences/EnteredCode.v
+Projection/Occurrences/PossiblePaths.v
+Projection/Occurrences/SenderBarrier.v
+Projection/Occurrences/SubtreeGuards.v
+Projection/Payloads/ChoiceSelection.v
+Projection/Payloads/OwnedPackets.v
+Projection/Payloads/PureBind.v
+Projection/Payloads/ReceiverCodec.v
+Projection/Payloads/RootPackets.v
+Projection/Payloads/SelectedBranch.v
+Projection/Payloads/SenderProvenance.v
+Projection/Payloads/StaticPackets.v
+Projection/Progress.v
+Projection/RoleLogs/ArchiveOrder.v
+Projection/RoleLogs/ChoiceExecution.v
+Projection/RoleLogs/Families/BranchPartition.v
+Projection/RoleLogs/Families/ChoicePartition.v
+Projection/RoleLogs/Families/RegionOwnership.v
+Projection/RoleLogs/OccurrenceScope.v
+Projection/RoleLogs/PrimitiveObservations.v
+Projection/RunCorrespondence.v
+Projection/SessionPaths.v
+Protocols/QuorumVoting.v
+Semantics/LocalEffects.v
+Semantics/Roles.v
+Semantics/Runs.v
+Semantics/SharedState.v

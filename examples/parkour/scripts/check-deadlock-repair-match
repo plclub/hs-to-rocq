@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+out="$PWD/build/repair-match-cases"
+mkdir -p "$out"
+build() (
+  cd "$1"
+  shift
+  opam exec --switch=rocq9 -- rocq makefile -f _CoqProject -o Makefile.coq
+  opam exec --switch=rocq9 -- make -f Makefile.coq "$@"
+)
+build theories Projection/Matching/ActionReflection.vo
+build tests Projection/ChoicePayloadMatching.vo
+flags=(-Q "$PWD/../rocq9.0/base" '' -Q "$PWD/build/run/manual" ''
+       -Q "$PWD/build/run/transformers" '' -Q "$PWD/lib" ''
+       -Q "$PWD/theories" ParkourTheories -Q "$PWD/tests" ParkourTheories.Tests)
+for pin in ExtLib Paco ITree; do flags+=(-Q "$PWD/build/run/pins/$pin" "$pin"); done
+library=ParkourTheories.Tests.Projection.ChoicePayloadMatching
+for export in complete_repaired_match actual_machine_four_actions source_final \
+  positive_between_sends_and_receives positive_after_choice_receive \
+  wrong_tag_prefix_rejected invented_choice_prefix_rejected \
+  swapped_fifo_prefix_rejected swapped_head_cannot_explain_choice \
+  wrong_tag_does_not_enable_generated_receive invented_branch_is_not_a_receive; do
+  echo "AUDIT RepairMatch.$export"
+  timeout 90 opam exec --switch=rocq9 -- \
+    python3 scripts/check-assumptions.py closed - \
+    "$library.RepairMatch.$export" --library "$library" "${flags[@]}" |
+    tee "$out/$export.log"
+done

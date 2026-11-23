@@ -1,13 +1,13 @@
 # Install the Parkour ITree dependencies
 
-[`install-itree-pins`](install-itree-pins) builds all three libraries from
+[`scripts/install-itree-pins`](scripts/install-itree-pins) builds all three libraries from
 fresh Git checkouts into a new directory. Run it from the repository root
 with Git, Bash, GNU Make and Rocq 9.0.1 on `PATH`. For example, with a
 prepared `rocq9` opam switch:
 
 ```sh
 dest="$PWD/parkour-itree-prefix"  # must not already exist
-opam exec --switch rocq9 -- examples/parkour/install-itree-pins "$dest"
+opam exec --switch rocq9 -- examples/parkour/scripts/install-itree-pins "$dest"
 ```
 
 The build uses up to four jobs; set `JOBS` to override. The script checks the

@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")/.."
-old=$(mktemp -d)
-trap 'rm -rf "$old"' EXIT
-git -C upstream archive 8ff9fadc480ddbd0397db6c3a12240c39fd9b5fb src | tar -x -C "$old"
-observer=(stack --allow-different-user exec -- runghc -XGHC2021 -XDataKinds -i)
-"${observer[@]}" -i"$old/src" counterexample/ObserveUpstream.hs original
-"${observer[@]}" -iupstream/src counterexample/ObserveUpstream.hs repaired

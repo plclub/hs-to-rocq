@@ -17,33 +17,35 @@ the manifest itself hashes to
 
 ## Registration
 
-Implementation: `theories/DeadlockRuns.v`.
-Fixed contracts: `tests/DeadlockRunsExpect.v`.
-Contract witnesses: `tests/DeadlockRunsCases.v`.
+Historical pre-migration paths in `DeadlockRunsExpect.sha256`:
 
-Fixed contract names in `DeadlockRunsExpect`:
+- Implementation: `theories/DeadlockRuns.v` (now [`../theories/Semantics/Runs.v`](../theories/Semantics/Runs.v), `ParkourTheories.Semantics.Runs`, with `DF`, `DF_ready`, `DF_after_run`, and `DF_no_stuck` renamed to `deadlock_free`, `deadlock_free_implies_ready`, `deadlock_free_after_run`, and `deadlock_free_excludes_stuck`).
+- Fixed contracts: `tests/DeadlockRunsExpect.v` (now [`Semantics/FiniteRunContracts.v`](Semantics/FiniteRunContracts.v), `ParkourTheories.Tests.Semantics.FiniteRunContracts`, byte-identical).
+- Contract witnesses: `tests/DeadlockRunsCases.v` (now [`Semantics/FiniteRunWitnesses.v`](Semantics/FiniteRunWitnesses.v), `ParkourTheories.Tests.Semantics.FiniteRunWitnesses`).
+
+Fixed contract names in `FiniteRunContracts` (`DeadlockRunsExpect`):
 
 - `ready_equation`, `stuck_equation`, `DF_equation`
 - `run_empty`, `run_extension`, `run_composition`
 
-Closed contract witnesses in `DeadlockRunsCases`:
+Closed contract witnesses in `FiniteRunWitnesses` (`DeadlockRunsCases`):
 
 - `ready_exact`, `stuck_exact`, `DF_exact`
 - `run_empty_exact`, `run_extension_exact`, `run_composition_exact`
 
-Closed implementation proofs in `DeadlockRuns`:
+Closed implementation proofs in `Runs` (`DeadlockRuns`):
 
 - `run_nil`, `run_snoc_iff`, `run_singleton`
 - `run_append`, `run_append_iff`, `run_cons_iff`
-- `stuck_iff_not_ready`, `DF_ready`, `DF_after_run`, `DF_no_stuck`
+- `stuck_iff_not_ready`, `deadlock_free_implies_ready` (`DF_ready`), `deadlock_free_after_run` (`DF_after_run`), `deadlock_free_excludes_stuck` (`DF_no_stuck`)
 - `ready_stuck_reflection`
 
 ## Validation
 
 Rocq 9.0.1 (`opam` switch `rocq9`) compiled all three modules through
-`parkour_rocq.py`, which applies `-q -w +all` and rejects printed warnings.
+[`../scripts/parkour_rocq.py`](../scripts/parkour_rocq.py), which applies `-q -w +all` and rejects printed warnings.
 Each of the 17 witnesses/proofs above separately passed
-`check-assumptions.py closed`, with a 45-second timeout per command. Every
+[`../scripts/check-assumptions.py`](../scripts/check-assumptions.py) `closed`, with a 45-second timeout per command. Every
 query returned `Closed under the global context`. The original Rocq 9.2
 multi-query assurance module was removed, including its stale build products.
 
@@ -51,16 +53,18 @@ From the repository root, compile the expectation, implementation, and cases
 in that order:
 
 ```sh
-opam exec --switch=rocq9 -- python3 examples/parkour/parkour_rocq.py \
-  -Q examples/parkour/theories "" -Q examples/parkour/tests "" FILE
+opam exec --switch=rocq9 -- python3 examples/parkour/scripts/parkour_rocq.py \
+  -Q examples/parkour/theories ParkourTheories \
+  -Q examples/parkour/tests ParkourTheories.Tests FILE
 ```
 
 For each qualified proof export listed above, run a separate command:
 
 ```sh
-opam exec --switch=rocq9 -- python3 examples/parkour/check-assumptions.py \
-  closed examples/parkour/theories MODULE.EXPORT \
-  -Q examples/parkour/tests ""
+opam exec --switch=rocq9 -- python3 examples/parkour/scripts/check-assumptions.py \
+  closed - ParkourTheories.MODULE.EXPORT \
+  -Q examples/parkour/theories ParkourTheories \
+  -Q examples/parkour/tests ParkourTheories.Tests
 ```
 
 The `DF` definition quantifies over all finite reachable runs and asserts

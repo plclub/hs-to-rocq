@@ -88,14 +88,23 @@ Four separate fresh single-query `Print Assumptions` files each produced
 exactly `Closed under the global context`. These audit the proposition
 definitions, NOT inhabitants proving the propositions. The original isolated
 queries used `Require DeadlockLibraryExpect.` and the fully qualified nested
-name. The standard `make check-required` gate now issues the same queries
-through `check-assumptions.py --library DeadlockLibraryExpect` and verifies
-the manifest against its own freshly generated library.
+name. Under the `ParkourTheories` namespace migration, [`namespace-migration.tsv`](namespace-migration.tsv)
+and [`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py) map the frozen
+`DeadlockLibraryExpect.sha256` entries to their canonical modules (with the
+expectation in [`Projection/RunCorrespondenceTypes.v`](Projection/RunCorrespondenceTypes.v),
+module `ParkourTheories.Tests.Projection.RunCorrespondenceTypes.RunAndProgressTypes`),
+and `make check-required` issues the same four closure queries through
+[`../scripts/check-assumptions.py`](../scripts/check-assumptions.py)
+`--library ParkourTheories.Tests.Projection.RunCorrespondenceTypes`.
 
 ## Public proof gate
 
 `make -C examples/parkour check-final SCRATCH=1` compiles the separate
-[direct witness file](../theories/DeadlockContract.v). It applies these
-unchanged expectations to the actual inputs and `DeadlockMatch.matches`.
-Missing or mistyped exports fail this gate. When the witnesses compile,
-each actual theorem receives its own assumption audit.
+[direct witness file](Projection/RunAndProgressTypes.v)
+(`ParkourTheories.Tests.Projection.RunAndProgressTypes`, formerly
+`theories/DeadlockContract.v`). It applies these unchanged expectations to the
+actual inputs, `ParkourTheories.Projection.Matching.PrefixRelation.matches`,
+`ParkourTheories.Projection.RunCorrespondence`, and
+`ParkourTheories.Projection.Progress`. Missing or mistyped exports fail this
+gate. When the witnesses compile, each actual theorem receives its own
+assumption audit.

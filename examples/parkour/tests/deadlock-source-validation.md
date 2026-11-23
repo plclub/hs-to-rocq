@@ -49,4 +49,10 @@ each occurrence. No function-extensionality premise has been added.
 This slice does not establish source well-formedness, source/network
 matching, the preservation theorem, or the quorum client. `make check-required`
 now compiles these files and repeats the single-export and dependency queries
-using freshly generated libraries.
+using freshly generated libraries. In the `ParkourTheories` migration
+([`namespace-migration.tsv`](namespace-migration.tsv) and
+[`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)), the source
+implementation splits across `theories/Choreography/{Occurrences,PendingDeliveries,RoleSteps,Execution}.v`
+and the ordering expectations and cases live under
+[`Choreography/`](Choreography/) (`CommunicationOrder.v`,
+`ChoiceAndSelfCommunication.v`, and `AsynchronousSteps.v`).

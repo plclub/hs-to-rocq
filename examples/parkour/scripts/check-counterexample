@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Replay the counterexample using the production compiler and generated library.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+echo 'b6057f6ac2e296987ba3483a934cb0815290cef92548f1427172611f30596e59  counterexample/EXPECTED.md' |
+    shasum -a 256 -c -
+if [[ ! -f lib/Choreography/Choreo2.vo ]]; then
+    echo 'Missing generated Choreography.Choreo2; build check-required first.' >&2
+    exit 1
+fi
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+outputs="$tmp/modules"
+mkdir "$outputs" "$tmp/audit"
+flags=(-Q ../rocq9.0/base '' -Q build/run/manual '' -Q build/run/transformers ''
+       -Q lib '' -Q "$outputs" Counterexample)
+for module in Local Family Source Network Projection Trace History Refutation ObservableRefutation; do
+    cp "counterexample/$module.v" "$outputs/"
+    python3 scripts/parkour_rocq.py "${flags[@]}" "$outputs/$module.v"
+done
+for name in Source.program_well_formed Source.source_deadlock_free History.no_send_first \
+        History.generated_history_has_no_source Trace.projected_action_history \
+        Projection.actual_projected_counterexample Refutation.two_role_counterexample \
+        Refutation.preservation_fails Refutation.reflection_fails \
+        ObservableRefutation.observable_two_role_counterexample; do
+    python3 scripts/check-assumptions.py closed "$tmp/audit" "Counterexample.$name" "${flags[@]}"
+done

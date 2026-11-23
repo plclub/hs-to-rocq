@@ -73,4 +73,15 @@ No theorem equating the old FIFO-restricted source with the occurrence-based
 source on well-formed runs is asserted here. Such a theorem needs a source
 invariant on occurrence-based reachable states. Wire FIFO correspondence also
 needs one frontier across both data and choice traffic: delivery kind is not
-part of the generated network queue key.
+part of the generated network queue key. In the `ParkourTheories` migration
+([`namespace-migration.tsv`](namespace-migration.tsv) and
+[`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)), the amended
+source splits across
+[`../theories/Choreography/Occurrences.v`](../theories/Choreography/Occurrences.v),
+[`../theories/Choreography/PendingDeliveries.v`](../theories/Choreography/PendingDeliveries.v),
+[`../theories/Choreography/RoleSteps.v`](../theories/Choreography/RoleSteps.v),
+and [`../theories/Choreography/Execution.v`](../theories/Choreography/Execution.v)
+(with `take_at`, `take_pending`, `cstep`, `crun`, and `cfinal` renamed to
+`take_at_occurrence`, `take_first_on_source_channel`, `choreography_step`,
+`choreography_run`, and `choreography_final`), and the occurrence expectation
+lives at [`Choreography/OccurrenceDelivery.v`](Choreography/OccurrenceDelivery.v).

@@ -7,9 +7,11 @@ Haskell regression from the repository root (also included in `make check`):
 make -C examples/parkour check-cond-haskell
 ```
 
-The runner extracts the original HasChor sources at
+The runner [`scripts/check-counterexample-haskell`](../scripts/check-counterexample-haskell)
+extracts the original HasChor sources at
 `8ff9fadc480ddbd0397db6c3a12240c39fd9b5fb` from Git into a temporary directory,
-then runs the same program and observer against the repaired local checkout.
+then runs the same program and observer ([`scripts/ObserveUpstream.hs`](../scripts/ObserveUpstream.hs))
+against the repaired local checkout.
 Observed with GHC 9.10.3:
 
 ```text

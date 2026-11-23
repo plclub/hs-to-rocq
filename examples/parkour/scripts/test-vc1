@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -eu
+cd "$(dirname "$0")/.."
+check=(scripts/checked-tool check --strict --target-version 9.0 -e tests/vc1/structural)
+"${check[@]}" --edits ../../base/edits
+
+reject() {
+    local expected=$1 output
+    shift
+    if output=$("${check[@]}" "$@" 2>&1); then
+        echo "expected rejection: $*" >&2
+        exit 1
+    fi
+    if ! rg -Fq -- "$expected" <<< "$output"; then
+        echo "expected '$expected' in: $output" >&2
+        exit 1
+    fi
+}
+reject 'direct [global]: forbidden RedefinitionEdit' --edits=tests/vc1/direct
+reject 'in [global > in Sample.outer]: forbidden RedefinitionEdit' -e tests/vc1/in
+reject 'except [global > except in Sample.outer, Sample.other]: forbidden RedefinitionEdit' -etests/vc1/except
+reject 'nested [global > in Sample.outer > except in Sample.inner]: forbidden RedefinitionEdit' -e tests/vc1/nested
+reject 'rewrite [global]: forbidden RewriteEdit' -e tests/vc1/rewrite
+reject 'tests/vc1/malformed:' -e tests/vc1/malformed
+reject 'unlisted edits input: SPEC.md' -e SPEC.md
+reject 'unlisted preamble: SPEC.md' -p SPEC.md
+reject 'forbidden midamble: SPEC.md' --midamble SPEC.md
+
+# Exercise the resolved digest without modifying the real base/edits symlink.
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/parkour-vc1.XXXXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/base" "$tmp/examples/parkour/scripts"
+cp scripts/checked-tool scripts/CheckEdits.hs "$tmp/examples/parkour/scripts/"
+STACK_YAML="$(cd ../.. && pwd)/stack.yaml"
+export STACK_YAML
+ln -s ../replacement "$tmp/base/edits"
+printf '# changed byte stream\n' > "$tmp/replacement"
+check=("$tmp/examples/parkour/scripts/checked-tool" check --strict --target-version 9.0)
+reject '../../base/edits: unexpected SHA-256' -e ../../base/edits
+cp tests/vc1/in "$tmp/replacement"
+reject '../../base/edits [global > in Sample.outer]: forbidden RedefinitionEdit' -e ../../base/edits
+printf '%s\n' 'rename value GHC.Internal.TypeLits.SSymbol = Parkour.Symbol.SSymbol' \
+    > "$tmp/examples/parkour/edits"
+reject 'edits [global]: forbidden RenameEdit' -e edits
+printf '%s\n' 'rename value Main.quorumVoting = Parkour.Runtime.getLine' \
+    > "$tmp/examples/parkour/edits"
+reject 'edits [global]: forbidden RenameEdit' -e edits
+printf '%s\n' 'in Main.quorumVoting rename value GHC.Internal.System.IO.getLine = Parkour.Runtime.getLine' \
+    > "$tmp/examples/parkour/edits"
+reject 'edits [global > in Main.quorumVoting]: forbidden RenameEdit' -e edits
+printf '%s\n' 'skip Choreography.Choreo2.unwrap' > "$tmp/examples/parkour/edits"
+reject 'edits [global]: forbidden SkipEdit' -e edits
+printf '%s\n' 'in Main.quorumVoting skip Choreography.Location.unwrap' > "$tmp/examples/parkour/edits"
+reject 'edits [global > in Main.quorumVoting]: forbidden SkipEdit' -e edits
+mkdir -p "$tmp/examples/parkour/module-edits/Choreography/Location"
+printf '%s\n' 'Definition injected := true.' > "$tmp/examples/parkour/module-edits/Choreography/Location/preamble.v"
+reject 'unexpected preamble contents' -p module-edits/Choreography/Location/preamble.v
+printf '%s\n' 'data kinds Control.Monad.Signatures.Catch Type, Type, Type' \
+    > "$tmp/examples/parkour/reader.edits"
+reject 'reader.edits [global]: forbidden DataKindEdit' -e reader.edits
+printf '%s\n' 'universe template Choreography.Choreo2.ChoreoSig' > "$tmp/examples/parkour/edits"
+reject 'edits [global]: forbidden UniverseTemplateEdit' -e edits
+printf '%s\n' 'in Main.main universe template Control.Monad.Tree.Tree' > "$tmp/examples/parkour/edits"
+reject 'edits [global > in Main.main]: forbidden UniverseTemplateEdit' -e edits
+echo 'VC1 controls passed'

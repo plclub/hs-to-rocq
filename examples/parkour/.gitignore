@@ -3,3 +3,6 @@
 /lib/
 !Makefile
 __pycache__/
+Makefile.coq
+Makefile.coq.conf
+.Makefile.coq.d

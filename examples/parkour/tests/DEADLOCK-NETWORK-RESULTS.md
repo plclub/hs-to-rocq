@@ -66,3 +66,13 @@ changed to make proofs pass.
 This slice does **not** prove source well-formedness, source/network matching,
 the generated session-ID correspondence, a full EPP preservation theorem,
 or the quorum client's preservation theorem. It does not model HTTP failures.
+In the `ParkourTheories` migration ([`namespace-migration.tsv`](namespace-migration.tsv)
+and [`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)),
+`DeadlockNetwork` splits across
+[`../theories/Network/Mailboxes.v`](../theories/Network/Mailboxes.v),
+[`../theories/Network/Endpoints.v`](../theories/Network/Endpoints.v), and
+[`../theories/Network/Execution.v`](../theories/Network/Execution.v) (with
+`nstep` and `nfinal` renamed to `network_step` and `network_final`), and the
+test modules live under [`Network/`](Network/) (`CommunicationRules.v`,
+`SharedStoreScheduling.v`, `SilentEndpoints.v`, and `SchedulingAndDelivery.v`),
+compiled via [`../scripts/parkour_rocq.py`](../scripts/parkour_rocq.py).

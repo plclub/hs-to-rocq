@@ -32,4 +32,13 @@ installation; it did not rerun translation.
 
 A separate assumption audit checked all 22 definitions and lemmas in
 `DeadlockOrder`; every report was closed under the global context.
-The assertion checksum remained unchanged.
+The assertion checksum remained unchanged. In the `ParkourTheories` migration
+([`namespace-migration.tsv`](namespace-migration.tsv) and
+[`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)), the ordering
+theory splits between
+[`../theories/Choreography/Precedence.v`](../theories/Choreography/Precedence.v)
+and [`../theories/Projection/SessionPaths.v`](../theories/Projection/SessionPaths.v),
+the frozen expectations live in
+[`FIFO/SessionPrecedence.v`](FIFO/SessionPrecedence.v)
+(`ParkourTheories.Tests.FIFO.SessionPrecedence`), and compilation uses
+[`../scripts/parkour_rocq.py`](../scripts/parkour_rocq.py).

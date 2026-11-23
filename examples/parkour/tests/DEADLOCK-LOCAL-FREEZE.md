@@ -27,47 +27,61 @@ both directions. The expectation files contain no proof bodies.
 ## Standalone gate
 
 From the repository root, with a private installation made by
-`examples/parkour/install-itree-pins`:
+`examples/parkour/scripts/install-itree-pins`:
 
 ```sh
-opam exec --switch rocq9 -- python3 examples/parkour/tests/check-deadlock-local.py \
+opam exec --switch rocq9 -- python3 examples/parkour/scripts/check-deadlock-local.py \
   --itree-prefix "$ITREE_PREFIX" --output "$NEW_EVIDENCE_DIRECTORY"
 ```
 
 The gate requires Rocq 9.0.1, checks all three source revisions, checks that
-installed `.vo` bytes match those pinned builds, checks both active digest
-manifests, copies five modules into a fresh directory, and compiles them
-through production `parkour_rocq.compile_file`. Thus every acceptance compile
-uses `rocq c -q -w +all`. Each compiler/checker invocation has a 120-second timeout.
-Each of the 20 independently named exports, including helpers, receives its
-own fresh assumption query through `check-assumptions.py`;
+installed `.vo` bytes match those pinned builds, verifies both active digest
+manifests through [`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)
+and [`namespace-migration.tsv`](namespace-migration.tsv), copies the five
+canonical modules into `$NEW_EVIDENCE_DIRECTORY/project`, and compiles them
+through production [`../scripts/parkour_rocq.py`](../scripts/parkour_rocq.py)
+under `-Q .../theories ParkourTheories` and `-Q .../tests ParkourTheories.Tests`.
+Thus every acceptance compile uses `rocq c -q -w +all`. Each compiler/checker
+invocation has a 120-second timeout. Each of the 20 independently named exports,
+including helpers, receives its own fresh assumption query through
+[`../scripts/check-assumptions.py`](../scripts/check-assumptions.py);
 the entire output must be exactly `Closed under the global context`.
 The output directory retains the copied inputs and full compiler/query logs.
 
-**Standalone validation, 2026-11-22:** exit 0, five modules, no diagnostics,
-20 individual closed assumption reports. ExtLib, Paco and ITree were the
+**Historical standalone validation, 2026-11-22 (pre-migration names):** exit 0,
+five modules (`DeadlockLocal`, `DeadlockLocalExpect`, `DeadlockLocalCases`,
+`DeadlockLocalExactExpect`, `DeadlockLocalExactCases`), no diagnostics,
+20 individual closed assumption reports. ExtLib, Paco, and ITree were the
 three pins listed in the specification, using the fresh private installation
-already documented in `ITREE-INSTALL.md`.
+already documented in [`../ITREE-INSTALL.md`](../ITREE-INSTALL.md).
 
 ## Integration handoff
 
-`theories/DeadlockLocal.v` needs only `From ITree Require Import ITree`.
-Its public definitions are `local_model` (interpretation and reply relation
-only), `local_view`, `local_return`, `local_event`/`LocalEvent`, and
-`local_step`/`LocalStep`. `local_step_typed_trace` exposes the actual
-existential event type, event, typed reply, continuation, and stores.
-`ViewNow` and `ViewTau` describe finite observation derivations.
+[`../theories/Semantics/LocalEffects.v`](../theories/Semantics/LocalEffects.v)
+(`ParkourTheories.Semantics.LocalEffects`, formerly `theories/DeadlockLocal.v`)
+needs only `From ITree Require Import ITree`. Its public definitions are
+`local_model` (interpretation and reply relation only), `local_view`,
+`local_return`, `local_event`/`LocalEvent`, and `local_step`/`LocalStep`.
+`local_step_typed_trace` exposes the actual existential event type, event,
+typed reply, continuation, and stores. `ViewNow` and `ViewTau` describe finite
+observation derivations.
 
-The fixed cases use role 7, store 3, `Get : request bool`, reply `true`,
-new store 4, and returned value 11 (not 22). They reject store 0, role 8,
-and an invented `false` reply. `twice` leaves its second event suspended
-after one action. Arbitrarily many finite Taus preserve returns/actions;
-visible events are not returns, returns are not actions, and the infinite
-Tau tree has neither. The independent exactness contracts prevent extra
-step or return rules.
+The fixed cases in [`Semantics/LocalEffectContracts.v`](Semantics/LocalEffectContracts.v),
+[`Semantics/LocalEffectWitnesses.v`](Semantics/LocalEffectWitnesses.v),
+[`Semantics/ExactObservations.v`](Semantics/ExactObservations.v), and
+[`Semantics/ObservationEquivalences.v`](Semantics/ObservationEquivalences.v)
+(`ParkourTheories.Tests.Semantics.*`, formerly `DeadlockLocalExpect.v`,
+`DeadlockLocalCases.v`, `DeadlockLocalExactExpect.v`, and
+`DeadlockLocalExactCases.v`) use role 7, store 3, `Get : request bool`, reply
+`true`, new store 4, and returned value 11 (not 22). They reject store 0,
+role 8, and an invented `false` reply. `twice` leaves its second event
+suspended after one action. Arbitrarily many finite Taus preserve
+returns/actions; visible events are not returns, returns are not actions, and
+the infinite Tau tree has neither. The independent exactness contracts prevent
+extra step or return rules.
 
-`check-required` now compiles the production theory, expectations and cases
-in `build/run/local` and checks all 20 exports before compiling dependents
-with the same load path. `check-deadlock-local` runs the local gate without
-the translation build. Its success alone does not establish source or
-network readiness.
+`check-required` compiles `theories/` and `tests/` from their `_CoqProject`
+files and runs `scripts/check-deadlock-local.py --project-root ...` in
+`build/run/local` to check all 20 exports. `check-deadlock-local` runs the
+standalone local gate without the translation build. Its success alone does not
+establish source or network readiness.
