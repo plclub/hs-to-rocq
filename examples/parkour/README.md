@@ -49,7 +49,9 @@ make -C examples/parkour check
 typechecks the pinned `Main.hs` with GHC 9.10.3, and checks the four singleton
 signatures expanded by `mkLoc`. It does not modify HasChor's Cabal bounds.
 When translating `Main`, the build runs those splices with GHC's external
-interpreter to avoid an in-process `PAGE21` relocation failure on arm64 macOS.
+interpreter. On arm64 macOS it also passes `-dynamic` to select `ghc-iserv-dyn`:
+the static interpreter can segfault at the first `mkLoc` splice or report a
+`PAGE21` relocation out of range while loading the HTTP package dependencies.
 Both commands pass `Main.hs` explicitly and reset GHC's home-module search
 path to `upstream/src`, so a file in the working directory cannot shadow a
 pinned import when GHC expands a splice.

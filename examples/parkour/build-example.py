@@ -1,6 +1,7 @@
 """Translate the pinned modules into an empty tree and check the compiled result."""
 
 import argparse
+import platform
 import shutil
 import subprocess
 import tempfile
@@ -48,9 +49,10 @@ def modules() -> Iterator[Module]:
         yield name, transformers, deps, [*cls_flags, "-i", transformers]
     for name in ["Control.Monad.Tree", "Choreography.Location", "Choreography.Network",
                  "Choreography.Choreo2", "Choreography2", "Main"]:
-        # Static in-process loading of the HTTP package closure overflows a
-        # PAGE21 relocation on Apple Silicon when GHC runs Main's mkLoc splices.
         th = ["--ghc=-fexternal-interpreter"] if name == "Main" else []
+        if th and platform.system() == "Darwin" and platform.machine() == "arm64":
+            # Static ghc-iserv can also crash loading Main's HTTP package closure.
+            th.append("--ghc=-dynamic")
         preamble = (["-p", f"module-edits/{name.replace('.', '/')}/preamble.v"]
                     if name in {"Choreography.Location", "Choreography2"} else [])
         yield name, protocol if name == "Main" else upstream, lib, [
