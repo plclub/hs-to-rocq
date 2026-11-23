@@ -126,7 +126,7 @@ CLOSED = {
     "DeadlockAtomicLayout": "tracked_atomic_node",
     "DeadlockBranchLayout": "app_layout_children bind_layout_children",
     "DeadlockChoiceLayout": "coherent_choice_layout",
-    "DeadlockStructuralLayout": "structural_root_layout",
+    "DeadlockStructuralLayout": "structural_tracked_layout structural_root_layout",
     "DeadlockFrontierProofs": "matched_receive_frontiers matched_prefix_frontiers",
     "DeadlockPlayedActual": "replay_app_actual replay_bind_actual replay_cond_actual archived_cut_actual_syntax",
     "DeadlockCoverage": "shared_node_paths returned_cut_completed completed_subtree_coverage",

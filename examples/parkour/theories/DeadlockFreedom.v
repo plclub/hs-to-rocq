@@ -282,8 +282,3 @@ Proof.
   - exact (well_formed_inputs_available Formed).
 Qed.
 End Contracts.
-
-Print Assumptions network_run_has_source.
-Print Assumptions matched_ready.
-Print Assumptions epp_preserves_deadlock_freedom.
-Print Assumptions deadlock_reflection.

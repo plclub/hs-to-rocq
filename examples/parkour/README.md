@@ -138,13 +138,12 @@ packet on the FIFO has that occurrence. The [handoff](DEADLOCK-HANDOFF.md)
 traces these two results through to preservation, scheduling, readiness,
 deadlock reflection and their quorum client.
 
-`make -C examples/parkour check-final SCRATCH=1` additionally compiles the
+`make -C examples/parkour check-required` compiles the
 [public witnesses](theories/DeadlockContract.v) against the independent
 library and quorum types, then audits the actual exports. A missing proof
-makes this target fail. `check-required` checks the slices separately.
-Normal `make check` runs `check-final` once after lint, the Haskell
-comparison, and harness controls. A green slice check alone cannot make
-`check` pass.
+makes this target fail. `check-final` is an alias for the same checks.
+Normal `make check` runs `check-required` once after lint, the Haskell
+comparison, and harness controls.
 
 For an isolated clean run while another process uses the generated libraries,
 run `make -C examples/parkour check-required SCRATCH=1`. The command prints

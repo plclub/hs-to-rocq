@@ -74,5 +74,3 @@ Proof.
     model stores input quorum_roles (fun _ => unit) (@Main.quorumVoting)
     quorum_well_formed).
 Qed.
-
-Print Assumptions quorum_deadlock_freedom.
