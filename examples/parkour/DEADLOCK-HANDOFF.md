@@ -70,8 +70,12 @@ proves the original-value and codec obligation whenever the receiver path
 uses only `AppFunction`, `AppArgument`, and `BindPrefix` (including the
 root). `DeadlockStaticPaths.static_receive_compares_to_queued` compares such a
 site with any same-key queued send, even one in a dynamically entered body.
-Comparison alone does not establish predecessor coverage. Sites inside
-`BindBody` or `ChoiceBody` also need the actual earlier result or choice.
+`DeadlockStaticBarrier.static_sender_barrier` shows that a send at a strict
+successor requires a prior send at the static site on this same history.
+Together with receiver freshness and the FIFO ledger, this proves
+`DeadlockStaticHead.source_head_paths_static`. Both receive obligations are
+therefore proved at every static site. Sites inside `BindBody` or `ChoiceBody`
+still need the actual earlier result or choice.
 
 ## Why the original projection fails
 

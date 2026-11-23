@@ -2,7 +2,7 @@ From Stdlib Require Import Lists.List.
 Require Import DeadlockSource DeadlockNetwork DeadlockMessages DeadlockFrontiers
   DeadlockFirstSend DeadlockRootHead DeadlockRootOrigin DeadlockStaticOrigin DeadlockStaticPaths
   DeadlockWellFormed DeadlockMatch DeadlockPast DeadlockOrder DeadlockLocal
-  DeadlockState DeadlockHead DeadlockCutSafety Choreography.Choreo2 Control.Monad.Tree Parkour.Symbol.
+  DeadlockState DeadlockHead DeadlockCutSafety DeadlockStaticBarrier Choreography.Choreo2 Control.Monad.Tree Parkour.Symbol.
 Import ListNotations.
 
 Lemma output_is_sender {M sender} R p pack X kind o (v : X) sh :
@@ -64,6 +64,40 @@ Proof.
     as [Eq|[Before|After]].
   - left; now symmetry.
   - right. exists tc0,s0,tn0,n0,gs0,a,s1,b,n1,gs1,batch. tauto.
-  - exfalso. exact (static_no_predecessor _ _ Static After).
+  - exfalso. exact (DeadlockFirstSend.static_no_predecessor _ _ Static After).
+Qed.
+
+Theorem source_head_paths_static tc s tn n gs p :
+  well_formed R M A c -> prefix tc s tn n gs -> In p R ->
+  forall X kind site sender rd, static_path site ->
+  receive_site sm p (A p) (positions s p) X kind site sender rd ->
+  forall g, first_for (sender,p,session_at site Choreography.Network.Root) gs g ->
+    message_path g = site.
+Proof.
+  intros WF Run InP X kind site sender rd Static Site g Head.
+  set (key := (sender,p,session_at site Choreography.Network.Root)).
+  destruct (sent R key tc) as [|first rest] eqn:Sent.
+  - pose proof (prefix_ledger model stores input R A c _ _ _ _ _ key Run) as Ledger.
+    rewrite Sent in Ledger. symmetry in Ledger. apply app_eq_nil in Ledger as [_ Empty].
+    destruct (head_key_path _ _ _ Head) as [tail Nonempty].
+    fold key in Nonempty. congruence.
+  - eapply head_from_first_send; [exact Run|exact Site|exact Sent| |exact Head].
+    destruct (first_send_at_or_after tc s tn n gs p X kind site sender rd first rest
+      WF Run InP Static Site Sent) as [Eq|Later]; [exact Eq|exfalso].
+    destruct Later as (tc0 & s0 & tn0 & n0 & gs0 & a & s1 & b & n1 & gs1 & batch &
+      Early & Act & Empty & Emits & Before).
+    destruct (receiver_selects_sender model stores input R A c _ _ _ _ _
+      WF Run p InP X kind site sender rd Static Site) as (v & sh & Origin & Codec).
+    assert (Ne : sender <> p).
+    { destruct Site as (B & C & focus & Sil & Site). destruct Site; assumption. }
+    assert (Emitted : In first (emits R (sender,p,session_at site Choreography.Network.Root) a)).
+    { rewrite Emits; now left. }
+    pose proof (static_sender_barrier sm R A c (stores,input) tc0 s0 a s1 sender p site first
+      (prefix_source_run model stores input R A c _ _ _ _ _ Early)
+      ltac:(exists site; split; [reflexivity|exact (output_is_sender _ _ _ _ _ _ _ _ InP Ne Origin)])
+      (paired_source model R A _ _ _ _ _ _ _ _ Act)
+      Emitted Before) as Issued.
+    change (In site (sent R (sender,p,session_at site Choreography.Network.Root) tc0)) in Issued.
+    rewrite Empty in Issued. exact Issued.
 Qed.
 End First.
