@@ -13,12 +13,17 @@ def main(policy: str, directory: str, export: str, *loads: str) -> None:
     qualid = rf"{ident}(?:\.{ident})*"
     if not re.fullmatch(rf"{ident}\.{qualid}", export):
         sys.exit("expected a qualified export")
+    library = export.rsplit(".", 1)[0]
+    if loads[:1] == ("--library",):
+        if len(loads) < 2 or not re.fullmatch(qualid, loads[1]) or not export.startswith(loads[1] + "."):
+            sys.exit("expected the containing library of the qualified export")
+        library, loads = loads[1], loads[2:]
     if policy not in {"closed", "client"} or len(loads) % 3 or any(flag != "-Q" for flag in loads[::3]):
         sys.exit("invalid assumption policy or load path")
     with tempfile.TemporaryDirectory() as tmp:
         def query(command: str) -> str:
             source = Path(tmp, "ParkourAudit.v")
-            source.write_text(f"Require {export.rsplit('.', 1)[0]}.\n{command}\n")
+            source.write_text(f"Require {library}.\n{command}\n")
             proc = compile_file([*loads, "-Q", directory, "", str(source)])
             print(proc.stdout, end="")
             if proc.returncode:

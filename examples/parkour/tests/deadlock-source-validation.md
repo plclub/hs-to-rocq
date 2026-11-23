@@ -47,7 +47,6 @@ Correspondence proofs must still align the concrete equality decision at
 each occurrence. No function-extensionality premise has been added.
 
 This slice does not establish source well-formedness, source/network
-matching, the preservation theorem, or the quorum client. These files have
-not been registered in the production build by this worker; build-script
-integration belongs to the coordinating worker. Focused compilation and
-these reports do not replace a subsequent clean production check.
+matching, the preservation theorem, or the quorum client. `make check-required`
+now compiles these files and repeats the single-export and dependency queries
+using freshly generated libraries.

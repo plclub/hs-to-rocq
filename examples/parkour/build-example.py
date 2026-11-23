@@ -3,6 +3,7 @@
 import argparse
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 
@@ -10,12 +11,19 @@ from itree_pins import pinned_environment, prefix_path
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--check-edits", action="store_true")
+parser.add_argument("--final", action="store_true", help="also require the independent public theorem contract")
+parser.add_argument("--scratch", action="store_true", help="use a fresh build directory and leave lib/ and build/run/ alone")
 args = parser.parse_args()
 base = Path("../rocq9.0/base")
 out = Path("build/run")
+lib = Path("lib")
+if args.scratch:
+    Path("build").mkdir(exist_ok=True)
+    scratch = Path(tempfile.mkdtemp(dir="build", prefix="required-"))
+    out, lib = scratch / "run", scratch / "lib"
+    print(f"Scratch build: {scratch}", flush=True)
 deps = out / "transformers"
 support = out / "manual"
-lib = Path("lib")
 contracts = out / "theories"
 local = out / "local"
 transformers = Path("../ghc/ghc/libraries/transformers")
@@ -129,3 +137,7 @@ for theorem in ["owner_cond_sequential", "owner_cond_app", "owner_cond_false",
     run("python3", Path("check-assumptions.py").resolve(), "closed", contracts.resolve(),
         f"OwnerCond.{theorem}", *load_deps, "-Q", lib.resolve(), "",
         cwd=contracts, env=rocq_env)
+
+run("python3", "check_semantics.py", out / "semantics", *(["--final"] if args.final else []),
+    "--generated", lib, "--", base, deps, support, local,
+    env=rocq_env)

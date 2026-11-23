@@ -38,6 +38,12 @@ warning category was disabled. The run compiled the repaired projection and
 quorum client, obtained a closed report for `epp` and each of the five
 `OwnerCond` checks, and passed the 20 local-effect assumption checks.
 
+The local-model review covered `3eb4b03f..27174fcb` only. On the
+standards axis, the missing local-effect trigger in `CLAUDE.md` was
+corrected in `31f66d00`. On the spec axis, the reviewers found no
+discrepancy between the local effect rules and their finite-view
+contracts. Neither review covers the choreography/network correspondence.
+
 ## Why the original projection fails
 
 [`counterexample/EXPECTED.md`](counterexample/EXPECTED.md) fixes the inputs and

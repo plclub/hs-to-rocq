@@ -19,7 +19,7 @@ refinement of raw queues. Those remain separate integration obligations.
 In particular, raw queue keys combine data and choice traffic; a ghost
 ordering invariant for those keys must combine both delivery kinds.
 
-Build/check registration is intentionally left to the coordinating session.
+`make check-required` compiles the ordering module and these frozen assertions.
 
 ## Validation
 

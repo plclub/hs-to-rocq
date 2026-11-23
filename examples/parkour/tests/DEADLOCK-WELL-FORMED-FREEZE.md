@@ -37,15 +37,13 @@ checks, not merely matching theorem names or comparing printed text.
 
 ## Production validation, 2026-11-22
 
-The following command compiled the actual repository sources, not repaired
-diagnostic substitutes, using Rocq 9.0.1, `parkour_rocq.py`, `+all`, and the
-runner's 120-second timeout per compilation:
+The focused validation compiled the actual repository sources, not repaired
+diagnostic substitutes, using Rocq 9.0.1, `parkour_rocq.py`, `+all`, and a
+120-second timeout per compilation. To reproduce these checks with the
+standard build, activate the Rocq switch and run:
 
 ```sh
-cd examples/parkour
-opam exec --switch=rocq9 -- python3 tests/check-deadlock-quorum.py \
-  theories/DeadlockWellFormed.v tests/DeadlockWellFormedExpect.v \
-  tests/DeadlockWellFormedPartialExpect.v tests/DeadlockWellFormedCases.v
+make -C examples/parkour check-required
 ```
 
 Both expectation manifests pass `shasum -a 256 -c` from the repository root.

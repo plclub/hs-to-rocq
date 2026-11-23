@@ -1,8 +1,8 @@
 # Internal alignment readiness checks
 
-Run `bash examples/parkour/tests/check-deadlock-alignment` from the repository
-root. The runner recompiles the source and alignment modules in an isolated
-directory with `+all`, then checks each listed export's assumptions independently.
+Run `make -C examples/parkour check-required SCRATCH=1` from the repository
+root. The build recompiles the source and alignment modules in an isolated
+directory with `+all`, then checks each named export's assumptions independently.
 
 `DeadlockAlignmentProgress.delivery_available_at` is a sufficient condition for
 endpoint readiness, not an exact receive-correspondence contract. When the source

@@ -11,7 +11,7 @@ SHELLCHECK ?= shellcheck
 check: lint
 	$(MAKE) check-cond-haskell
 	$(MAKE) test-checks
-	$(MAKE) check-required
+	$(MAKE) check-final
 
 PYTHON_SOURCES := $(wildcard *.py) tests/check-deadlock-local.py
 lint:
@@ -29,9 +29,10 @@ check-deadlock-local:
 	rm -rf build/deadlock-local
 	python3 tests/check-deadlock-local.py --output build/deadlock-local
 
-check-required:
+.PHONY: check-final
+check-required check-final:
 	python3 verify-source.py --dependencies
-	python3 build-example.py
+	python3 build-example.py $(if $(filter 1,$(SCRATCH)),--scratch) $(if $(filter check-final,$@),--final)
 
 test-checks:
 	bash test-checks.sh

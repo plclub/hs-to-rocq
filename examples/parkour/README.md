@@ -98,6 +98,42 @@ and checking 20 named exports. Focused compiler and assumption logs are under
 and uses that directory and private installation for subsequent compilations.
 `test-checks` and `check-edits` do not require the private installation.
 
+`check-required` also builds the run, shared-state, source, source-order,
+well-formedness and network contracts. It checks the repaired four-action
+network run and the initial well-formedness of generated `Main.quorumVoting`
+against its independently typed client contract. Single-export assumption
+reports, declarative dependency queries and the disabled-left/right network
+controls are in `build/run/semantics/`. These checks do not prove a general
+source/network simulation or quorum deadlock freedom.
+
+The same gate checks generated projection equations, network enabledness
+and step views, and literal typed-message/FIFO cases. A single-message
+fixture checks the correct generated endpoints and two broken variants:
+wrong session and omitted sender. The four frozen library propositions
+are compiled and audited as *types*; that check supplies no inhabitants.
+For the matching relation, the cases accept the initial states and reject
+an inserted target event, an invented delivery, and a receive that skips
+an earlier choice on the same queue. A fresh dependency query checks that
+matching uses the generated projection and the ghost queue relation without
+depending on readiness.
+
+The slice gate also checks finite role-value selection, endpoint scheduling,
+conditional alignment and matching steps, and a nonempty matched prefix for
+a generated send. `DeadlockFreedom` contributes partial lemmas on empty runs,
+final states and readiness under an input-availability premise.
+
+`make -C examples/parkour check-final SCRATCH=1` additionally compiles the
+[public witnesses](theories/DeadlockContract.v) against the independent
+library and quorum types, then audits the actual exports. A missing proof
+makes this target fail. `check-required` checks the slices separately.
+Normal `make check` runs `check-final` once after lint, the Haskell
+comparison, and harness controls. A green slice check alone cannot make
+`check` pass.
+
+For an isolated clean run while another process uses the generated libraries,
+run `make -C examples/parkour check-required SCRATCH=1`. The command prints
+a fresh directory under `build/` containing its own `lib/` and `run/`.
+
 ## Checking the translation
 
 **Strict generator check (2026-11-22):** At upstream `872bb12f`,

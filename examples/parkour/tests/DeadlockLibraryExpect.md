@@ -5,8 +5,10 @@ The expectation is `tests/DeadlockLibraryExpect.v`, module
 `70c70585f06d6446cbdbdeab2f2238a8615bf7c0a7154ac22f0d7642987a6288`.
 The adjacent SHA-256 manifest freezes the spec, actual machine definitions,
 source well-formedness, shared-state model, and generated syntax/projection
-inputs used for this check. Validate from the repository root with
-`shasum -a 256 -c examples/parkour/tests/DeadlockLibraryExpect.sha256`.
+inputs used for this check. `make -C examples/parkour check-required` verifies
+the historical source entry against the frozen Git blob and verifies the
+revised occurrence-based source against its separate amendment. A direct
+checksum of the *current* source against the historical entry should differ.
 Do not refresh these expectations to accommodate a failing library proof.
 
 ## Signatures
@@ -84,19 +86,16 @@ by this independent check; the six machine modules were freshly compiled.
 
 Four separate fresh single-query `Print Assumptions` files each produced
 exactly `Closed under the global context`. These audit the proposition
-definitions, NOT inhabitants proving the propositions. The existing
-`check-assumptions.py` assumes everything before the last dot is a physical
-library; it cannot query this nested module directly. The equivalent isolated
-queries therefore explicitly used `Require DeadlockLibraryExpect.` and the
-fully qualified nested name, and checked the exact output and exit status.
+definitions, NOT inhabitants proving the propositions. The original isolated
+queries used `Require DeadlockLibraryExpect.` and the fully qualified nested
+name. The standard `make check-required` gate now issues the same queries
+through `check-assumptions.py --library DeadlockLibraryExpect` and verifies
+the manifest against its own freshly generated library.
 
-## Remaining acceptance gate
+## Public proof gate
 
-No final theorem has been proved or type-witnessed here. When the real
-`matches` and four exports exist, add a separate witness file importing these
-unchanged expectations and the actual library. Give each witness an explicit
-universally quantified type whose conclusion is the corresponding expectation
-applied to the real inputs (and real relation for the last three), and whose
-body is the corresponding actual export. Do not assume simulation, insert a
-fixture relation, add hypotheses, or replace the generated runner.
-Then compile the witnesses and audit each actual theorem separately.
+`make -C examples/parkour check-final SCRATCH=1` compiles the separate
+[direct witness file](../theories/DeadlockContract.v). It applies these
+unchanged expectations to the actual inputs and `DeadlockMatch.matches`.
+Missing or mistyped exports fail this gate. When the witnesses compile,
+each actual theorem receives its own assumption audit.
