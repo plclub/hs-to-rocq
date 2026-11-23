@@ -185,7 +185,7 @@ Proof.
       [discriminate|exact Scope|now apply FS].
 Qed.
 
-Lemma logged_replay_app S F B
+Lemma logged_replay_app_partition S F B
     (f : programs M (fun p => F p -> B p) S) (x : programs M F S)
     active inc o (cuts : family cut B active) :
   good B active o cuts ->
@@ -197,7 +197,9 @@ Lemma logged_replay_app S F B
     family_at cut node S _ f active inc (child o AppFunction) fs /\
     family_at cut node S _ x active inc (child o AppArgument) xs /\
     (forall p d, app_cursor_shape p (F p) (B p) o
-      (f p (inc p d)) (x p (inc p d)) (cuts p d) (fs p d) (xs p d)).
+      (f p (inc p d)) (x p (inc p d)) (cuts p d) (fs p d) (xs p d)) /\
+    (forall p d e, In e (tokens (cuts p d)) <->
+      In e (tokens (fs p d)) \/ In e (tokens (xs p d))).
 Proof.
   intros Good At. destruct Good as [ND [Cover Exact]].
   destruct (@select_branch_cuts
@@ -233,7 +235,30 @@ Proof.
       * intros p d. exact (proj2 (ChildExact p d)).
     + split; [intros p d; exact (proj1 (Valid p d d))|].
       split; [intros p d; exact (proj1 (proj2 (Valid p d d)))|].
-      intros p d. exact (proj2 (proj2 (proj2 (Valid p d d)))).
+      split.
+      * intros p d. exact (proj2 (proj2 (proj2 (Valid p d d)))).
+      * intros p d. exact (proj1 (proj2 (proj2 (Valid p d d)))).
+Qed.
+
+Lemma logged_replay_app S F B
+    (f : programs M (fun p => F p -> B p) S) (x : programs M F S)
+    active inc o (cuts : family cut B active) :
+  good B active o cuts ->
+  family_at cut node S B (fun p s => App (f p s) (x p s)) active inc o cuts ->
+  exists (fs : family cut (fun p => F p -> B p) active)
+    (xs : family cut F active),
+    good _ active (child o AppFunction) fs /\
+    good _ active (child o AppArgument) xs /\
+    family_at cut node S _ f active inc (child o AppFunction) fs /\
+    family_at cut node S _ x active inc (child o AppArgument) xs /\
+    (forall p d, app_cursor_shape p (F p) (B p) o
+      (f p (inc p d)) (x p (inc p d)) (cuts p d) (fs p d) (xs p d)).
+Proof.
+  intros Good At.
+  destruct (logged_replay_app_partition S F B f x active inc o cuts Good At)
+    as (fs & xs & FG & XG & FA & XA & Shape & Partition).
+  exists fs,xs. split; [exact FG|]. split; [exact XG|].
+  split; [exact FA|]. split; assumption.
 Qed.
 
 Definition bind_cursor_shape p X Y o (t : Choreo M p X)
