@@ -44,6 +44,25 @@ corrected in `31f66d00`. On the spec axis, the reviewers found no
 discrepancy between the local effect rules and their finite-view
 contracts. Neither review covers the choreography/network correspondence.
 
+### Repaired projection: correspondence checkpoint
+
+`DeadlockFrontiers.prefix_ledger` counts occurrence paths on each real wire
+key. On every matched prefix the sends are exactly the receives followed by
+the still-pending paths, in order. The checked four-action `RepairMatch`
+fixture instantiates the actual matching relation; changing the tag, swapping
+the FIFO contents, or inventing a choice fails the match.
+
+The ledger alone does not identify the occurrence at a waiting receiver.
+`DeadlockCutSafety.covered_residuals` needs two facts about each source
+receive site: the head has that site's occurrence, and a queued message at
+that occurrence has the original sender's operand and compatible codec.
+The second fact requires no witness value when the channel is empty.
+`DeadlockPast.matched_has_actual_past` traces queued messages to actual sends;
+`DeadlockCoverage.completed_subtree_coverage` finds peer actions in completed
+subtrees. The remaining proof must connect those subtree witnesses to the
+**same** matched history and establish both facts from `well_formed`.
+The four library exports and the quorum preservation corollary remain open.
+
 ## Why the original projection fails
 
 [`counterexample/EXPECTED.md`](counterexample/EXPECTED.md) fixes the inputs and

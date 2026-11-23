@@ -53,6 +53,9 @@ MODULES = ("theories/DeadlockRuns", "tests/DeadlockRunsExpect", "tests/DeadlockR
            "tests/DeadlockAlignmentProgressCases", "theories/DeadlockMatch",
            "theories/DeadlockMatchStep", "tests/DeadlockMatchStepExpect", "theories/DeadlockHead",
             "theories/DeadlockFrontiers", "tests/DeadlockRepairMatchCases", "theories/DeadlockFreedom",
+            "theories/DeadlockCoherence", "theories/DeadlockReplay", "theories/DeadlockPlayedValues",
+            "theories/DeadlockPlayedFamily", "theories/DeadlockPast",
+            "theories/DeadlockCoverage", "theories/DeadlockCutSafety",
            "tests/DeadlockLibraryExpect", "tests/DeadlockMatchExpect",
            "tests/DeadlockQuorumFreedomExpect", "tests/DeadlockContractParametric",
            "tests/DeadlockMutationExpect", "theories/DeadlockMutationCases",
@@ -60,6 +63,13 @@ MODULES = ("theories/DeadlockRuns", "tests/DeadlockRunsExpect", "tests/DeadlockR
            "theories/DeadlockQuorum", "tests/DeadlockQuorumCases")
 CLOSED = {
     "DeadlockFrontiers": "decorated_ledger prefix_ledger reachable_head_from_coverage",
+    "DeadlockCoherence": "initial_actor_history history_bind_receive run_completed_partial_histories",
+    "DeadlockReplay": "code_history_has_syntax_cut syntax_cut_role_step",
+    "DeadlockPlayedValues": "received_original_value owner_locally_actual_result",
+    "DeadlockPlayedFamily": "structural_played_family",
+    "DeadlockPast": "matched_has_actual_past production_recorded_in_replay",
+    "DeadlockCoverage": "shared_node_paths returned_cut_completed completed_subtree_coverage",
+    "DeadlockCutSafety": "replay_receive_site aligned_cut_receive_safety aligned_cut_delivery_available covered_residuals",
     "DeadlockHead": """nonempty_channel_first removal_has_key queued_key_nonempty head_bytes exact_receive_at
         source_removal_exposes_wire""",
     "DeadlockChronology": """role_history_chronology code_history_chronology history_scoped scoped_fork_disjoint
