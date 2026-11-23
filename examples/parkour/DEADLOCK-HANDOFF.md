@@ -95,6 +95,13 @@ this using the paired steps from that prefix; `entered_choices_agree`
 identifies the common argument when at least one role entered a choice.
 Neither result alone identifies the FIFO head at an arbitrary nested receive.
 
+`DeadlockAllOrigins.matched_receiver_packet_codec` proves the typed-packet
+part at **any** exposed receive: if a queued message has the receiver's
+occurrence and wire key, it has the original value and writer, and the
+receiver's dictionary decodes that writer. It makes no claim that the first
+message on the key has that occurrence. `matched_source_originals_from_head`
+combines this theorem with exactly that FIFO-head fact.
+
 ## Why the original projection fails
 
 [`counterexample/EXPECTED.md`](counterexample/EXPECTED.md) fixes the inputs and
