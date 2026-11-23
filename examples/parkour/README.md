@@ -4,10 +4,11 @@ This example targets the upstream `explicit-parallel` choreography library
 and its quorum-voting protocol. The [specification](SPEC.md) lists the
 bindings, type contracts, and projection behavior that the port must preserve.
 
-The separate [deadlock-freedom investigation](DEADLOCK-HANDOFF.md) found
-a well-formed two-role `Cond` whose generated endpoints can deadlock under
-the specified parallel `App` and FIFO rules. See the handoff for the Rocq
-counterexample and the results of the stricter warning gate.
+The [deadlock-freedom investigation](DEADLOCK-HANDOFF.md) found a
+counterexample in the original upstream revision: the choice owner's
+continuation could send on `Root` before the announcement on the same FIFO.
+The receiver expected the announcement first. The handoff records both
+this checked counterexample and the matching run after the fix.
 
 The [HasChor submodule](upstream) includes an unpublished, one-commit fix:
 the choice owner binds its broadcast before running the continuation.
@@ -123,6 +124,16 @@ The slice gate also checks finite role-value selection, endpoint scheduling,
 conditional alignment and matching steps, and a nonempty matched prefix for
 a generated send. `DeadlockFreedom` contributes partial lemmas on empty runs,
 final states and readiness under an input-availability premise.
+
+Two proofs explain how matching handles value-dependent code. In
+[`DeadlockPlayedPrefix.v`](theories/DeadlockPlayedPrefix.v),
+`matched_partial_results` recovers the return values of the roles that
+finished a prefix; a blocked peer need not supply a value. In
+[`DeadlockAllOrigins.v`](theories/DeadlockAllOrigins.v),
+`matched_receiver_packet_codec` connects an exposed receiver to the typed
+packet its sender actually produced, even inside nested continuations. It
+applies to packets at that occurrence. Showing that the **first** packet on
+the FIFO has that occurrence is a separate ordering obligation.
 
 `make -C examples/parkour check-final SCRATCH=1` additionally compiles the
 [public witnesses](theories/DeadlockContract.v) against the independent
