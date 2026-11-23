@@ -1,6 +1,7 @@
 """Select and verify the private Rocq installation used by the local model."""
 
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -14,19 +15,32 @@ PINS = (
 )
 
 
+def rocq_version() -> str:
+    version = subprocess.check_output(["rocq", "c", "--print-version"], text=True).split()[0]
+    if version != "9.0.1" and not re.fullmatch(r"9\.2(?:\.\d+)?", version):
+        raise SystemExit(f"need Rocq 9.0.1 or 9.2.x; got {version}")
+    return version
+
+
+def default_prefix() -> Path:
+    version = rocq_version()
+    return CACHE / ("pins" if version == "9.0.1" else f"pins-{version}")
+
+
 def prefix_path() -> Path:
-    return Path(os.environ.get("ITREE_PREFIX") or CACHE / "pins").resolve()
+    return Path(os.environ.get("ITREE_PREFIX") or default_prefix()).resolve()
 
 
 def ensure_prefix(prefix: Path) -> None:
     if prefix.is_dir():
         return
-    if prefix != CACHE / "pins" or os.environ.get("ITREE_PREFIX"):
+    if prefix != default_prefix() or os.environ.get("ITREE_PREFIX"):
         raise SystemExit(f"missing prepared ITree installation: {prefix}")
     CACHE.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(dir=CACHE) as tmp:
         stage = Path(tmp, "pins")
         subprocess.run([PARKOUR / "scripts/install-itree-pins", stage], check=True)
+        verify_prefix(stage)
         # Publish only a complete build. A concurrent successful build wins.
         if not prefix.exists():
             try:
@@ -48,9 +62,12 @@ def pinned_environment(prefix: Path) -> dict[str, str]:
 
 
 def verify_prefix(prefix: Path) -> None:
-    version = subprocess.check_output(["rocq", "c", "--print-version"], text=True)
-    if version.split()[0] != "9.0.1":
-        raise SystemExit(f"need Rocq 9.0.1; got {version.strip()}")
+    version = rocq_version()
+    stamp = prefix / "rocq-version"
+    # Only the original 9.0.1 installer produced unstamped installations.
+    built_with = stamp.read_text().strip() if stamp.exists() else "9.0.1"
+    if version != built_with:
+        raise SystemExit(f"{prefix}: built with Rocq {built_with}; active compiler is {version}")
     for repo, pin, relative, logical, count in PINS:
         source = prefix / "src" / repo
         git = ["git", "-C", str(source)]

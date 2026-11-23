@@ -1,5 +1,5 @@
 -Q . ParkourTheories
--Q ../../rocq9.0/base ""
+-Q ../build/run/base ""
 -Q ../build/run/transformers ""
 -Q ../build/run/manual ""
 -Q ../lib ""
@@ -13,6 +13,7 @@
 # Use the compiler's native-code default. Rocq 9.0's makefile otherwise adds
 # a deprecated flag and suppresses its warning after our -w +all.
 COQFLAGS = "$(OTHERFLAGS) $(COQFILTEREDEXTRAFLAGS)"
+ROCQ = "python3 ../scripts/parkour_rocq.py --driver"
 
 Choreography/Execution.v
 Choreography/Histories/CursorHistories.v

@@ -10,7 +10,14 @@ import tempfile
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 
-from itree_pins import ensure_prefix, pinned_environment, prefix_path, verify_prefix
+from itree_pins import (
+    ensure_prefix,
+    pinned_environment,
+    prefix_path,
+    rocq_version,
+    verify_prefix,
+)
+from parkour_base import SOURCE_BASE, prepare_base
 
 SCRIPTS = Path(__file__).resolve().parent
 PARKOUR = SCRIPTS.parent
@@ -28,11 +35,10 @@ if args.scratch:
     scratch = Path(tempfile.mkdtemp(dir="build", prefix="required-"))
     project = scratch / "parkour"
     project.mkdir()
-    (scratch / "rocq9.0").mkdir()
-    (scratch / "rocq9.0/base").symlink_to(Path("../rocq9.0/base").resolve(), target_is_directory=True)
+    (project / "scripts").symlink_to(SCRIPTS, target_is_directory=True)
     print(f"Scratch build: {scratch}", flush=True)
-base = project / "../rocq9.0/base"
 out = project / "build/run"
+base = out / "base"
 lib = project / "lib"
 deps = out / "transformers"
 support = out / "manual"
@@ -71,7 +77,7 @@ def modules() -> Iterator[Module]:
 
 def invocation(name: str, root: Path, target: Path, flags: Sequence[Arg]) -> list[Arg]:
     cli = ["--strict", "--target-version", "9.0", "-N", "-e", "../../base/edits",
-           *flags, "--iface-dir", base, "--iface-dir", support, "--iface-dir", deps, "--iface-dir", lib,
+           *flags, "--iface-dir", SOURCE_BASE, "--iface-dir", support, "--iface-dir", deps, "--iface-dir", lib,
            "-o", target]
     for source, rocq in origins:
         if source.rpartition(".")[0] == name:
@@ -90,8 +96,7 @@ for module in modules():
 if args.check_edits:
     raise SystemExit(0)
 
-if "version 9.0.1\n" not in subprocess.check_output(["rocq", "--version"], text=True):
-    raise SystemExit("activate a Rocq 9.0.1 switch")
+version = rocq_version()
 if subprocess.check_output(["stack", "exec", "--", "ghc", "--numeric-version"],
                            text=True).strip() != "9.10.3":
     raise SystemExit("expected GHC 9.10.3")
@@ -101,6 +106,7 @@ for directory in [out, lib]:
 for directory in [deps, lib, support]:
     directory.mkdir(parents=True, exist_ok=True)
 
+prepare_base(version, base)
 prefix = prefix_path()
 ensure_prefix(prefix)
 verify_prefix(prefix)
@@ -137,24 +143,24 @@ def build_project(directory: str) -> None:
     if not args.scratch:
         # Acceptance must observe diagnostics even for modules compiled earlier in an editor.
         run("make", "-f", "Makefile.coq", "clean", cwd=target.resolve(), env=rocq_env)
-    # A few Rocq warnings still return zero even with -w +all.
+    # The project compiler checks warnings before parallel output is interleaved.
     log = out / f"make-{directory}.log"
     with log.open("w") as transcript, subprocess.Popen(
         ["make", "-j2", "-f", "Makefile.coq"], cwd=target.resolve(), env=rocq_env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     ) as make:
-        warned = False
+        dependency_warning = False
         assert make.stdout is not None
         for line in make.stdout:
             transcript.write(line)
             sys.stdout.write(line)
             sys.stdout.flush()
-            warned |= line.startswith(("Warning:", "*** Warning:"))
+            dependency_warning |= line.startswith("*** Warning:")
         status = make.wait()
     if status:
         raise SystemExit(status)
-    if warned:
-        raise SystemExit(f"Rocq reported a warning: see {log}")
+    if dependency_warning:
+        raise SystemExit(f"Rocq dependency warning: see {log}")
 
 
 run("python3", SCRIPTS / "extract-contravariant.py", class_source / "Parkour/Contravariant.hs")

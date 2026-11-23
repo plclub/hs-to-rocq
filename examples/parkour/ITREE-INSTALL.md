@@ -2,12 +2,13 @@
 
 [`scripts/install-itree-pins`](scripts/install-itree-pins) builds all three libraries from
 fresh Git checkouts into a new directory. Run it from the repository root
-with Git, Bash, GNU Make and Rocq 9.0.1 on `PATH`. For example, with a
-prepared `rocq9` opam switch:
+with Git, Bash, Python 3, GNU Make and Rocq 9.0.1 or 9.2.x on `PATH`. For
+example, with a prepared Rocq 9.2 opam switch:
 
 ```sh
 dest="$PWD/parkour-itree-prefix"  # must not already exist
-opam exec --switch rocq9 -- examples/parkour/scripts/install-itree-pins "$dest"
+switch=cs2-rocq92  # use rocq9 for the Rocq 9.0.1 switch
+opam exec --switch "$switch" -- examples/parkour/scripts/install-itree-pins "$dest"
 ```
 
 The build uses up to four jobs; set `JOBS` to override. The script checks the
@@ -15,6 +16,14 @@ compiler version and reuses its core theories, Stdlib, Ltac2 and plugins.
 It creates a private `ROCQLIB`, clears ambient Rocq load-path overrides,
 and checks that imports of ExtLib, Paco and ITree all fail before installing
 anything. It does not install into or select an opam switch.
+
+Parkour builds this prefix automatically when `ITREE_PREFIX` is unset.
+Rocq 9.0.1 keeps the original `examples/parkour/.itree-cache/pins`;
+9.2 uses its sibling `pins-9.2` (or `pins-9.2.x` if the compiler prints a
+patch version). To reuse a manually built prefix, run `export ITREE_PREFIX="$dest"`.
+The verifier checks the compiler stamp, pinned source revisions, tracked source
+files, and exact installed `.vo` inventory and bytes against the build tree.
+An older, unstamped 9.0.1 prefix is accepted only on 9.0.1.
 
 | Logical root | Source revision |
 | --- | --- |
@@ -32,7 +41,7 @@ It observes a visible event with a Boolean reply and proves that replying
 To repeat that check using only the staged libraries and the same compiler:
 
 ```sh
-opam exec --switch rocq9 -- bash -c '
+opam exec --switch "$switch" -- bash -c '
   cd "$1"
   unset COQPATH ROCQPATH COQLIB ROCQLIB COQCORELIB ROCQRUNTIMELIB
   runtime=$(rocq c -config | sed -n "s/^COQCORELIB=//p")
@@ -46,3 +55,10 @@ the final resumption check. The installation contained 117 ExtLib, 41 Paco
 and 68 ITree `.vo` files. The repeat command exited 0 without diagnostics;
 a separate `Print Assumptions Resume.reply_resumes.` reported
 `Closed under the global context`.
+
+The same three Git revisions also built from scratch on macOS with Rocq
+9.2 (opam `rocq-core.9.2.0`), Stdlib 9.2.0 and OCaml 5.4.1. The verifier
+matched all 226 installed objects to their pinned builds. On both switches,
+a smoke file explicitly imported `ExtLib.Structures.Monad`, `Paco.paco` and
+`ITree.ITree`, compiled the resumption proof under `-w +all`, and reported
+`reply_resumes` closed under the global context.

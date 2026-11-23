@@ -77,6 +77,12 @@ while IFS=$'\t' read -r name expected; do
         reject "$name" "$expected" -- compile "$controls" "$name"
     fi
 done < "$controls/controls.tsv"
+# The 9.2 exception must keep the diagnostic visible, even on success.
+if [[ $(rocq c --print-version) == 9.2* ]]; then
+    echo 'Notation ParkourList := list.' > "$controls/Compat.v"
+    compile "$controls" Compat > "$tmp/compat.log"
+    rg -F 'notation-for-abbreviation' "$tmp/compat.log"
+fi
 compile "$controls" Alias
 compile "$controls" AliasType
 reject axiom-alias 'Assumption check failed for Alias.keep' 'Alias.opaqueKeep' -- check_closed "$controls" Alias.keep

@@ -12,7 +12,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 outputs="$tmp/modules"
 mkdir "$outputs" "$tmp/audit"
-flags=(-Q ../rocq9.0/base '' -Q build/run/manual '' -Q build/run/transformers ''
+flags=(-Q build/run/base '' -Q build/run/manual '' -Q build/run/transformers ''
        -Q lib '' -Q "$outputs" Counterexample)
 for module in Local Family Source Network Projection Trace History Refutation ObservableRefutation; do
     cp "counterexample/$module.v" "$outputs/"

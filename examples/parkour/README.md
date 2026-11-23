@@ -136,19 +136,32 @@ whose parent is `8ff9fadc480ddbd0397db6c3a12240c39fd9b5fb`.
 rejects extra files in the source directories. The checkout also supplies the
 `mkLoc` Template Haskell splices used by the upstream protocol.
 
-The target toolchain is the repository's Stack build (GHC 9.10.3) and
-Rocq 9.0.1. Activate the Rocq switch before running the checks. Build the
-Rocq 9 base and initialize the GHC submodule for the `transformers` sources:
+Use the repository's Stack build (GHC 9.10.3) and put Rocq 9.0.1 or Rocq 9.2
+on `PATH`. Initialize the GHC and `transformers` submodules:
 
 ```sh
 git submodule update --init examples/ghc/ghc
 git -C examples/ghc/ghc submodule update --init libraries/transformers
 stack build
 examples/parkour/scripts/check-ghc
-make -C examples/rocq9.0 base
-make -C examples/parkour clean
-make -C examples/parkour check
+make -C examples/rocq9.0 base    # only with Rocq 9.0.1
+make -C examples/parkour
 ```
+
+Rocq 9.2 dependency setup skips the `examples/rocq9.0 base` command. Parkour
+compiles the same base sources under `build/run/base`, leaving the 9.0.1
+objects untouched. Both compilers use the translator's `9.0` output format.
+Run `make -C examples/parkour` after switching compilers to rebuild the
+generated modules and proofs. `make -C examples/parkour check` also runs lint,
+the Haskell comparison, and the harness controls.
+
+The Parkour compiler driver enables all warnings on both versions. On 9.0.1
+every warning is fatal. On 9.2 exactly three diagnostic categories remain
+visible but nonfatal: `notation-for-abbreviation`, `bad-template-constraint`,
+and `register-all`. This lets both versions compile the same frozen sources.
+The theorem assumptions, dependency checks and negative controls are the same
+on both versions. The shared base and pinned external libraries use their own
+upstream build flags.
 
 `scripts/check-ghc` installs the snapshot packages in `upstream-packages.txt`,
 typechecks the pinned `Main.hs` with GHC 9.10.3, and checks the four singleton
@@ -195,9 +208,10 @@ and `ReaderT` inductive. `ChoreoSig` has no such edit.
 
 `make -C examples/parkour check-deadlock-local`
 ([`scripts/check-deadlock-local.py`](scripts/check-deadlock-local.py)) runs the
-local semantics gate on its own with Rocq 9.0.1. The first run uses
+local semantics gate on its own with either supported compiler. The first run uses
 [`scripts/install-itree-pins`](ITREE-INSTALL.md) to build ExtLib, Paco, and
-Interaction Trees under `.itree-cache/pins`; this cache survives `make clean`.
+Interaction Trees under `.itree-cache/` in a compiler-specific directory;
+these installations survive `make clean`.
 To reuse a prepared installation, set `ITREE_PREFIX` to the installer’s output
 directory. Each run verifies the source revisions, installed objects, and
 [frozen local contracts](tests/DEADLOCK-LOCAL-FREEZE.md) before compiling

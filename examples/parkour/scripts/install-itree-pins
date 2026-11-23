@@ -6,8 +6,7 @@ if [[ $# != 1 ]]; then
   exit 2
 fi
 unset COQPATH ROCQPATH COQLIB ROCQLIB COQCORELIB ROCQRUNTIMELIB
-version=$(rocq c --print-version)
-[[ ${version%% *} == 9.0.1 ]] || { echo "need Rocq 9.0.1; got $version" >&2; exit 1; }
+version=$(cd -- "$(dirname -- "$0")" && python3 -c 'from itree_pins import rocq_version; print(rocq_version())')
 base=$(rocq c -where)
 runtime=$(rocq c -config | sed -n 's/^COQCORELIB=//p')
 mkdir -- "$1"
@@ -66,4 +65,5 @@ Example reply_resumes :
 Proof. reflexivity. Qed.
 EOF
 rocq c -q -w +all Resume.v
+echo "$version" > rocq-version
 echo "Installed and checked the three pins under $ROCQLIB/user-contrib"
