@@ -51,7 +51,8 @@ MODULES = ("theories/DeadlockRuns", "tests/DeadlockRunsExpect", "tests/DeadlockR
            "theories/DeadlockPartialValues", "theories/DeadlockRoster",
            "theories/DeadlockAlignment", "theories/DeadlockSourceView", "theories/DeadlockAlignmentProgress",
            "tests/DeadlockAlignmentProgressCases", "theories/DeadlockMatch",
-           "theories/DeadlockMatchStep", "tests/DeadlockMatchStepExpect", "theories/DeadlockHead",
+           "theories/DeadlockMatchStep", "tests/DeadlockMatchStepExpect", "tests/DeadlockExtraMatchCases",
+           "theories/DeadlockHead",
             "theories/DeadlockFrontiers", "tests/DeadlockRepairMatchCases", "theories/DeadlockReadyInputs",
             "theories/DeadlockCoherence", "theories/DeadlockReplay", "theories/DeadlockPlayedValues",
             "theories/DeadlockPlayedFamily", "theories/DeadlockPast",
@@ -201,6 +202,11 @@ CLIENT = ("Main.quorumVoting", "DeadlockQuorum.quorum_well_formed",
           "DeadlockQuorumCases.quorum_has_frozen_type",
           "DeadlockQuorumFreedomExpect.quorum_deadlock_freedom_expected")
 NESTED = {
+    ("DeadlockExtraMatchCases", "ExtraMatch"): """Parallel.left_branch_actual_match
+        Parallel.right_branch_actual_match Parallel.cross_branch_match_rejected Parallel.wrong_branch_packet
+        SelfComm.actual_empty_match SelfComm.generated_exact_return SelfComm.generated_final
+        SelfComm.fabricated_self_send_rejected Choice.multi_peer_pending_match
+        Choice.invented_peer_value_rejected Choice.singleton_actual_match""",
     ("DeadlockRepairMatchCases", "RepairMatch"): """complete_repaired_match actual_machine_four_actions
         source_final positive_between_sends_and_receives positive_after_choice_receive
         wrong_tag_prefix_rejected invented_choice_prefix_rejected swapped_fifo_prefix_rejected
