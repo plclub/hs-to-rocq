@@ -15,10 +15,10 @@ exactly the original source entry in `DeadlockLibraryExpect.sha256`.
 
 That manifest remains byte-for-byte unchanged, with SHA-256
 `c91b31607d06c104e763fe3feb574bca467911b2ebd4b1a4981c721f44d68b66`.
-The checker compares its original source entry against the pinned Git blob,
-not against this amended working source. It checks the amended source
-separately. A direct checksum of the historical manifest against the current
-source is expected to fail on that entry; overwriting it is not the migration.
+The original source entry records provenance only. The checker verifies the
+manifest digest but does not fetch or check the superseded source. It checks
+the amended semantics and its acceptance fixture through
+`DeadlockSourceOccurrenceAmendment.sha256` and `namespace-migration.tsv`.
 
 The existing `DeadlockSourceExpect.v`, `DeadlockSourceExtraExpect.v`,
 `DeadlockLibraryExpect.v`, and all their frozen propositions are unchanged.

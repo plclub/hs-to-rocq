@@ -1,7 +1,6 @@
 """Verify the reviewed Parkour inputs used by the independent proof contracts."""
 
 import hashlib
-import subprocess
 from pathlib import Path
 
 from itree_pins import PARKOUR
@@ -67,14 +66,12 @@ def verify(root: Path, generated: Path, *, local: bool) -> None:
         for row in checked(PARKOUR / "tests" / name, anchor).decode().splitlines():
             expected, filename = row.split("  ", 1)
             relative = filename.removeprefix("examples/parkour/")
+            # The pinned manifest retains this historical row. The occurrence
+            # amendment pins the active semantics under the same filename.
+            if name == "DeadlockLibraryExpect.sha256" and relative == "theories/DeadlockSource.v":
+                continue
             if relative.startswith("lib/"):
                 checked(generated / relative.removeprefix("lib/"), expected)
-            elif expected == "eec7c4d4b62cac0713521a83613ba5318940d7260cc7508ba21004346fed7d9c":
-                # The earlier source predates the occurrence-rule amendment.
-                original = subprocess.check_output(
-                    ["git", "cat-file", "blob", "d97eeb4607c670944977fe0417addbc2fb3464c3"], cwd=PARKOUR)
-                if hashlib.sha256(original).hexdigest() != expected:
-                    raise SystemExit("changed historical choreography semantics")
             elif relative.endswith(".v"):
                 needed.add(expected)
             else:

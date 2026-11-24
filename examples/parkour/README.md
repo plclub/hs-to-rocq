@@ -124,6 +124,10 @@ multiple rows with that historical SHA-256 explicitly identify every split
 piece. [`scripts/frozen_inputs.py`](scripts/frozen_inputs.py) verifies the
 migration table's own pinned digest and compares each file's exact bytes against
 its reviewed SHA-256; it never derives an expected digest from the working copy.
+`DeadlockLibraryExpect.sha256` retains the original `DeadlockSource.v` digest
+as a historical record. The audit skips that row and checks the current source
+modules against the [occurrence-rule amendment](tests/DeadlockSourceOccurrenceAmendment.sha256)
+through the same migration table.
 
 An independent namespace-migration review on Rocq 9.0.1 confirmed all 42
 digest triples recorded at `e69c765a`. Compared with `fe8a2152`, all 818

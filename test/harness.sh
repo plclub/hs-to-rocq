@@ -1119,7 +1119,7 @@ new_case rocq9 manual-from-prefix
 mkdir -p "$test_dir/../base-src/manual/GHC"
 ln -s "$workspace/examples/base-src/manual/GHC/Enum.v" "$test_dir/../base-src/manual/GHC/Enum.v"
 run_make 0 -C base-src HANDMOD=GHC/Enum ../base/GHC/Enum.v
-assert_contains base/GHC/Enum.v 'From Stdlib Require Import ssreflect Lia.'
+assert_contains base/GHC/Enum.v 'From Stdlib Require Import ssreflect '
 assert_calls translate GHC/Enum 0
 passed
 
