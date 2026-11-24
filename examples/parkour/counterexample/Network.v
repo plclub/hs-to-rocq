@@ -1,4 +1,5 @@
-From Stdlib Require Import Lists.List NArith.BinNat.
+From Stdlib Require Import Lists.List.
+From Stdlib Require NArith.BinNat.
 Require Import Choreography.Network Control.Monad.Tree Parkour.Codec.
 Import ListNotations.
 
@@ -6,7 +7,7 @@ Import ListNotations.
 Definition loc := Choreography.Location.LocTm.
 Definition wire := GHC.Base.String.
 Definition channel := (loc * loc * SessionId)%type.
-Definition loc_eq_dec := list_eq_dec N.eq_dec.
+Definition loc_eq_dec := list_eq_dec BinNat.N.eq_dec.
 Definition sid_eq_dec (x y : SessionId) : {x = y} + {x <> y}.
 Proof. decide equality; decide equality; decide equality. Defined.
 Definition channel_eq_dec (x y : channel) : {x = y} + {x <> y}.
@@ -61,6 +62,7 @@ Inductive step (self : loc) : forall a, net a -> queues -> net a -> queues -> Pr
     step self b (App (Pure f) (Pure x)) q (Pure (f x)) q.
 
 Definition final {a} (t : net a) : Prop := exists v, t = Pure v.
+#[universes(template)]
 Inductive run (self : loc) (a : Type) :
     net a -> queues -> net a -> queues -> Prop :=
 | run_refl : forall t q, run self a t q t q

@@ -1,14 +1,11 @@
 # Parkour: projecting a Choreo2 choreography
 
 This example targets the upstream `explicit-parallel` choreography library
-and its quorum-voting protocol. The [specification](SPEC.md) lists the
-bindings, type contracts, and projection behavior that the port must preserve.
-
-The [deadlock-freedom investigation](DEADLOCK-HANDOFF.md) found a
-counterexample in the original upstream revision: the choice owner's
-continuation could send on `Root` before the announcement on the same FIFO.
-The receiver expected the announcement first. The handoff records both
-this checked counterexample and the matching run after the fix.
+and its quorum-voting protocol. The [translation specification](SPEC.md)
+defines what the port must preserve. The [deadlock-freedom contracts](DEADLOCK-FREEDOM-SPEC.md)
+are checked against the repaired projection, in which the `Cond` owner broadcasts
+before its continuation can send. The [original-projection counterexample](counterexample/UPSTREAM.md)
+exercises the opposite ordering on the same FIFO.
 
 With the dependencies below installed, run these commands from the repository root:
 
@@ -113,37 +110,15 @@ and `Reserved` forms. It checks Parkour-authored `.v` files, including
 fixtures and translation preambles, and reports each violation by path and
 line. The check needs only Python and runs as part of `check-layout`.
 
-Frozen `.sha256` manifests under `tests/` and the immutable specifications
-([`SPEC.md`](SPEC.md) and [`DEADLOCK-FREEDOM-SPEC.md`](DEADLOCK-FREEDOM-SPEC.md))
-retain their historical `Deadlock*` filenames and digests.
-[`tests/namespace-migration.tsv`](tests/namespace-migration.tsv) records 42
-tab-separated rows of `(historical input SHA-256, reviewed canonical file SHA-256,
-project-relative filename)`. When a historical input was split across multiple
-modules (compared with `git show fe8a2152:examples/parkour/theory_sources.py`),
-multiple rows with that historical SHA-256 explicitly identify every split
-piece. [`scripts/frozen_inputs.py`](scripts/frozen_inputs.py) verifies the
-migration table's own pinned digest and compares each file's exact bytes against
-its reviewed SHA-256; it never derives an expected digest from the working copy.
-`DeadlockLibraryExpect.sha256` retains the original `DeadlockSource.v` digest
-as a historical record. The audit skips that row and checks the current source
-modules against the [occurrence-rule amendment](tests/DeadlockSourceOccurrenceAmendment.sha256)
-through the same migration table.
-
-An independent namespace-migration review on Rocq 9.0.1 confirmed all 42
-digest triples recorded at `e69c765a`. Compared with `fe8a2152`, all 818
-historical exports matched on their normalized elaborated types, and all
-467 mutually unfoldable definitions matched their normalized bodies. The
-remaining 54 definition entries did not unfold on either side; the comparison
-does not claim proof-term identity.
-
-Removing local notations changed five canonical digests: `Execution` and
-`RoleSteps` in `theories/Choreography/`, `CommunicationOrder` and
-`OccurrenceDelivery` in `tests/Choreography/`, and `ScheduledTraceContracts`
-in `tests/FIFO/`. Before updating those digests, we compiled the five files
-against the same dependencies as their `e69c765a` originals on Rocq 9.0.1.
-The module signatures, `About` reports for all 160 exports, and printed
-definition, projection, and induction-scheme bodies matched with notations
-disabled and universes visible. Only declaration locations differed.
+[`scripts/frozen_inputs.py`](scripts/frozen_inputs.py) checks the independent
+contracts against pinned manifests and maps their source digests to current
+modules through [`tests/namespace-migration.tsv`](tests/namespace-migration.tsv).
+The [control manifest](tests/slice1.sha256) pins the deadlock-freedom spec at
+SHA-256 `688b31eb14f43ccf3b557a3d86aee532eb4aaf2e4e6ce9497c15fc422c326327`.
+The [network cases](tests/DEADLOCK-NETWORK-FREEZE.md) and
+[source-ordering cases](tests/deadlock-source-ordering-v1.md) are also checked
+byte for byte. For the source receive rule, the checker uses the
+[occurrence amendment](tests/DeadlockSourceOccurrenceAmendment.md).
 
 The [HasChor submodule](upstream) includes an unpublished, one-commit fix:
 the choice owner binds its broadcast before running the continuation.
@@ -290,10 +265,9 @@ checks either projected `App` branch sending first, self-communication, and
 single- and multi-peer choices, including a peer still waiting to hear.
 The [independent wire-run expectations](tests/FIFO/ScheduledTraceContracts.v)
 (`ParkourTheories.Tests.FIFO.ScheduledTraceContracts`)
-were frozen in `60653fa8` before their witnesses. One schedule leaves a
-single peer with both the announcement and data on `Root`; another puts
-self-communication and a real exchange in different `App` branches.
-One candidate negative in that file changed only the value inside a
+cover schedules where a single peer holds both the announcement and data on
+`Root`, or where self-communication and a real exchange occur in different `App`
+branches. One candidate negative in that file changes only the value inside a
 source `HearAction`, leaving the observed bytes and receiver state unchanged.
 The action hides its payload type. In
 [`InvalidSourceTraces.v`](tests/FIFO/InvalidSourceTraces.v)
@@ -301,10 +275,10 @@ The action hides its payload type. In
 `invented_value_transport_obstruction` shows that a type equality transporting
 `true` to `false` would make that candidate incompatible with the positive run.
 The [wire-value control](tests/FIFO/WrongAnnouncementValue.v)
-(`ParkourTheories.Tests.FIFO.WrongAnnouncementValue`), frozen separately in
-`a85f7c51`, tests the peer actually receiving `"False"` after `"True"` was
-announced. The original candidate remains in the frozen file; the checker
-requires the observable rejection and the transport result separately.
+(`ParkourTheories.Tests.FIFO.WrongAnnouncementValue`) tests the peer actually
+receiving `"False"` after `"True"` was announced. The original candidate remains
+in the frozen contract; the checker requires the observable rejection and the
+transport result separately.
 
 Two proofs explain how matching handles value-dependent code. In
 [`ReturnedValues.v`](theories/Projection/Matching/ReturnedValues.v)
@@ -318,21 +292,28 @@ packet its sender actually produced, even inside nested continuations. It
 applies to packets at that occurrence. The
 [frontier proof](theories/Projection/Matching/MatchedReceiveSafety.v)
 (`ParkourTheories.Projection.Matching.MatchedReceiveSafety`) shows that the
-**first** packet on the FIFO has that occurrence. The [handoff](DEADLOCK-HANDOFF.md)
-traces these two results through to preservation, scheduling, readiness,
-deadlock reflection, and their quorum client.
+**first** packet on the FIFO has that occurrence.
 
-`make -C examples/parkour check-required` compiles the
-[public witnesses](tests/Projection/RunAndProgressTypes.v)
-(`ParkourTheories.Tests.Projection.RunAndProgressTypes`) against the
-independent [library types](tests/Projection/RunCorrespondenceTypes.v) and
-[quorum type](tests/Protocols/QuorumProgress.v), then audits the actual
-exports (`ParkourTheories.Projection.Progress`,
-`ParkourTheories.Projection.RunCorrespondence`, and
-`ParkourTheories.Protocols.QuorumVoting`) under `build/run/final/`. A missing
-proof makes this target fail. `check-final` is an alias for the same checks.
-Normal `make check` runs `check-required` once after `check-layout`, `lint`,
-the Haskell comparison, and harness controls.
+Three modules contain the public theorems:
+
+- [`RunCorrespondence.v`](theories/Projection/RunCorrespondence.v) proves
+  `network_run_has_source`: every finite run of the generated endpoints
+  has a matching source run.
+- [`Progress.v`](theories/Projection/Progress.v) proves `matched_ready` for
+  each reachable matched pair, `epp_preserves_deadlock_freedom`, and
+  `deadlock_reflection`.
+- [`QuorumVoting.v`](theories/Protocols/QuorumVoting.v) proves `quorum_well_formed`
+  for the generated four-role program. Its `quorum_deadlock_freedom` corollary
+  requires source deadlock freedom for the given local model, stores, and
+  input; the client's STM actions can block.
+
+`check-required` compiles the [public witnesses](tests/Projection/RunAndProgressTypes.v)
+against the independent [library types](tests/Projection/RunCorrespondenceTypes.v)
+and [quorum type](tests/Protocols/QuorumProgress.v). Generated
+`Choreography.Choreo2.epp` and the four library theorems must each report
+`Closed under the global context`. The two quorum proofs may use only the
+14 [permitted runtime constants](tests/slice1/client-allowlist). The individual
+reports are under `build/run/semantics/` and `build/run/final/`.
 
 For clean outputs while another process uses the generated libraries, pass
 `SCRATCH=1` to the build or check target. Each run prints its fresh directory
@@ -344,49 +325,32 @@ and `theories/` there; `make -C examples/parkour check SCRATCH=1` also builds
 
 The translation assertions live under [`tests/Translation/`](tests/Translation/)
 in the `ParkourTheories.Tests.Translation` namespace:
-[`ReaderTreeUniverses.v`](tests/Translation/ReaderTreeUniverses.v),
-[`GeneratedBindingTypes.v`](tests/Translation/GeneratedBindingTypes.v),
-[`EndpointTraces.v`](tests/Translation/EndpointTraces.v),
-[`ChoiceBroadcastOrder.v`](tests/Translation/ChoiceBroadcastOrder.v), and
-[`QuorumEndpoints.v`](tests/Translation/QuorumEndpoints.v).
-
-**Native project validation (2026-11-22).** On Rocq 9.0.1 and GHC 9.10.3,
-`make clean` followed by `make check` passed in this example. The standalone
-`_CoqProject` builds compiled 83 library modules and 51 fixtures without
-warnings. Both native builds also rejected the `arguments-assert` and
-`disj-pattern-notation` controls. Make tracked `Semantics/LocalEffects.v`
-as a transitive dependency of `Projection/Progress.vo` and left the unrelated
-`Semantics/Roles.vo` current. The [handoff](DEADLOCK-HANDOFF.md) lists the
-public theorem assumption reports.
-
-**Historical strict generator check (2026-11-22, pre-migration names):** At
-upstream `872bb12f`, `build-example.py` regenerated the dependencies and the
-HasChor modules into empty scratch output directories. With the updated Rocq 9
-base, all compiled on Rocq 9.0.1 under `rocq c -q -w +all`. The `epp`
-assumption check passed, as did `ReaderTree`, `Required`, `Behavior`,
-`OwnerCond`, `Integration` (now under `ParkourTheories.Tests.Translation.*`),
-and the five individual `OwnerCond` closure checks. Both shared compiler suites
-and the VC1 edit-policy controls also passed.
-
-**Historical translation baseline (`3e36e582`, before the all-warnings gate):**
-The clean `check` above exited 0 on GHC 9.10.3 and Rocq 9.0.1 at upstream
-`8ff9fadc480ddbd0397db6c3a12240c39fd9b5fb`. Rocq reported
-`Choreography.Choreo2.epp` **Closed under the global context**, compiled all
-eight behavior assertions, and typechecked the generated `Main.quorumVoting`
-projections at `candidate`, `voter1`, `voter2`, and `voter3`. The validation
-used an isolated `STACK_WORK` directory for the in-tree translator.
+[`ReaderTreeUniverses.v`](tests/Translation/ReaderTreeUniverses.v) (universe
+polymorphism across `ReaderT` and `Tree`),
+[`GeneratedBindingTypes.v`](tests/Translation/GeneratedBindingTypes.v) (expected
+types of the required generated bindings),
+[`EndpointTraces.v`](tests/Translation/EndpointTraces.v) (projected `Comm`,
+`App`, `par`, `Bind`, and `Cond` behavior),
+[`ChoiceBroadcastOrder.v`](tests/Translation/ChoiceBroadcastOrder.v) (the
+repaired `Cond` owner's `Bind` root and session-ID nesting, with closed
+assumption checks on all five theorems), and
+[`QuorumEndpoints.v`](tests/Translation/QuorumEndpoints.v) (projected
+`Main.quorumVoting` endpoints at `candidate`, `voter1`, `voter2`, and `voter3`).
 
 `check` includes `make -C examples/parkour lint`, which runs strict mypy,
 Ruff, and ShellCheck on [`scripts/`](scripts/). Install `uv` and `shellcheck`
 for the default commands, or use `MYPY=mypy RUFF=ruff` with locally installed
 Python tools. The typed scripts require Python 3.10 or later.
 
-`make -C examples/parkour test-checks` runs [`scripts/test_layout.py`](scripts/test_layout.py)
-and [`scripts/test-checks.sh`](scripts/test-checks.sh) without generating the
-library. For example, it compiles a handwritten replacement that computes the
-right answer, then checks that the translator refuses to credit it as a source
-definition. Another control typechecks an alias to an axiom and checks that the
-assumptions test rejects it.
+`make -C examples/parkour test-checks` runs the Python scanner unit tests
+([`scripts/test_layout.py`](scripts/test_layout.py) and
+[`scripts/test_local_notation.py`](scripts/test_local_notation.py)) and the
+shell controls in [`scripts/test-checks.sh`](scripts/test-checks.sh) (including
+[`scripts/test-vc1`](scripts/test-vc1)) without generating the library. For
+example, it compiles a handwritten replacement that computes the right answer,
+then checks that the translator refuses to credit it as a source definition.
+Another control typechecks an alias to an axiom and checks that the assumptions
+test rejects it.
 
 Both build targets verify the pinned source bytes, regenerate the HasChor
 modules in an empty `lib/`, and compile the support models and `transformers`

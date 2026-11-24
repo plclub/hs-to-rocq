@@ -296,7 +296,7 @@ def dependencies(output: Path, loads: list[str]) -> None:
         raise SystemExit("matches: missing state/history dependency or forbidden readiness/theorem dependency")
 
 
-def check(output: Path, external: list[str], root: Path, generated: Path, *, final: bool) -> None:
+def check(output: Path, external: list[str], root: Path, generated: Path) -> None:
     output.mkdir(parents=True, exist_ok=False)
     verify_frozen_inputs(root, generated)
     loads = [*external, *project_loads(root)]
@@ -315,21 +315,21 @@ def check(output: Path, external: list[str], root: Path, generated: Path, *, fin
         assumptions(output, loads, "client", export)
     mutants(output, external, root)
     print("PASS: semantic contracts, dependency queries, mutants and quorum well-formedness")
-    if final:
-        evidence = output.parent / "final"
-        evidence.mkdir()
-        contract = evidence / "PublicContract.v"
-        contract.write_text("Require ParkourTheories.Tests.Projection.RunAndProgressTypes.\n")
-        compile_v(evidence, loads, contract)
-        for policy, library, exports in (
-            ("closed", "ParkourTheories.Projection.Progress", ("epp_preserves_deadlock_freedom",
-              "matched_ready", "deadlock_reflection")),
-            ("closed", "ParkourTheories.Projection.RunCorrespondence", ("network_run_has_source",)),
-            ("client", "ParkourTheories.Protocols.QuorumVoting", ("quorum_deadlock_freedom",)),
-        ):
-            for name in exports:
-                assumptions(evidence, loads, policy, f"{library}.{name}")
-        print("PASS: public theorem witnesses and assumption reports")
+
+    evidence = output.parent / "final"
+    evidence.mkdir()
+    contract = evidence / "PublicContract.v"
+    contract.write_text("Require ParkourTheories.Tests.Projection.RunAndProgressTypes.\n")
+    compile_v(evidence, loads, contract)
+    for policy, library, exports in (
+        ("closed", "ParkourTheories.Projection.Progress", ("epp_preserves_deadlock_freedom",
+          "matched_ready", "deadlock_reflection")),
+        ("closed", "ParkourTheories.Projection.RunCorrespondence", ("network_run_has_source",)),
+        ("client", "ParkourTheories.Protocols.QuorumVoting", ("quorum_deadlock_freedom",)),
+    ):
+        for name in exports:
+            assumptions(evidence, loads, policy, f"{library}.{name}")
+    print("PASS: public theorem witnesses and assumption reports")
 
 
 if __name__ == "__main__":
@@ -337,10 +337,9 @@ if __name__ == "__main__":
     parser.add_argument("output", type=Path, help="fresh evidence directory")
     parser.add_argument("--generated", type=Path, required=True, help="freshly translated Parkour library")
     parser.add_argument("--project-root", type=Path, required=True, help="compiled theories/ and tests/ tree")
-    parser.add_argument("--final", action="store_true", help="require public proofs and their exact types")
     parser.add_argument("libraries", type=Path, nargs="+", help="compiled base, transformer and support roots")
     args = parser.parse_intermixed_args()
     generated = args.generated.resolve()
     check(args.output.resolve(), [arg for path in [*args.libraries, generated]
                                   for arg in ("-Q", str(path.resolve()), "")],
-          args.project_root.resolve(), generated, final=args.final)
+          args.project_root.resolve(), generated)

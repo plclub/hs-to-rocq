@@ -27,8 +27,7 @@ check-no-local-notation:
 
 PYTHON_SOURCES := $(wildcard scripts/*.py)
 SHELL_SOURCES := $(addprefix scripts/,check-ghc checked-tool \
-	check-counterexample check-counterexample-haskell check-deadlock-repair-match \
-	test-checks.sh test-vc1)
+	check-counterexample check-counterexample-haskell test-checks.sh test-vc1)
 lint:
 	$(MYPY) --strict --cache-dir=build/mypy $(PYTHON_SOURCES)
 	$(RUFF) check --no-cache $(PYTHON_SOURCES)
@@ -46,9 +45,6 @@ deps:
 check-deadlock-local:
 	rm -rf build/deadlock-local
 	python3 scripts/check-deadlock-local.py --output build/deadlock-local
-
-.PHONY: check-final
-check-final: check-required
 
 check-required: check-layout
 	$(BUILD_EXAMPLE) --check

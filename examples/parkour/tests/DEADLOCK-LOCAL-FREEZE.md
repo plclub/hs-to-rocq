@@ -1,95 +1,36 @@
-# Local acceptance freeze
+# Local-effect contracts
 
-`deadlock-local.sha256` records the first pre-proof expectation draft.
-That draft did not elaborate: the `Vis` lambda needed a Boolean annotation,
-and the fixture reply function placed its role before its type argument.
-The draft also needed an explicit template-universe declaration to meet the
-all-warnings policy. These are elaboration corrections, not changed literal
-outcomes or propositions. The original digest remains as an audit record.
+Source `Locally` and target `Exec` use the same
+[`local_model`](../theories/Semantics/LocalEffects.v). Each branch receives the
+current shared store. The local tests exercise this model independently of the
+generated choreography and network.
 
-`deadlock-local-v1.sha256` freezes the corrected, successfully compiled
-expectations before any acceptance proof bodies were written. Reruns check
-this fixed manifest; they must not regenerate it from the working copy.
-The old manifest is historical and intentionally does not match v1.
+[`LocalEffectContracts.v`](Semantics/LocalEffectContracts.v) and its
+[witnesses](Semantics/LocalEffectWitnesses.v) fix a `Get : request bool` at
+role 7, store 3: the reply `true` sets the store to 4 and resumes the
+continuation with result 11. The tests reject a different role, a blocked
+store, and an invented reply. A second event stays suspended after one step.
 
-The local component does not import generated source/network syntax. It is
-an independently checked shared primitive, not an integrated preservation
-proof. Source `Locally` and target `Exec` must use the same `local_model`,
-and each branch must receive the current shared store, not a private copy.
-
-The additive `deadlock-local-exact.sha256` freezes two further generic
-contracts before their proofs: return is exactly the independent finite
-view ending in `RetF`; a step is exactly a finite view ending in `VisF`
-with an enabled reply, the real typed event/reply trace entry, and the
-continuation resumed at that reply. `DeadlockLocalExactCases.v` proves
-both directions. The expectation files contain no proof bodies.
+[`ExactObservations.v`](Semantics/ExactObservations.v) and its
+[equivalence proofs](Semantics/ObservationEquivalences.v) characterize return
+as a finite view ending in `RetF`. An event step requires a finite view ending
+in `VisF`, an enabled typed reply, and resumption at that reply. An infinite
+sequence of `Tau` steps admits neither observation.
 
 ## Standalone gate
 
-From the repository root, with the three Git pins (`coq-ext-lib`, `coq-paco`,
-`coq-itree`) installed in the compiler's opam switch via
-[`../parkour-deps.opam`](../parkour-deps.opam) (see
-[`../ITREE-INSTALL.md`](../ITREE-INSTALL.md)):
+Install the [switch dependencies](../ITREE-INSTALL.md), then run this command
+from the repository root:
 
 ```sh
 opam exec --switch="$switch" --set-switch -- make -C examples/parkour check-deadlock-local
-opam exec --switch="$switch" --set-switch -- python3 examples/parkour/scripts/check-deadlock-local.py \
-  --output "$NEW_EVIDENCE_DIRECTORY"
 ```
 
-Ordinary `opam exec --switch="$switch" -- ...` also works (`switch=rocq9` for
-Rocq 9.0.1 or `switch=cs2-rocq92` for Rocq 9.2). The gate does not install
-packages. It checks the active compiler (Rocq 9.0.1 or 9.2.x) and verifies that
-all three `pin-depends` entries from [`../parkour-deps.opam`](../parkour-deps.opam)
-are installed in the active switch without pending rebuilds, verifies both
-active digest manifests through [`../scripts/frozen_inputs.py`](../scripts/frozen_inputs.py)
-and [`namespace-migration.tsv`](namespace-migration.tsv), copies the five
-canonical modules into `$NEW_EVIDENCE_DIRECTORY/project`, and compiles them
-through production [`../scripts/parkour_rocq.py`](../scripts/parkour_rocq.py)
-under `-Q .../theories ParkourTheories` and `-Q .../tests ParkourTheories.Tests`
-(`ExtLib`, `Paco`, and `ITree` load from the switch without `-Q` mappings).
-Every acceptance compile uses `parkour_rocq.py`'s warning policy (`rocq c -q -w +all`
-on 9.0.1, with the three nonfatal compatibility categories on 9.2). Each
-compiler/checker invocation has a 120-second timeout. Each of the 20
-independently named exports, including helpers, receives its own fresh
-assumption query through [`../scripts/check-assumptions.py`](../scripts/check-assumptions.py);
-the entire output must be exactly `Closed under the global context`.
-The output directory retains the copied inputs and full compiler/query logs.
-
-**Historical standalone validation, 2026-11-22 (pre-migration names):** exit 0,
-five modules (`DeadlockLocal`, `DeadlockLocalExpect`, `DeadlockLocalCases`,
-`DeadlockLocalExactExpect`, `DeadlockLocalExactCases`), no diagnostics,
-20 individual closed assumption reports. ExtLib, Paco, and ITree were the
-three pins listed in the specification, using the fresh private installation
-already documented in [`../ITREE-INSTALL.md`](../ITREE-INSTALL.md).
-
-## Integration handoff
-
-[`../theories/Semantics/LocalEffects.v`](../theories/Semantics/LocalEffects.v)
-(`ParkourTheories.Semantics.LocalEffects`, formerly `theories/DeadlockLocal.v`)
-needs only `From ITree Require Import ITree`. Its public definitions are
-`local_model` (interpretation and reply relation only), `local_view`,
-`local_return`, `local_event`/`LocalEvent`, and `local_step`/`LocalStep`.
-`local_step_typed_trace` exposes the actual existential event type, event,
-typed reply, continuation, and stores. `ViewNow` and `ViewTau` describe finite
-observation derivations.
-
-The fixed cases in [`Semantics/LocalEffectContracts.v`](Semantics/LocalEffectContracts.v),
-[`Semantics/LocalEffectWitnesses.v`](Semantics/LocalEffectWitnesses.v),
-[`Semantics/ExactObservations.v`](Semantics/ExactObservations.v), and
-[`Semantics/ObservationEquivalences.v`](Semantics/ObservationEquivalences.v)
-(`ParkourTheories.Tests.Semantics.*`, formerly `DeadlockLocalExpect.v`,
-`DeadlockLocalCases.v`, `DeadlockLocalExactExpect.v`, and
-`DeadlockLocalExactCases.v`) use role 7, store 3, `Get : request bool`, reply
-`true`, new store 4, and returned value 11 (not 22). They reject store 0,
-role 8, and an invented `false` reply. `twice` leaves its second event
-suspended after one action. Arbitrarily many finite Taus preserve
-returns/actions; visible events are not returns, returns are not actions, and
-the infinite Tau tree has neither. The independent exactness contracts prevent
-extra step or return rules.
-
-`check-required` compiles `theories/` and `tests/` from their `_CoqProject`
-files and runs `scripts/check-deadlock-local.py --project-root ...` in
-`build/run/local` to check all 20 exports. `check-deadlock-local` runs the
-standalone local gate without the translation build. Its success alone does not
-establish source or network readiness.
+The [checker](../scripts/check-deadlock-local.py) verifies
+[`deadlock-local-v1.sha256`](deadlock-local-v1.sha256) and
+[`deadlock-local-exact.sha256`](deadlock-local-exact.sha256) through the
+[namespace mapping](namespace-migration.tsv), then compiles the five modules.
+Each of the 20 exports must independently report `Closed under the global
+context`. The standalone command writes its evidence under `build/deadlock-local/`;
+`check-required` uses the already compiled project and writes the same audits
+under `build/run/local/`.

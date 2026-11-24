@@ -1,31 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if (( $# )); then
+    echo "usage: $0" >&2
+    exit 2
+fi
+
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tests="$here/tests"
 root=$(cd "$here/../.." && pwd)
 export STACK_YAML="$root/stack.yaml"
 
-verify_contract() {
-    (cd "$here" &&
-        echo '2eaf6aa2825530ad31ce5e0a46e8574a089076e0bad34e3fe59fc1b369112502  tests/slice1.sha256' |
-            shasum -a 256 -c - && shasum -a 256 -c tests/slice1.sha256)
-}
-verify_contract
-
-check_closed() {
-    python3 "$here/scripts/check-assumptions.py" closed "$@"
-}
-
-if [[ ${1:-} == --check-closed || ${1:-} == --check-client ]]; then
-    policy=${1#--check-}
-    shift
-    exec python3 "$here/scripts/check-assumptions.py" "$policy" "$@"
-fi
-
 cd "$here"
+python3 scripts/frozen_inputs.py
+
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/parkour-checks.XXXXXXXX")
 trap 'rm -rf "$tmp"' EXIT
+audit=(python3 scripts/check-assumptions.py)
 translator=(stack --allow-different-user exec hs-to-rocq --)
 args=(--strict --target-version 9.0 -N -e "$root/base/edits")
 required=(--require-origin Probe.keep=Probe.keep)
@@ -67,7 +58,7 @@ controls="$tmp/controls"
 cp -R "$tests/slice1" "$controls"
 cp "$tests/Alias.v" "$controls"
 compile "$controls" ExtraPremise
-check_closed "$controls" ExtraPremise.keep
+"${audit[@]}" closed "$controls" ExtraPremise.keep
 while IFS=$'\t' read -r name expected; do
     if [[ $expected == pass ]]; then
         compile "$controls" "$name"
@@ -85,12 +76,11 @@ if [[ $(rocq c --print-version) == 9.2* ]]; then
 fi
 compile "$controls" Alias
 compile "$controls" AliasType
-reject axiom-alias 'Assumption check failed for Alias.keep' 'Alias.opaqueKeep' -- check_closed "$controls" Alias.keep
+reject axiom-alias 'Assumption check failed for Alias.keep' 'Alias.opaqueKeep' -- "${audit[@]}" closed "$controls" Alias.keep
 compile "$controls" Parkour/Runtime
 compile "$controls" Client
-client=(python3 "$here/scripts/check-assumptions.py" client "$controls")
-"${client[@]}" Client.allowed
-reject mixed-client 'Assumption check failed for Client.mixed: Constant Client.IO' -- "${client[@]}" Client.mixed
+"${audit[@]}" client "$controls" Client.allowed
+reject mixed-client 'Assumption check failed for Client.mixed: Constant Client.IO' -- "${audit[@]}" client "$controls" Client.mixed
 
 scripts/test-vc1
 
@@ -101,7 +91,7 @@ scripts/checked-tool translate --strict --target-version 9.0 -N -e ../../base/ed
 cp "$tests/Contract.v" "$good"
 compile "$good" Probe
 compile "$good" Contract
-check_closed "$good" Probe.keep
+"${audit[@]}" closed "$good" Probe.keep
 
 missing() {
     local label=$1

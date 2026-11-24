@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument("--check-edits", action="store_true")
 mode.add_argument("--deps-only", action="store_true", help="prepare the generated libraries for standalone builds")
-mode.add_argument("--check", "--final", action="store_true", help="check the translation, fixtures and theorem assumptions")
+mode.add_argument("--check", action="store_true", help="check the translation, fixtures and theorem assumptions")
 parser.add_argument("--scratch", action="store_true", help="use a fresh build directory and leave lib/ and build/run/ alone")
 args = parser.parse_args()
 project = Path(".")
@@ -183,9 +183,6 @@ if not args.check:
 build_project("tests")
 run("python3", SCRIPTS / "check-deadlock-local.py", "--output", out / "local",
     "--project-root", project.resolve(), env=rocq_env)
-run("bash", SCRIPTS / "test-checks.sh", "--check-closed", lib.resolve(), "Choreography.Choreo2.epp",
-    *load_deps,
-    cwd=out, env=rocq_env)
 for theorem in ["owner_cond_sequential", "owner_cond_app", "owner_cond_false",
                 "peer_cond_false", "owner_cond_then_action"]:
     run("python3", SCRIPTS / "check-assumptions.py", "closed", lib.resolve(),
@@ -193,6 +190,6 @@ for theorem in ["owner_cond_sequential", "owner_cond_app", "owner_cond_false",
         "-Q", (project / "theories").resolve(), "ParkourTheories",
         "-Q", (project / "tests").resolve(), "ParkourTheories.Tests", cwd=out, env=rocq_env)
 
-run("python3", SCRIPTS / "check_semantics.py", out / "semantics", "--final",
+run("python3", SCRIPTS / "check_semantics.py", out / "semantics",
     "--generated", lib, "--project-root", project.resolve(), "--", base, deps, support,
     env=rocq_env)

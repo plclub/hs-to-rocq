@@ -1,6 +1,7 @@
-"""Verify the reviewed Parkour inputs used by the independent proof contracts."""
+"""Verify frozen Parkour inputs. Run directly to verify the standalone slice 1 controls."""
 
 import hashlib
+from collections.abc import Iterator
 from pathlib import Path
 
 from itree_pins import PARKOUR
@@ -53,6 +54,19 @@ def checked(path: Path, expected: str) -> bytes:
     return data
 
 
+def manifest_rows(name: str, anchor: str) -> Iterator[tuple[str, str]]:
+    for row in checked(PARKOUR / "tests" / name, anchor).decode().splitlines():
+        expected, filename = row.split("  ", 1)
+        yield expected, filename
+
+
+def verify_slice1_inputs() -> None:
+    # Even scratch builds read the client allowlist from this source tree.
+    anchor = "2eaf6aa2825530ad31ce5e0a46e8574a089076e0bad34e3fe59fc1b369112502"
+    for expected, filename in manifest_rows("slice1.sha256", anchor):
+        checked(PARKOUR / filename, expected)
+
+
 def verify(root: Path, generated: Path, *, local: bool) -> None:
     # One historical input may now live in more than one module. Check each
     # part, including the library definitions used by an independent fixture.
@@ -63,8 +77,7 @@ def verify(root: Path, generated: Path, *, local: bool) -> None:
         relocated.setdefault(old, []).append((new, path))
     needed = set[str]()
     for name, anchor in (LOCAL if local else MANIFESTS).items():
-        for row in checked(PARKOUR / "tests" / name, anchor).decode().splitlines():
-            expected, filename = row.split("  ", 1)
+        for expected, filename in manifest_rows(name, anchor):
             relative = filename.removeprefix("examples/parkour/")
             # The pinned manifest retains this historical row. The occurrence
             # amendment pins the active semantics under the same filename.
@@ -90,4 +103,9 @@ def verify_local_inputs(project_root: Path) -> None:
 
 
 def verify_frozen_inputs(project_root: Path, generated: Path) -> None:
+    verify_slice1_inputs()
     verify(project_root, generated, local=False)
+
+
+if __name__ == "__main__":
+    verify_slice1_inputs()

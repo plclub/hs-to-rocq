@@ -150,7 +150,3 @@ Proof.
   apply (Reject s n).
   rewrite <- Equal. exact Match.
 Qed.
-
-Print Assumptions reject_wrong_occurrence.
-Print Assumptions invented_value_transport_obstruction.
-Print Assumptions reject_invented_bytes.

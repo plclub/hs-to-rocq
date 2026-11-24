@@ -284,5 +284,3 @@ Proof.
              destruct (key_eq_dec k (wire_A,wire_C,Choreography.Network.Root));
              try congruence; reflexivity.
 Qed.
-
-Print Assumptions partial_delivery.

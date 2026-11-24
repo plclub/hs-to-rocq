@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Replay the counterexample using the production compiler and generated library.
+# The proof needs the original HasChor projection; see counterexample/UPSTREAM.md.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 echo 'b6057f6ac2e296987ba3483a934cb0815290cef92548f1427172611f30596e59  counterexample/EXPECTED.md' |
     shasum -a 256 -c -
 if [[ ! -f lib/Choreography/Choreo2.vo ]]; then
-    echo 'Missing generated Choreography.Choreo2; build check-required first.' >&2
+    echo 'Missing original lib/Choreography/Choreo2.vo (HasChor 8ff9fadc); see counterexample/UPSTREAM.md.' >&2
     exit 1
 fi
 tmp=$(mktemp -d)

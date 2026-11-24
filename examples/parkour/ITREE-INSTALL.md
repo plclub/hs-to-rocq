@@ -54,24 +54,3 @@ and the four modules under [`tests/Semantics/`](tests/Semantics/)
 `ObservationEquivalences.v`), where `LocalEffectWitnesses.finite_action` and
 `ObservationEquivalences.step_exact` exercise ITree reply continuation
 resumption against the installed switch libraries.
-
-**Opam validation (2026-11-22).** Opam 2.5.1 rebuilt all three pinned packages
-in both the Rocq 9.0.1 and Rocq 9.2 (`rocq-core.9.2.0`) switches. In each
-switch, `Locate Library` found `ExtLib.Structures.Monad`, `Paco.paco`, and
-`ITree.ITree` in that switch's `user-contrib`. The full
-`make -C examples/parkour check SCRATCH=1` passed on both compilers, including
-the local and public theorem assumption checks.
-
-**Historical private-prefix validation (2026-11-22).** A fresh private root on macOS with Rocq 9.0.1,
-Stdlib 9.0.0 and OCaml 4.14.2 passed the initial missing-import checks and
-the final resumption check. The installation contained 117 ExtLib, 41 Paco
-and 68 ITree `.vo` files. Recompiling `Resume.v` exited 0 without diagnostics;
-a separate `Print Assumptions Resume.reply_resumes.` reported
-`Closed under the global context`.
-
-The same three Git revisions also built from scratch on macOS with Rocq
-9.2 (opam `rocq-core.9.2.0`), Stdlib 9.2.0 and OCaml 5.4.1. The verifier
-matched all 226 installed objects to their pinned builds. On both switches,
-a smoke file explicitly imported `ExtLib.Structures.Monad`, `Paco.paco` and
-`ITree.ITree`, compiled the resumption proof under `-w +all`, and reported
-`reply_resumes` closed under the global context.
