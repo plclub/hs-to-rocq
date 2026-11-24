@@ -239,8 +239,8 @@ Definition compare_bool (b1:bool)(b2:bool) : comparison :=
 Instance Ord_bool___ : Ord bool := fun _ k => k {|
   op_zl____   := fun x y => andb (negb x) y;
   op_zlze____ := fun x y => orb (negb x) y;
-  op_zg____   := fun x y => orb (negb y) x;
-  op_zgze____ := fun x y => andb (negb y) x;
+  op_zg____   := fun x y => andb (negb y) x;
+  op_zgze____ := fun x y => orb (negb y) x;
   compare__   := compare_bool;
   max__       := orb;
   min__       := andb
