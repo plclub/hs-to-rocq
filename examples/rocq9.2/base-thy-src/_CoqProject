@@ -1,0 +1,9 @@
+-Q . Proofs
+-Q ../base ""
+-arg -w
+-arg -masking-absolute-name,+deprecated-dirpath-Coq
+GHC/Base.v
+GHC/List.v
+Data/Foldable.v
+Data/Traversable.v
+Data/Functor/Identity.v

@@ -1,0 +1,64 @@
+classDefns:
+  Data.FingerTree.Measured: ClassDefinition (Qualified "Data.FingerTree" "Measured")
+    [Typed Ungeneralizable Explicit (Ident (Bare "v") :| []) (Qualid (Bare "Type")),Typed
+    Ungeneralizable Explicit (Ident (Bare "a") :| []) (Qualid (Bare "Type")),Generalized
+    Implicit (App (Qualid (Qualified "GHC.Base" "Monoid")) (PosArg (Qualid (Bare "v"))
+    :| []))] Nothing [(Qualified "Data.FingerTree" "measure",Arrow (Qualid (Bare "a"))
+    (Qualid (Bare "v")))]
+classTypes:
+  Data.FingerTree.Measured: fromList []
+constructorFields:
+  Data.FingerTree.Deep: NonRecordFields 4
+  Data.FingerTree.Empty: NonRecordFields 0
+  Data.FingerTree.EmptyL: NonRecordFields 0
+  Data.FingerTree.EmptyR: NonRecordFields 0
+  Data.FingerTree.Four: NonRecordFields 4
+  Data.FingerTree.MkSplit: NonRecordFields 3
+  Data.FingerTree.Node2: NonRecordFields 3
+  Data.FingerTree.Node3: NonRecordFields 4
+  Data.FingerTree.Nowhere: NonRecordFields 0
+  Data.FingerTree.OnLeft: NonRecordFields 0
+  Data.FingerTree.OnRight: NonRecordFields 0
+  Data.FingerTree.One: NonRecordFields 1
+  Data.FingerTree.Position: NonRecordFields 3
+  Data.FingerTree.Single: NonRecordFields 1
+  Data.FingerTree.Three: NonRecordFields 3
+  Data.FingerTree.Two: NonRecordFields 2
+  Data.FingerTree.op_ZCzg__: NonRecordFields 2
+  Data.FingerTree.op_ZCzl__: NonRecordFields 2
+constructorTypes:
+  Data.FingerTree.Deep: Qualified "Data.FingerTree" "FingerTree"
+  Data.FingerTree.Empty: Qualified "Data.FingerTree" "FingerTree"
+  Data.FingerTree.EmptyL: Qualified "Data.FingerTree" "ViewL"
+  Data.FingerTree.EmptyR: Qualified "Data.FingerTree" "ViewR"
+  Data.FingerTree.Four: Qualified "Data.FingerTree" "Digit"
+  Data.FingerTree.MkSplit: Qualified "Data.FingerTree" "Split"
+  Data.FingerTree.Node2: Qualified "Data.FingerTree" "Node"
+  Data.FingerTree.Node3: Qualified "Data.FingerTree" "Node"
+  Data.FingerTree.Nowhere: Qualified "Data.FingerTree" "SearchResult"
+  Data.FingerTree.OnLeft: Qualified "Data.FingerTree" "SearchResult"
+  Data.FingerTree.OnRight: Qualified "Data.FingerTree" "SearchResult"
+  Data.FingerTree.One: Qualified "Data.FingerTree" "Digit"
+  Data.FingerTree.Position: Qualified "Data.FingerTree" "SearchResult"
+  Data.FingerTree.Single: Qualified "Data.FingerTree" "FingerTree"
+  Data.FingerTree.Three: Qualified "Data.FingerTree" "Digit"
+  Data.FingerTree.Two: Qualified "Data.FingerTree" "Digit"
+  Data.FingerTree.op_ZCzg__: Qualified "Data.FingerTree" "ViewR"
+  Data.FingerTree.op_ZCzl__: Qualified "Data.FingerTree" "ViewL"
+constructors:
+  Data.FingerTree.Digit: '[Qualified "Data.FingerTree" "One",Qualified "Data.FingerTree"
+    "Two",Qualified "Data.FingerTree" "Three",Qualified "Data.FingerTree" "Four"]'
+  Data.FingerTree.FingerTree: '[Qualified "Data.FingerTree" "Empty",Qualified "Data.FingerTree"
+    "Single",Qualified "Data.FingerTree" "Deep"]'
+  Data.FingerTree.Node: '[Qualified "Data.FingerTree" "Node2",Qualified "Data.FingerTree"
+    "Node3"]'
+  Data.FingerTree.SearchResult: '[Qualified "Data.FingerTree" "Position",Qualified
+    "Data.FingerTree" "OnLeft",Qualified "Data.FingerTree" "OnRight",Qualified "Data.FingerTree"
+    "Nowhere"]'
+  Data.FingerTree.Split: '[Qualified "Data.FingerTree" "MkSplit"]'
+  Data.FingerTree.ViewL: '[Qualified "Data.FingerTree" "EmptyL",Qualified "Data.FingerTree"
+    "op_ZCzl__"]'
+  Data.FingerTree.ViewR: '[Qualified "Data.FingerTree" "EmptyR",Qualified "Data.FingerTree"
+    "op_ZCzg__"]'
+superclassCount:
+  Data.FingerTree.Measured: '2'

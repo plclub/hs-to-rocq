@@ -46,12 +46,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-hs-to-rocq
+        with:
+          extra-apt-packages: python3
       - name: Run Haskell test suites
         run: stack --allow-different-user test
       - name: Check test-harness failure propagation
         run: bash test/harness.sh
       - name: Check concurrent real translations
         run: bash test/concurrent.sh
+      - name: Check assumption-audit rejection controls
+        run: python3 test/assumptions.py
 
   test-coq-files:
     name: Testing all Coq examples (Coq 8.20)
@@ -183,11 +187,13 @@ jobs:
       image: haskell:9.10.3-bookworm
     env:
       HOME: /root
+      ROCQ92_SWITCH: rocq92
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-hs-to-rocq
         with:
-          submodules: examples/ghc/ghc
+          submodules: examples/ghc/ghc examples/fingertree/fingertree
+          extra-apt-packages: python3
       - name: Install Rocq 9.0
         run: |
           set -x
@@ -212,6 +218,24 @@ jobs:
         run: |
           eval $(opam env)
           make -C examples/rocq9.0/tests
+      - name: Install isolated Rocq 9.2
+        run: |
+          opam switch create "$ROCQ92_SWITCH" ocaml-base-compiler.4.14.2 --no-switch -y
+          opam install --switch="$ROCQ92_SWITCH" -y \
+            rocq-prover.meta.1 \
+            rocq-core.9.2.0 \
+            rocq-runtime.9.2.0 \
+            rocq-stdlib.9.2.0
+      - name: Check assumption-audit rejection with Rocq 9.2
+        run: opam exec --switch="$ROCQ92_SWITCH" -- python3 test/assumptions.py --rocq rocq
+      - name: Clean Rocq 9.2 foundations and fingertree outputs
+        run: |
+          opam exec --switch="$ROCQ92_SWITCH" -- make -C examples/fingertree clean
+          opam exec --switch="$ROCQ92_SWITCH" -- make -C examples/rocq9.2 clean
+      - name: Build and check Rocq 9.2 foundations
+        run: opam exec --switch="$ROCQ92_SWITCH" -- make -j2 -C examples/rocq9.2 check
+      - name: Build, audit, and kernel-check fingertree proofs
+        run: opam exec --switch="$ROCQ92_SWITCH" -- make -j2 -C examples/fingertree kernel-check core-check interval-check priority-check
 
   test-rocq9-translation:
     name: Rocq 9.0 translation (ensures convenience copy is up-to-date)

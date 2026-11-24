@@ -185,7 +185,14 @@ convertClassDecl env (L _ hsCtx) (L _ hsName) ltvs fds lsigs defaults types type
   let tycl = convertedTyCl name env
   
   let convUnsupportedHere what = convUnsupportedIn what "type class" (showP name)
-  unless (null fds) $ convUnsupportedHere "functional dependencies"
+  -- GHC has already used functional dependencies for inference, improvement and
+  -- instance consistency in the checked class environment. They add no dictionary
+  -- fields: both encodings below retain every parameter, checked method type and
+  -- superclass. Erasing dependencies asserts neither type equality nor uniqueness
+  -- for arbitrary Gallina dictionaries. Require checked information rather than
+  -- falling back to renamed syntax for a class with functional dependencies.
+  unless (null fds || isJust tycl) $
+    convUnsupportedHere "functional dependencies without GHC-checked class information"
 
   let aux x = withCurrentDefinition name $ convertLHsType x
   ctx' <- traverse (fmap (Generalized Coq.Implicit) . aux) hsCtx

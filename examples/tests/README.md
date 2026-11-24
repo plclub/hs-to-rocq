@@ -84,16 +84,18 @@ do not replace compiler tests.
 | --- | --- |
 | [Edits.hs](../../test/Edits.hs) | Currently 237 assertions through `parseEditList`, `parseTerm`, `buildEdits`, and related public APIs: exact ASTs, configuration fields, diagnostics, ordering, and precedence. |
 | [edits.sh](../../test/edits.sh) | 32 real-CLI cases per target, 64 for both. Success requires nonempty `.v` and `.h2ci` output plus selected source assertions; rejection requires a nonzero exit and a diagnostic substring. This script does not compile output. |
-| Shared compiler fixtures | Currently 67 `PASS` cases and 3 `TODO_PASS` cases per compiler. Generated proofs, type checks, and deliberate `Fail` commands distinguish selected edit effects from mere successful translation. |
+| Shared compiler fixtures | Currently 70 `PASS` cases and 3 `TODO_PASS` cases per compiler. Generated proofs, type checks, and deliberate `Fail` commands distinguish selected edit effects from mere successful translation. |
 
 The compiler counts include 12 edit fixtures, the reactivated `Records` and
-`RecordConstruction`, and `SoleCtorGuard`, up from 52 `PASS` cases. The record
+`RecordConstruction`, `SoleCtorGuard`, `FunctionalDependencies`,
+`RecursiveInstanceMethods`, and `ConstructorTags`, up from 52 `PASS` cases. The record
 assertions check field update, named-field construction, and projection of the
 constructed value. `SoleCtorGuard` combines `Single`, `Nested`, `Choice`, guarded
 case arms, and empty-list guards with the `Box` and nested-pair cases. Computational
 assertions cover each fixture case, including exhaustive guards and refutable
-fallbacks. It counts as one `PASS` module, so combining the two branches keeps
-the total at 67, not 68.
+fallbacks. `SoleCtorGuard` counts as one `PASS` module. `FunctionalDependencies`,
+`RecursiveInstanceMethods`, and `ConstructorTags` bring the previous inventory
+of 67 to 70.
 The lists in `test-rules.mk` determine which fixtures run; these counts describe
 the inventory, not the outcome of a particular run.
 
@@ -108,6 +110,138 @@ and `ExceptInDataDefinition`. Expected failures return success only when they
 match their category; an unexpected result must keep Make's nonzero status.
 Generation is forced on reruns, including helper dependencies, and a failed
 translator's partial `.v` output is discarded rather than reused.
+
+## Functional dependencies
+
+The translator accepts functional dependencies when GHC-checked class information
+is available. GHC performs inference, improvement, and instance consistency
+checking. Translation retains all class parameters, checked method types,
+superclass arguments, and ordinary dictionary passing in both class encodings.
+The dependencies add no runtime dictionary fields, so translation erases them.
+It generates no type-equality laws or axioms, and establishes no uniqueness
+property for arbitrary Gallina dictionaries.
+
+`FunctionalDependencies` exercises the public CLI and matching compiler without
+the translated base library or local axioms/stubs. Its CPS `Measured` class uses
+`a -> v`; its direct `Codec` class uses both `a -> v` and `v -> a`. Type checks
+pin their parameter, superclass, method, and constructor types. Computational
+proofs check inference from an element argument, superclass dispatch, inherited
+defaults, explicit overrides, explicit dictionary arguments, and a parameterized
+instance with a superclass constraint.
+
+GHC resolves instances; translator lookup identifies the corresponding checked
+declaration using every visible class argument in order, omitting invisible kind
+arguments and retaining the existing representation-polymorphic head match.
+Ambiguous matches fail translation. The fixture distinguishes instances sharing
+their first or last argument, including parameterized list heads. A manual
+mutation restoring first-match, any-argument lookup made both compilers reject
+a method whose selected type expected `Element` but whose body matched
+`OtherElement`; restoring all-argument lookup passed both focused compiler checks.
+
+## Direct recursion in instance methods
+
+Instance-method conversion applies the existing recursion machinery after
+instantiating the method signature and supplying its quantified binders. Only a
+local method's direct self-reference triggers this path. Ordinary structural
+recursion emits a local `Definition` containing a typed `fix`; `polyrec` and
+structural-argument edits have the same role as for ordinary bindings.
+Well-founded orders use the existing Program Fixpoint emitter and obligation
+tactic. Nonrecursive method emission keeps its existing representation.
+
+`RecursiveInstanceMethods` uses an ordinary nonuniform `Nest tag a`, a Foldable-like
+callback at the nested `Pair a` type, and a retained `Tag tag` instance premise.
+Its scoped application rewrite identifies only the recursive Nest invocation;
+component Pair calls retain dictionary dispatch. The list instance needs only
+scoped method-name renames. All five methods remain present, including inherited
+defaults. Compiler proofs check two nesting depths, component calls, defaults,
+instance parameters, and the selected structural argument's reduction behavior.
+No recursive algorithm, dictionary knot, axiom, or stub is supplied by edits.
+
+The old emitter failed with a missing local recursive reference on both targets.
+Removing `polyrec` rejects the changed element type; removing `{struct 2}` fails
+the deliberate reduction guard. Fifteen existing class/instance fixtures also
+compile on each target, with byte-identical generated Gallina. `MutrecInst`
+retains its expected compiler failure; cross-method recursion is a separate case.
+
+The earlier synthesized-function-match rewrite experiment was discarded after
+the ordinary nonuniform datatype compiled. Its hook and fixture were removed;
+this fixture replaced it at an inventory of 69. Earlier complete-catalog
+records predate this method-emission change; the validation here is focused.
+
+## Constructor tags in instance methods
+
+The instance emitter lowers saturated `GHC.Magic.dataToTag#` and the older
+`GHC.Prim.dataToTag#` spelling to constructor matches returning zero-based `Z`
+ordinals. The receiver's own type comes from the instantiated method signature,
+lambda argument alignment through `useTypeInBinders`, or an explicit ascription.
+The pass removes shadowed bindings before descending and preserves primitive-free
+bodies and binder syntax. Both ordinary and recursive method emission use it.
+
+Support is limited to unique local, checked, native non-newtype ADTs with vanilla
+constructors. GHC's `dataConTagZ` and `dataConSourceArity` supply the tags and field
+counts. Renamed constructor lists and arities must agree with TypeInfo; target
+list order alone is insufficient, especially for built-in Bool/Maybe layouts.
+Skipped/redefined layouts, GADTs, imported/built-in operand types, unknown shadowed
+operands, and unsupported binding contexts fail explicitly. No interface fields,
+tag dictionaries, per-datatype tag functions, or new edit syntax are introduced.
+Other primitive comparisons use existing, exact-shape expression rewrites.
+
+`ConstructorTags` is a base-independent source-local primitive-method fixture.
+Its two matrices cover 130 ordered pairs, source ordinal order, renamed
+constructors, field arities, a phantom parameter, and actual min/max return values.
+Separate proofs check a receiver different from the instance head, an explicit
+receiver ascription, and a recursive method. The focused `.pass` target also runs seven public-CLI rejection cases for
+layouts, pattern/let/lambda shadowing, built-ins, and GADTs. Full native derived
+Eq/Ord integration belongs to the example's separate validation.
+
+## Well-founded recursion after mutual inlining
+
+`inline mutual` runs before the nonstructural-mutual-recursion check. If one
+recursive member remains, its existing measure/well-founded guidance reaches
+`wfFix`; the nonrecursive helper definition is retained. Multiple remaining
+recursive members still produce the existing unsupported-recursion diagnostic.
+For a single well-founded member, the selected helpers' converted bodies are
+expanded at saturated call sites before `wfFix` creates decreasing arguments.
+This puts the recursive call beneath the caller's case/split facts instead of
+asking for decrease for arbitrary helper parameters. Structural groups and
+groups without selected helpers bypass application expansion.
+
+`InlineMutualEdits.localSplit` exercises the local form:
+
+```text
+in InlineMutualEdits.localSplit inline mutual merge2
+in InlineMutualEdits.localSplit termination merge1 {measure (Nat.add (length as_) (length bs))}
+obligations InlineMutualEdits.localSplit solve_local_split @peelOne_length
+```
+
+The stronger `localSplit` regression mirrors alternating merge helpers: the
+caller extracts a tail and splits its other list; the helper cases on its own
+arguments and splits again before recurring. Its typed two-argument helper needs
+both the call-site bounds and its inner split facts. The old let-bound lowering
+failed its decreasing obligation on both targets. `localShadow` also checks free
+closure variables, parameter/match/let shadowing, an unrelated same-name local
+function, and a source name colliding with the fresh-name prefix.
+
+The application pass uses fresh lexical identities and freshens every copied
+helper body before substituting actual arguments. It preserves argument/result
+annotations and does not reduce unselected function applications. Root measure
+parameters retain their names; local binders use fresh `inlined_N__` names, so
+obligation tactics should match equations and types rather than local spellings.
+Initial support requires exactly saturated positional calls to explicit helper
+parameters. Partial/escaping or overapplied helpers, implicit/generalized helper
+parameters, dependent binding forms, and helper-closure/root-parameter name
+collisions are rejected explicitly rather than guessed.
+
+The source helpers remain ordinary Haskell. Compiler checks cover the retained
+helper's outer call and finite computations after all Program obligations are
+discharged. The fixture compiles the existing production
+`base/HsToRocq/Wf.v` utility in isolation through the CLI preamble path, so both
+targets get normal namespace rewriting without building the translated base.
+The finite proof unfolds the recursion combinator and destructs accessibility
+evidence; it does not need the extensional unfolding lemma. Four CLI rejection
+cases cover multiple retained members, an escaping helper, and an ambiguous root
+closure. Thirteen assumption reports for the tag instances/proofs and measured functions/proofs
+were closed on each compiler. These are focused checks, not a complete catalog run.
 
 ## Deriving and base integration
 
@@ -266,7 +400,7 @@ combination of edits has been tested.
 | `RenameModuleEdit` / `rename module` | Preserve source-to-target module mapping. | `ScopedMethods` compiles under the renamed module with scoped overrides; `ModuleEdits` merges an original module while preserving its data declaration. |
 | `AliasModuleEdit` / `alias module` | Expand following exact module aliases, allow rebinding, reset between files, and leave no builder effect. | `ModuleEdits` checks renamed values and additions using the real module name; CLI contrasts same-file expansion with file-local isolation. |
 | `SimpleClassEdit` / `simple class` | Record the class and reject duplicates. | `ClassEditSimple`: check the direct `Build_Direct` signature, absence of dictionary wrappers, and default-method dispatch. |
-| `InlineMutualEdit` / `inline mutual` | Record each selected function and reject duplicates. | `InlineMutualEdits`: transitively inline `forward`/`relay` so `walk` and `forward` compute through the recursive cycle. |
+| `InlineMutualEdit` / `inline mutual` | Record each selected function and reject duplicates. | `InlineMutualEdits`: transitively inline `forward`/`relay`; local inlining reduces a measured mutual group to one recursive function, with discharged obligations and a retained helper. |
 | `SetTypeEdit` / `set type`, `no type` | Distinguish an explicit type, a cleared annotation, and no edit. | `TypeEdits` checks exact annotated/inferred types; `InlineMutualEdits` accepts `post` on Boolean lists and rejects natural-number lists. |
 | `CollapseLetEdit` / `collapse let` | Record the function and reject duplicates. | `StructuralEdits`: a local recursive helper and calls to the outer function collapse into a computing list copy. |
 | `InEdit` / `in` | Accumulate independent/nested scopes, preserve global fields, and reject duplicates within one scope. | `ScopedMethods` changes only one instance method; sibling methods and another instance retain their behavior. |
@@ -291,7 +425,7 @@ These checks target interactions that a one-directive smoke test would miss.
 | Class edits and default dispatch | `ClassEdits` checks removed classes/methods and a body-only skip; `ClassEditSimple` checks direct encoding; `ClassEditRedefine` distinguishes inherited defaults, explicit methods, and one replaced instance method. |
 | Redefined newtype and coerce | `NewtypeEdits` changes constructor/accessor metadata, rejects the old selector, and checks both Boolean results of the derived method after wrapping/unwrapping. |
 | Termination, obligations, and ordering | `programChecks`, `StructuralEdits`, and `RecursionEdits` cover structural positions, local polyrec, custom relations, and tactic-only dependencies. CLI rejects well-founded edits on nonrecursive functions or cleared signatures and Equations with deferred/corecursive termination. |
-| Mutual inlining with other edits | `InlineMutualEdits` combines transitive inlining with a scoped rewrite, added notation scope, and a specialized helper type; both the recursive result and rejected wrong-type call are checked. |
+| Mutual inlining with other edits | `InlineMutualEdits` combines transitive inlining with a scoped rewrite, notation scope, specialized helper type, and local measure/obligation edits. Finite results and rejection of multiple retained nonstructural members are checked. |
 | Invariant, exclusions, and promotion | `invariantChecks` checks generated edits; `InvariantEdits` combines raw-name renaming, sigma exceptions, validator promotion, and a constructor obligation. The invalid-value control rejects `eq_refl` as evidence for a false payload. |
 | Additions, promotion, and phases | `additionChecks` and `PhaseEdits` distinguish type-phase additions and promoted dependencies from ordinary terms. Midamble `Check`/`Fail Check` assertions enforce the boundary even with a cross-phase order request. |
 | Universe edits with other type edits | `UniversePolymorphic` combines cumulative/polymorphic requests with redefinition, coinduction, and a mutual block; positive upcasts and negative controls distinguish their effects. |

@@ -1,0 +1,2 @@
+inline mutual InlineMutualEdits.forward
+termination InlineMutualEdits.walk {measure (length arg_0__)}

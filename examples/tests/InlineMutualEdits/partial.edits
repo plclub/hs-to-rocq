@@ -1,0 +1,2 @@
+in InlinePartial.run inline mutual helper
+in InlinePartial.run termination go {measure (length ys)}

@@ -1,0 +1,90 @@
+{
+  "ApplicationLaws": {
+    "count": 37,
+    "exceptions": {
+      "DeferredFix.deferredFix": [
+        "queue_eq_reflexive", "queue_eq_symmetric", "queue_eq_transitive", "queue_comparison",
+        "queue_eq_compare", "queue_methods", "queue_compare_reflexive", "queue_compare_opposite",
+        "queue_compare_transitive", "queue_compare_ties", "queue_order", "queue_minmax"
+      ],
+      "DeferredFix.deferredFix_eq_on": [
+        "queue_eq_reflexive", "queue_eq_symmetric", "queue_eq_transitive", "queue_comparison",
+        "queue_eq_compare", "queue_compare_reflexive", "queue_compare_opposite",
+        "queue_compare_transitive", "queue_compare_ties", "queue_order", "queue_minmax"
+      ]
+    }
+  },
+  "CoreSize": {"count": 41},
+  "CoreModel": {"count": 30},
+  "CoreOperations": {"count": 82},
+  "CoreSearch": {"count": 86},
+  "CoreContext": {"count": 50},
+  "CoreInstances": {"count": 102},
+  "ApplicativeValidity": {"count": 29},
+  "CoreTraversal": {
+    "count": 58,
+    "exceptions": {
+      "FunctionalExtensionality.functional_extensionality_dep": [
+        "liftA2_app_assoc", "traverse_concat_app", "traverse_concat_flat_map",
+        "traverseDigit_contentsWith", "traverseNode_contentsWith", "traverseTree_contentsWith",
+        "unsafeTraverseNode_contentsWith", "unsafeTraverse_contentsWith", "traverse'_contents",
+        "unsafeTraverse_contents", "traverse_context_concat_app", "traverseWCDigit_contentsWith",
+        "traverseWCNode_contentsWith", "traverseWCTree_contentsWith", "traverseWithContext_contents",
+        "traverseWPTree_as_WC", "traverseWithPos_contents", "traverseWithPos_validity_occurrences"
+      ]
+    }
+  },
+  "PriorityModel": {"count": 98},
+  "PriorityOperations": {
+    "count": 136,
+    "exceptions": {
+      "DeferredFix.deferredFix": [
+        "assocs_definition", "foldMap_definition", "min_valid", "max_valid",
+        "assocs_unfold", "assocs_model", "foldMap_unfold", "foldMap_model", "foldr_model",
+        "foldl_model", "foldl_strict_model", "foldr_strict_model", "toList_model",
+        "foldMap_strict_model", "fold_behavior", "length_fold_model", "product_fold_model",
+        "sum_fold_model", "eq_model", "neq_model", "eq_equivalent", "eq_reflexive",
+        "eq_symmetric", "eq_transitive", "compare_model", "lt_behavior", "le_behavior",
+        "gt_behavior", "ge_behavior", "min_model", "max_model", "compare_equal_equivalent",
+        "compare_reflexive", "compare_opposite", "compare_less_transitive", "le_iff",
+        "le_reflexive", "le_total", "le_transitive", "le_antisymmetric", "lt_model", "le_model",
+        "gt_model", "ge_model", "length_model", "product_model", "sum_model",
+        "foldMap_strict_agrees", "unfoldr_valid_eq", "unfoldr_valid_model", "compare_eq_boolean"
+      ],
+      "DeferredFix.deferredFix_eq_on": [
+        "assocs_unfold", "assocs_model", "foldMap_unfold", "foldMap_model", "foldr_model",
+        "foldl_model", "foldl_strict_model", "foldr_strict_model", "toList_model",
+        "foldMap_strict_model", "fold_behavior", "length_fold_model", "product_fold_model",
+        "sum_fold_model", "eq_model", "neq_model", "eq_equivalent", "eq_reflexive",
+        "eq_symmetric", "eq_transitive", "compare_model", "lt_behavior", "le_behavior",
+        "gt_behavior", "ge_behavior", "min_model", "max_model", "compare_equal_equivalent",
+        "compare_reflexive", "compare_opposite", "compare_less_transitive", "le_iff",
+        "le_reflexive", "le_total", "le_transitive", "le_antisymmetric", "lt_model", "le_model",
+        "gt_model", "ge_model", "length_model", "product_model", "sum_model",
+        "foldMap_strict_agrees", "unfoldr_valid_eq", "unfoldr_valid_model", "compare_eq_boolean"
+      ]
+    }
+  },
+  "PriorityRegression": {"count": 5},
+  "IntervalModel": {"count": 54},
+  "IntervalOperations": {
+    "count": 158,
+    "exceptions": {
+      "FunctionalExtensionality.functional_extensionality_dep": [
+        "inRange_spec", "search_spec", "intersections_spec", "dominators_spec", "union_spec",
+        "traverse_entries", "sequenceA_entries", "mapM_entries", "sequence_entries",
+        "union_left_identity", "union_right_identity", "union_associative", "mconcat_spec"
+      ]
+    }
+  },
+  "IntervalLaws": {
+    "count": 82,
+    "exceptions": {
+      "FunctionalExtensionality.functional_extensionality_dep": [
+        "liftA2_associate", "compose_functor_laws", "compose_applicative_laws",
+        "map_traverse_reference", "map_traversal_identity", "map_traversal_naturality",
+        "map_traversal_composition"
+      ]
+    }
+  }
+}

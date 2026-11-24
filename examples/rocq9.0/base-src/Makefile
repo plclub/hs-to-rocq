@@ -77,9 +77,12 @@ HS_TO_ROCQ_OPTS_BASE := \
 .SECONDEXPANSION:
 
 # Rule for Data/* and Control/* modules from ghc-internal
+# A caller may supply per-module guidance while retaining the shared rule.
+# Key by the stem so an override cannot leak into prerequisite modules.
+GHC_INTERNAL_EDITS = $(or $(GHC_INTERNAL_EDITS_$*),$(wildcard $(BASE_SRC)/module-edits/$*/edits))
 $(VFILES_GHC_INTERNAL) $(VFILES_EARLY_GHC_INTERNAL): $(OUT)/%.v : $$(wildcard $(BASE_SRC)/module-edits/$$*/preamble.v) $$(wildcard $(BASE_SRC)/module-edits/$$*/midamble.v) $$(wildcard $(BASE_SRC)/module-edits/$$*/edits) $(BASE_SRC)/edits
 	rm -f $@
-	$(HS_TO_ROCQ) $(addprefix -e , $(wildcard $(BASE_SRC)/module-edits/$*/edits)) \
+	$(HS_TO_ROCQ) $(addprefix -e , $(GHC_INTERNAL_EDITS)) \
 	             $(addprefix -p , $(wildcard $(BASE_SRC)/module-edits/$*/preamble.v)) \
 	             $(addprefix --midamble , $(wildcard $(BASE_SRC)/module-edits/$*/midamble.v)) \
 		     $(HS_TO_ROCQ_OPTS_INTERNAL) \

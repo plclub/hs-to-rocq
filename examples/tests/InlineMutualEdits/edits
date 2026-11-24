@@ -8,6 +8,23 @@ in InlineMutualEdits.post rewrite forall xs, InlineMutualEdits.marker xs = ident
 set type InlineMutualEdits.post : list bool -> list bool
 add scope inline_list for value InlineMutualEdits.post
 
+in InlineMutualEdits.localMeasured inline mutual merge2
+in InlineMutualEdits.localMeasured termination go {measure (length ys)}
+obligations InlineMutualEdits.localMeasured solve_local_measured
+
+in InlineMutualEdits.localSplit inline mutual merge2
+in InlineMutualEdits.localSplit termination merge1 {measure (Nat.add (length as_) (length bs))}
+obligations InlineMutualEdits.localSplit solve_local_split @peelOne_length
+
+in InlineMutualEdits.localShadow inline mutual bridge
+in InlineMutualEdits.localShadow termination main {measure (length ys)}
+obligations InlineMutualEdits.localShadow solve_local_measured
+
+add InlineMutualEdits Theorem InlineMutualEdits.peelOne_length {a} (xs : list a) :
+  Nat.add (length (fst (peelOne xs))) (length (snd (peelOne xs))) = length xs.
+Proof. destruct xs; reflexivity. Qed.
+order InlineMutualEdits.peelOne_length InlineMutualEdits.localSplit
+
 add InlineMutualEdits Theorem InlineMutualEdits.walk_example :
   walk (cons true (cons false nil)) = cons true (cons false nil).
 Proof. reflexivity. Qed.
@@ -21,4 +38,36 @@ add InlineMutualEdits Theorem InlineMutualEdits.post_bool_only :
 Proof.
   Fail Check (post (nil : list nat)).
   reflexivity.
+Qed.
+
+add InlineMutualEdits Theorem InlineMutualEdits.local_split_example :
+  (localSplit nil (cons true nil) = cons true nil) /\
+  (localSplit (cons true (cons false (cons true nil)))
+              (cons false (cons true (cons false nil))) =
+   cons false (cons true (cons false (cons true (cons false (cons true nil)))))).
+Proof.
+  split; unfold localSplit, HsToRocq.Wf.wfFix2, HsToRocq.Wf.wfFix1,
+    Coq.Program.Wf.Fix_sub;
+    destruct_accessibility;
+    reflexivity.
+Qed.
+
+add InlineMutualEdits Theorem InlineMutualEdits.hygienic_helper_calls :
+  (localShadow true (cons false nil) = cons true nil) /\
+  ((localShadow true (cons false (cons true nil)) = cons false (cons true nil)) /\
+   (localShadow false (cons true (cons false nil)) = cons true nil)).
+Proof.
+  repeat split; unfold localShadow, HsToRocq.Wf.wfFix1, Coq.Program.Wf.Fix_sub;
+    destruct_accessibility;
+    reflexivity.
+Qed.
+
+add InlineMutualEdits Theorem InlineMutualEdits.local_measured_example :
+  (localMeasured nil = nil) /\
+  (localMeasured (cons true (cons false (cons true nil))) =
+   cons true (cons false (cons true nil))).
+Proof.
+  split; unfold localMeasured, HsToRocq.Wf.wfFix1, Coq.Program.Wf.Fix_sub;
+    destruct_accessibility;
+    reflexivity.
 Qed.

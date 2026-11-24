@@ -1,0 +1,79 @@
+skip RecursiveInstanceMethods.Default__Pair
+skip RecursiveInstanceMethods.Default__Nest
+
+# Only the recursive Nest application is redirected. Pair dictionary calls,
+# including the callback at the changed element type, retain normal dispatch.
+in RecursiveInstanceMethods.FoldLike__Nest_foldLike rewrite forall f t, RecursiveInstanceMethods.foldLike (RecursiveInstanceMethods.foldLike f) t = RecursiveInstanceMethods.FoldLike__Nest_foldLike (RecursiveInstanceMethods.foldLike f) t
+polyrec RecursiveInstanceMethods.FoldLike__Nest_foldLike
+
+# The list method has no component dictionary calls, so a scoped name suffices.
+in RecursiveInstanceMethods.FoldLike__list_foldLike rename value RecursiveInstanceMethods.foldLike = RecursiveInstanceMethods.FoldLike__list_foldLike
+in RecursiveInstanceMethods.FoldLike__list_takeFlags rename value RecursiveInstanceMethods.takeFlags = RecursiveInstanceMethods.FoldLike__list_takeFlags
+termination RecursiveInstanceMethods.FoldLike__list_takeFlags {struct 2}
+order RecursiveInstanceMethods.FoldLike__Pair RecursiveInstanceMethods.FoldLike__Nest
+
+add RecursiveInstanceMethods Theorem RecursiveInstanceMethods.method_types : True.
+Proof.
+  Check (@FoldLike__Nest_foldLike : forall tag : Type, Tag tag ->
+    forall a : Type, (a -> bool) -> Nest tag a -> bool).
+  Check (@FoldLike__Nest_foldDefault : forall tag : Type, Tag tag ->
+    forall a : Type, (a -> bool) -> Nest tag a -> bool).
+  Check (@FoldLike__Nest_foldNegated : forall tag : Type, Tag tag ->
+    forall a : Type, (a -> bool) -> Nest tag a -> bool).
+  Check (@FoldLike__Nest_foldEvery : forall tag : Type, Tag tag ->
+    forall a : Type, (a -> bool) -> Nest tag a -> bool).
+  Check (@FoldLike__Nest_takeFlags : forall tag : Type, Tag tag ->
+    forall a : Type, Nest tag a -> list bool -> list bool).
+  Check (@FoldLike__list_foldLike : forall a : Type,
+    (a -> bool) -> list a -> bool).
+  exact I.
+Qed.
+order RecursiveInstanceMethods.FoldLike__Nest RecursiveInstanceMethods.method_types
+order RecursiveInstanceMethods.FoldLike__list RecursiveInstanceMethods.method_types
+
+add RecursiveInstanceMethods Theorem RecursiveInstanceMethods.nested_calls :
+  (foldLike (fun x => x) (NLeaf true true) = true) /\
+  ((foldLike (fun x => x) (NLeaf false true) = false) /\
+  ((foldLike (fun x => x) middleTrue = true) /\
+  ((foldLike (fun _ => false) middleTrue = false) /\
+   (foldLike (fun x => x) deepTrue = true)))).
+Proof. repeat split; reflexivity. Qed.
+order RecursiveInstanceMethods.FoldLike__Nest RecursiveInstanceMethods.nested_calls
+order RecursiveInstanceMethods.middleTrue RecursiveInstanceMethods.nested_calls
+order RecursiveInstanceMethods.deepTrue RecursiveInstanceMethods.nested_calls
+
+add RecursiveInstanceMethods Theorem RecursiveInstanceMethods.component_dispatch :
+  (foldLike (fun x => x) (MkPair false true) = true) /\
+  (foldLike (fun x => x) (MkPair false false) = false).
+Proof. split; reflexivity. Qed.
+order RecursiveInstanceMethods.FoldLike__Pair RecursiveInstanceMethods.component_dispatch
+
+add RecursiveInstanceMethods Theorem RecursiveInstanceMethods.inherited_methods :
+  (foldDefault (fun x => x) middleTrue = true) /\
+  ((foldNegated (fun x => x) middleTrue = false) /\
+  ((foldEvery (fun x => x) middleTrue = false) /\
+  ((foldEvery (fun _ => true) deepTrue = true) /\
+   (takeFlags deepTrue (cons true (cons false nil)) = cons true (cons false nil))))).
+Proof. repeat split; reflexivity. Qed.
+order RecursiveInstanceMethods.FoldLike__Nest RecursiveInstanceMethods.inherited_methods
+order RecursiveInstanceMethods.middleTrue RecursiveInstanceMethods.inherited_methods
+order RecursiveInstanceMethods.deepTrue RecursiveInstanceMethods.inherited_methods
+
+add RecursiveInstanceMethods Theorem RecursiveInstanceMethods.list_methods :
+  (foldLike (fun x => x) (cons false (cons true nil)) = true) /\
+  ((foldDefault (fun x => x) (cons false nil) = false) /\
+  ((foldNegated (fun x => x) (cons false nil) = true) /\
+  ((foldEvery (fun x => x) (cons true (cons true nil)) = true) /\
+   (takeFlags (cons false (cons true nil)) (cons true (cons false (cons true nil))) =
+    cons true (cons false nil))))).
+Proof. repeat split; reflexivity. Qed.
+order RecursiveInstanceMethods.FoldLike__list RecursiveInstanceMethods.list_methods
+
+# Choosing the second argument must affect reduction, not merely print a hint.
+add RecursiveInstanceMethods Theorem RecursiveInstanceMethods.structural_argument (ys : list bool) :
+  @takeFlags list FoldLike__list bool nil ys = nil.
+Proof.
+  Fail reflexivity.
+  destruct ys; reflexivity.
+Qed.
+order RecursiveInstanceMethods.FoldLike__list RecursiveInstanceMethods.structural_argument

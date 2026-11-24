@@ -76,6 +76,9 @@ PASS = \
   ClassEdits \
   ClassEditSimple \
   ClassEditRedefine \
+  FunctionalDependencies \
+  RecursiveInstanceMethods \
+  ConstructorTags \
   ScopedMethods \
   NewtypeEdits \
   RecursionEdits \
@@ -188,6 +191,23 @@ Renamed.v: FORCE $(SRC_DIR)/RenameMe.hs $(SRC_DIR)/RenameMe.hs-boot $(SRC_DIR)/R
 
 RenameModule.v:: Renamed.vo
 
+ConstructorTags.pass: constructor-tag-checks
+constructor-tag-checks:
+	bash $(SRC_DIR)/ConstructorTags/check.sh $(EDIT_CHECK_VERSION)
+
+# Compile the existing WF combinators in isolation, with normal target-version
+# rewriting. This helper requires only the compiler's standard library.
+InlineMutualEdits.v: HsToRocq/Wf.vo
+InlineMutualEdits.pass: inline-mutual-checks
+InlineMutualEdits.pass: TYPECHECK = $(COMPILER) -Q . "" 1>/dev/null
+inline-mutual-checks:
+	bash $(SRC_DIR)/InlineMutualEdits/check.sh $(EDIT_CHECK_VERSION)
+HsToRocq/Wf.v: FORCE $(SRC_DIR)/InlineMutualEdits/Wf.hs $(SRC_DIR)/../../base/HsToRocq/Wf.v
+	@mkdir -p HsToRocq
+	@rm -f $@
+	$(HS_TO_ROCQ) $(HS_EXTRA) -N -e $(SRC_DIR)/renamings --preamble $(SRC_DIR)/../../base/HsToRocq/Wf.v -o . $(SRC_DIR)/InlineMutualEdits/Wf.hs 1>/dev/null || { rm -f $@; exit 1; }
+	@test -e $@ || { echo "$@: translation produced no output" >&2; exit 1; }
+
 RocqFromImports.v: Other/Coq/Init/Decimal.vo
 RocqFromImports.pass: TYPECHECK = $(COMPILER) -Q . "" 1>/dev/null
 
@@ -217,7 +237,8 @@ clean:
 	rm -rf */*.vo */*.glob */*.v.d *.vo *.vok *.vos *.v.d *.glob *.h2ci .*.aux *.hi *.o *.hi-boot *.o-boot $(VFILES) Renamed.v _CoqProject Makefile.coq *~
 	rm -f Other/Coq/Init/Decimal.v Other/Coq/Init/Decimal.h2ci Other/Coq/Init/Decimal.vo Other/Coq/Init/Decimal.vok Other/Coq/Init/Decimal.vos Other/Coq/Init/Decimal.glob Other/Coq/Init/.Decimal.aux
 	rm -f ModuleEdits/Support.v ModuleEdits/Support.h2ci ModuleEdits/Support.vo ModuleEdits/Support.vok ModuleEdits/Support.vos ModuleEdits/Support.glob ModuleEdits/.Support.aux
+	rm -f HsToRocq/Wf.v HsToRocq/Wf.h2ci HsToRocq/Wf.vo HsToRocq/Wf.vok HsToRocq/Wf.vos HsToRocq/Wf.glob HsToRocq/.Wf.aux
 
-.SECONDARY: $(VFILES) Other/Coq/Init/Decimal.v ModuleEdits/Support.v
+.SECONDARY: $(VFILES) Other/Coq/Init/Decimal.v ModuleEdits/Support.v HsToRocq/Wf.v
 
-.PHONY: main all edit-checks pass todo_pass todo_translate FORCE clean
+.PHONY: main all edit-checks constructor-tag-checks inline-mutual-checks pass todo_pass todo_translate FORCE clean

@@ -12,6 +12,7 @@ module HsToRocq.ConvertHaskell.Declarations.Instances (
 ) where
 
 import Control.Lens
+import Control.Monad (filterM, forM_, unless, when)
 
 import Data.Semigroup (Semigroup(..), (<>))
 import Data.Traversable
@@ -20,6 +21,7 @@ import Data.Maybe
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Bifunctor
+import Data.Generics (everything, mkQ)
 import Data.List (partition, sortBy)
 import Data.Monoid
 import Data.Ord (comparing)
@@ -31,11 +33,18 @@ import Control.Monad.Writer.Strict (runWriterT, tell)
 
 import qualified Data.Map.Strict as M
 
-import GHC hiding (Name)
+import GHC hiding (Name, Match)
 #if __GLASGOW_HASKELL__ >= 900
 import GHC.Data.Bag (bagToList)
+import GHC.Core.TyCon (isAlgTyCon, isNewTyCon, tyConDataCons, tyConName)
+import GHC.Core.DataCon (isVanillaDataCon, dataConName, dataConSourceArity, dataConTagZ)
+import GHC.Types.TypeEnv (typeEnvTyCons)
+import GHC.Unit.Module.ModDetails (md_types)
 #else
 import Bag
+import TyCon (isAlgTyCon, isNewTyCon, tyConDataCons, tyConName)
+import DataCon (isVanillaDataCon, dataConName, dataConSourceArity, dataConTagZ)
+import HscTypes (typeEnvTyCons, md_types)
 #endif
 #if __GLASGOW_HASKELL__ >= 806
 import HsToRocq.Util.GHC.HsTypes (noExtCon)
@@ -47,8 +56,10 @@ import HsToRocq.Rocq.Gallina
 
 import HsToRocq.Rocq.Subst
 import HsToRocq.Rocq.SubstTy
+import HsToRocq.Rocq.FreeVars (getFreeVars)
 import HsToRocq.Rocq.Pretty
 import HsToRocq.Rocq.Gallina.Util
+import HsToRocq.Rocq.Gallina.UseTypeInBinders
 
 import HsToRocq.Edits.Types
 import HsToRocq.ConvertHaskell.Monad
@@ -91,6 +102,131 @@ typeHead (App f _)                       = typeHead f
 typeHead (Parens t)                      = typeHead t
 typeHead (InScope t _)                   = typeHead t
 typeHead _                               = Nothing
+
+-- Constructor tags are GHC's zero-based source ordinals, not positions in our
+-- target metadata (which can be built in, renamed, skipped or redefined).
+isConstructorTag :: Qualid -> Bool
+isConstructorTag q = q `elem` [Qualified "GHC.Magic" "op_dataToTagzh__",
+                              Qualified "GHC.Prim" "op_dataToTagzh__"]
+
+hasConstructorTag :: Term -> Bool
+hasConstructorTag = everything (||) (mkQ False isTagTerm)
+  where
+    isTagTerm (Qualid q) = isConstructorTag q
+    isTagTerm (RawQualid q) = isConstructorTag q
+    isTagTerm _ = False
+
+bindTagTypes :: M.Map Qualid Term -> [Binder] -> M.Map Qualid Term
+bindTagTypes = foldl extend
+  where
+    extend env b =
+      let cleared = foldr M.delete env (toListOf binderIdents b)
+      in case b of
+        Typed _ _ names ty -> foldr (\n e -> case n of
+          Ident q -> M.insert q ty e
+          _ -> e) cleared names
+        _ -> cleared
+
+constructorTagMatch :: ConversionMonad r m => Term -> Term -> m Term
+constructorTagMatch receiver ty = do
+  q <- maybe (throwProgramError "dataToTag#: operand has no known type constructor")
+             pure (typeHead ty)
+  tcs <- views (currentModule.modDetails) (typeEnvTyCons . md_types)
+  matches <- filterM (\tc -> (== q) <$> var TypeNS (tyConName tc)) tcs
+  tc <- case matches of
+    [tc] | isAlgTyCon tc && not (isNewTyCon tc) -> pure tc
+    _ -> throwProgramError $ "dataToTag#: no unique local source ADT for " ++ showP ty
+  redef <- view (edits.redefinitions.at q)
+  when (isJust redef) $
+    throwProgramError "dataToTag#: redefined datatype is unsupported"
+  let dcs = tyConDataCons tc
+  unless (all isVanillaDataCon dcs) $
+    throwProgramError "dataToTag#: non-vanilla constructors are unsupported"
+  source <- forM dcs $ \dc -> do
+    cn <- var ExprNS (dataConName dc)
+    pure (cn, dataConSourceArity dc, dataConTagZ dc)
+  let names = [cn | (cn, _, _) <- source]
+  actual <- lookupConstructors q
+  unless (actual == Just names && S.size (S.fromList names) == length names) $
+    throwProgramError "dataToTag#: target constructor list differs from source"
+  forM_ source $ \(cn, arity, _) -> do
+    fields <- lookupConstructorFields cn
+    let count = case fields of
+          Just (NonRecordFields n) -> Just n
+          Just (RecordFields fs) -> Just (length fs)
+          _ -> Nothing
+    unless (count == Just arity) $
+      throwProgramError "dataToTag#: field arity differs from source"
+  pure $ Match (MatchItem receiver Nothing Nothing :| []) Nothing
+    [ Equation (MultPattern (ArgsPat cn (replicate arity UnderscorePat) :| []) :| [])
+        (InScope (Num (fromIntegral tag)) "Z")
+    | (cn, arity, tag) <- source ]
+
+-- This is a bounded analysis of the receiver's own type, not an inference pass
+-- or a guess from the instance head. Primitive-free terms remain byte-identical.
+-- Untyped shadowing loses information; unsupported binding forms fail closed.
+lowerConstructorTags :: ConversionMonad r m
+                     => M.Map Qualid Term -> Maybe Term -> Term -> m Term
+lowerConstructorTags env expected term
+  | not (hasConstructorTag term) = pure term
+  | otherwise = do
+      lowered <- lower env expected term
+      when (hasConstructorTag lowered) $
+        throwProgramError "dataToTag#: unsupported primitive in a type or binder"
+      pure lowered
+  where
+    strip (Parens t) = strip t
+    strip (InScope t _) = strip t
+    strip t = t
+    operandType e t = case strip t of
+      Qualid q -> M.lookup q e
+      HasType _ ty -> Just ty
+      CheckType _ ty -> Just ty
+      _ -> Nothing
+    -- Removing constructor names too is conservative and cannot invent a type.
+    maskPattern e p = foldr M.delete e $
+      everything (++) (mkQ [] (\q -> [q :: Qualid])) p
+    go = lowerConstructorTags
+    lower e ty t = case t of
+      App f (PosArg x :| []) | Qualid q <- strip f, isConstructorTag q -> do
+        xty <- maybe (throwProgramError $ "dataToTag#: unknown operand type: " ++ showP x)
+                     pure (operandType e x)
+        x' <- go e Nothing x
+        constructorTagMatch x' xty
+      Fun bs body -> do
+        (typed, resultTy) <- case ty of
+          Nothing -> pure (bs, Nothing)
+          Just t' | Forall{} <- strip t' ->
+            throwProgramError "dataToTag#: polymorphic lambda alignment is unsupported"
+          Just t' -> case useTypeInBinders (strip t') bs of
+            Right (ret, bs', UTIBIsTypeTooShort False) -> pure (bs', Just ret)
+            _ -> throwProgramError "dataToTag#: cannot align lambda with method type"
+        Fun bs <$> go (bindTagTypes e (NE.toList typed)) resultTy body
+      LetTick p val body -> LetTick p <$> go e Nothing val
+        <*> go (maskPattern e p) ty body
+      Let q bs oty val body -> Let q bs oty
+        <$> go (bindTagTypes (M.delete q e) bs) oty val
+        <*> go (M.delete q e) ty body
+      Match items Nothing eqns | all simpleItem items -> do
+        items' <- forM items $ \(MatchItem scr as inside) ->
+          MatchItem <$> go e Nothing scr <*> pure as <*> pure inside
+        eqns' <- forM eqns $ \(Equation pats body) -> do
+          let e' = foldl maskPattern e
+                [p | MultPattern ps <- NE.toList pats, p <- NE.toList ps]
+          Equation pats <$> go e' ty body
+        pure $ Match items' Nothing eqns'
+      App f args -> App <$> go e Nothing f <*> traverse (\case
+        PosArg x -> PosArg <$> go e Nothing x
+        NamedArg n x -> NamedArg n <$> go e Nothing x) args
+      If style c Nothing a b -> If style <$> go e Nothing c <*> pure Nothing
+        <*> go e ty a <*> go e ty b
+      Parens x -> Parens <$> go e ty x
+      InScope x s -> (`InScope` s) <$> go e ty x
+      HasType x xty -> (`HasType` xty) <$> go e (Just xty) x
+      CheckType x xty -> (`CheckType` xty) <$> go e (Just xty) x
+      _ -> throwProgramError $ "dataToTag#: unsupported context: " ++ showP t
+    simpleItem (MatchItem _ Nothing Nothing) = True
+    simpleItem _ = False
 
 -- | Decompose an arrow type into arguments and result, skipping forall binders.
 -- Returns ([argTypes], resultType)
@@ -506,9 +642,9 @@ convertClsInstDecl env cid@ClsInstDecl{..} = runWriterT $ do
 
       -- decomposeClassTy can fail, so run it in the monad so that
       -- failure will be caught and cause the instance to be skipped
-      (className, instTy) <- either convUnsupportedHere pure $ decomposeClassTy classTy
+      (className, instTys) <- either convUnsupportedHere pure $ decomposeClassTy classTy
       
-      _inst@ConvertedInstance{..} <- lookupInstance instTy className env
+      _inst@ConvertedInstance{..} <- lookupInstance instTys className env
       let binds = convertedInstanceBinds ++ filter (\b -> binderGeneralizability b == Generalizable) binds'
 
       -- Get the methods of this class (this should already exclude skipped ones)
@@ -609,7 +745,7 @@ convertClsInstDecl env cid@ClsInstDecl{..} = runWriterT $ do
             let extraSubst
                   | meth `elem` classTypes =
                     let names = foldMap (^..binderIdents) . filter (\b -> binderExplicitness b == Explicit)
-                    in M.fromList $ zip (names classArgs) [instTy]
+                    in M.fromList $ zip (names classArgs) instTys
                   | otherwise =
                     mempty
             in -- In the body of the default definition, make methods names
@@ -641,13 +777,38 @@ convertClsInstDecl env cid@ClsInstDecl{..} = runWriterT $ do
             expandedBody <- case level of
               CLTerm -> expandCoerce (Just ty) body
               _       -> pure body
-            qbody <- quantify sub meth $ substTy sub' expandedBody
-            pure . DefinitionSentence $ DefinitionDef Local
-                                                      localMeth
-                                                      (subst allLocalNames <$> params)
-                                                      (Just $ subst allLocalNames ty)
-                                                      qbody
-                                                      NotExistingClass
+            let args = subst allLocalNames <$> params
+                methodTy = subst allLocalNames ty
+                peel (Forall bs t) = first (NE.toList bs ++) (peel t)
+                peel t = ([], t)
+                (methodArgs, resultTy) = peel methodTy
+                sentence cd = DefinitionSentence $ DefinitionDef Local
+                  (cd^.convDefName) (cd^.convDefArgs) (cd^.convDefType)
+                  (cd^.convDefBody) NotExistingClass
+            tagBody <- withCurrentDefinition localMeth $
+              lowerConstructorTags (bindTagTypes M.empty (args ++ methodArgs))
+                (Just resultTy) (substTy sub' expandedBody)
+            qbody <- quantify sub meth tagBody
+            if level == CLTerm && localMeth `S.member` getFreeVars qbody
+              then withCurrentDefinition localMeth $ do
+                -- Recursion needs the instantiated method signature. Put its
+                -- quantified parameters alongside the instance parameters, as
+                -- for ordinary bindings, so polyrec controls which enter fix.
+                let cd = ConvertedDefinition localMeth (args ++ methodArgs)
+                           (Just resultTy) tagBody
+                -- Process only this method's self-recursion. Cross-method calls
+                -- retain their existing ordering and dictionary behavior.
+                fixed <- addRecursion [Right (ConvertedDefinitionBinding cd)]
+                case fixed of
+                  [Right (ConvertedDefinitionBinding cd')] -> do
+                    termination <- view (edits.termination.at localMeth)
+                    case termination of
+                      Just (WellFoundedTA order) -> do
+                        obl <- view (edits.obligations.at localMeth)
+                        toProgramFixpointSentence cd' (fromWFOrder order) obl
+                      _ -> pure $ sentence cd'
+                  _ -> throwProgramError "internal error: lost recursive instance method"
+              else pure $ sentence (ConvertedDefinition localMeth args (Just methodTy) qbody)
 
       let instHeadTy = appList (Qualid className)
             (PosArg <$> filterVisibleVars convertedInstanceClass convertedInstanceTypes)
@@ -741,12 +902,16 @@ makeInstanceMethodSubst params =
         Generalized ei tm      -> Generalized   ei <$> sub tm in
   (instBnds, instSubst)
 
--- from "instance C ty where" access C and ty
--- TODO: multiparameter type classes   "instance C t1 t2 where"
---       instances with contexts       "instance C a => C (Maybe a) where"
-decomposeClassTy :: Term -> Either String (Qualid, Term)
-decomposeClassTy (App1 (Qualid cn) a) = Right (cn, normalizeType a)
-decomposeClassTy ty                   =  Left $ "type class instance head `" ++ showP ty ++ "'"
+-- Recover all visible arguments of "instance C t1 ... tn where".
+decomposeClassTy :: Term -> Either String (Qualid, [Term])
+decomposeClassTy ty = case normalizeType ty of
+  Qualid cn -> Right (cn, [])
+  App (Qualid cn) args -> (cn,) <$> traverse positionalArg (NE.toList args)
+  _ -> unsupported
+  where
+    positionalArg (PosArg t) = Right (normalizeType t)
+    positionalArg _ = unsupported
+    unsupported = Left $ "type class instance head `" ++ showP ty ++ "'"
 
 decomposeForall :: Term -> ([Binder], Term)
 decomposeForall (Forall bnds ty) = first (NE.toList bnds ++) (decomposeForall ty)

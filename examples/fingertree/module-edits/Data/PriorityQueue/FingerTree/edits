@@ -1,0 +1,34 @@
+# Rocq types and constructors share a namespace.
+rename value Data.PriorityQueue.FingerTree.Prio = Data.PriorityQueue.FingerTree.MkPrio
+rename value Data.PriorityQueue.FingerTree.Entry = Data.PriorityQueue.FingerTree.MkEntry
+rename value Data.PriorityQueue.FingerTree.PQueue = Data.PriorityQueue.FingerTree.MkPQueue
+
+# The core translation renames its recursive view helpers.
+rename value Data.FingerTree.<| = Data.FingerTree.consTree
+rename value Data.FingerTree.|> = Data.FingerTree.snocTree
+
+# Close the source Foldable self-call to the generated local method.  The
+# pre-rename module name matches the class method in the checked source.  This
+# preserves the source recursion.  The user authorized deferredFix so its
+# valid-domain unfolding premises can be proved during verification.
+in Data.PriorityQueue.FingerTree.Foldable__PQueue_foldMap rename value GHC.Internal.Data.Foldable.foldMap = Data.PriorityQueue.FingerTree.Foldable__PQueue_foldMap
+termination Data.PriorityQueue.FingerTree.Foldable__PQueue_foldMap deferred
+
+# User-approved single-function exception: preserve the lazy where binding's
+# guard order in source lines 238-246. Do not demand the measure on empty.
+redefine Definition Data.PriorityQueue.FingerTree.minViewWithKey
+  {k v : Type} `{GHC.Base.Ord k}
+  : PQueue k v -> option (op_zt__ (op_zt__ k v) (PQueue k v)) :=
+  fun queue => match queue with | MkPQueue q =>
+    if Data.FingerTree.null q then None else
+    match Data.FingerTree.measure q with
+    | MkPrio k v =>
+        match Data.FingerTree.split (Data.PriorityQueue.FingerTree.below k) q with | pair l r =>
+        Some (pair (pair k v)
+          (match Data.FingerTree.viewl r with
+           | Data.FingerTree.op_ZCzl__ _ r' =>
+               MkPQueue (Data.FingerTree.op_zgzl__ l r')
+           | _ => GHC.Err.error (GHC.Base.hs_string__ "can't happen")
+           end)) end
+    | _ => GHC.Err.patternFailure
+    end end.

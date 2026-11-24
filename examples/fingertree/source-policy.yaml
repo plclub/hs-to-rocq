@@ -1,0 +1,20 @@
+# Owner inputs only: inherited deps/base.edits is outside this policy.
+# These pins are existing rewrite guidance, not additional manual algorithm bodies.
+# Changing a target or a parsed rewrite requires a deliberate policy update.
+# Rewrite-bearing inputs follow lexical order of the file keys below.
+approved-redefinitions:
+  Data.PriorityQueue.FingerTree.minViewWithKey: ASSUMPTIONS.md#approved-translation-exception-minviewwithkey
+rewrites:
+  module-edits/Data/FingerTree/edits: |
+    in Data.FingerTree.consDigit rewrite forall , Data.FingerTree.illegal_argument = @Data.FingerTree.illegal_argument _ (HsToRocq.Err.Build_Default _ arg_1__)
+    in Data.FingerTree.snocDigit rewrite forall , Data.FingerTree.illegal_argument = @Data.FingerTree.illegal_argument _ (HsToRocq.Err.Build_Default _ arg_0__)
+    in Data.FingerTree.ltailDigit rewrite forall , Data.FingerTree.illegal_argument = @Data.FingerTree.illegal_argument _ (HsToRocq.Err.Build_Default _ arg_0__)
+    in Data.FingerTree.rtailDigit rewrite forall , Data.FingerTree.illegal_argument = @Data.FingerTree.illegal_argument _ (HsToRocq.Err.Build_Default _ arg_0__)
+    in Data.FingerTree.Foldable__FingerTree_foldMap rewrite forall f t, Data.Foldable.foldMap (Data.Foldable.foldMap f) t = Data.FingerTree.Foldable__FingerTree_foldMap (Data.Foldable.foldMap f) t
+    in Data.FingerTree.search rewrite forall , Data.FingerTree.searchTree = @Data.FingerTree.searchTree _ _ _ _ _ _
+    in Data.FingerTree.split rewrite forall , Data.FingerTree.splitTree = @Data.FingerTree.splitTree _ _ _ _ _ _
+    rewrite forall x y, GHC.Prim./=# x y = if Coq.ZArith.BinInt.Z.eqb x y then (#0 : GHC.Num.Int) else (#1 : GHC.Num.Int)
+    rewrite forall x y, (GHC.Prim.tagToEnum# (GHC.Prim.<# x y) : bool) = Coq.ZArith.BinInt.Z.ltb x y
+    rewrite forall x y, (GHC.Prim.tagToEnum# (GHC.Prim.==# x y) : bool) = Coq.ZArith.BinInt.Z.eqb x y
+  module-edits/Data/IntervalMap/FingerTree/edits: |
+    in Data.IntervalMap.FingerTree.Foldable__IntervalMap_foldMap rewrite forall f t, Data.Foldable.foldMap (Data.Foldable.foldMap f) t = Data.Foldable.foldMap (fun (x : Node inst_v a) => Data.Foldable.foldMap f x) t

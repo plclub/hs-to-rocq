@@ -37,19 +37,19 @@ Check the tools for the selected jobs rather than assuming they are installed:
 | Job | Required tools and CI versions |
 | --- | --- |
 | `hlint` | HLint 3.6.1; check `command -v hlint` and `hlint --version`. |
-| `build-haskell` and its dependents | Stack with GHC 9.10.3, Bash, make, and Git. After building, verify with `stack exec -- ghc --numeric-version`. |
+| `build-haskell` and its dependents | Stack with GHC 9.10.3, Bash, make, Git, and Python 3.8+. After building, verify with `stack exec -- ghc --numeric-version`. |
 | `test-coq-files` | Coq 8.20, `coq_makefile`, opam, MathComp 2.5.0, and `coq-equations.1.3.1+8.20` (CI image: `mathcomp/mathcomp:2.5.0-coq-8.20`). |
 | `tests` | `coq.8.20.1`, `coq_makefile`, and `coq-equations.1.3.1+8.20`. This job does not require MathComp. |
-| `test-rocq9` | `rocq-prover`, `rocq-core`, `rocq-runtime`, and `rocq-stdlib`, all 9.0.0; `rocq-equations.1.3.1+9.0`; `rocq` and the matching `coq_makefile`. |
+| `test-rocq9` | Separate compiler environments: `rocq-prover`, `rocq-core`, `rocq-runtime`, and `rocq-stdlib` 9.0.0 with `rocq-equations.1.3.1+9.0`; plus `rocq-prover.meta.1` and core/runtime/stdlib 9.2.0. Python 3.8+; each compiler's matching Makefile tool. CI uses OCaml 4.14.2 in both switches. |
 | Translation jobs | No Coq/Rocq compiler required. `test-translation` also needs `lndir` and GNU sed for GHC regeneration. |
 
 Report missing prerequisites and version mismatches alongside the affected results. Use a UTF-8 locale available on the host; CI uses `LANG=C.utf8`. On macOS, ensure GNU sed is exposed as `sed` for GHC regeneration; see `CLAUDE.md`, "GHC example".
 
 ### Per-job compiler environments
 
-Coq 8.20 and Rocq 9.0 need separate environments. The compiler blocks below use `opam exec` so selecting one job does not change the global switch or contaminate the next job's `PATH`.
+Coq 8.20, Rocq 9.0, and Rocq 9.2 need separate environments. The compiler blocks below use `opam exec` so selecting one compiler does not change the global switch or contaminate another compiler's `PATH` or object files.
 
-Use `opam switch list --short` to discover existing switches. Set `COQ820_SWITCH` and `ROCQ90_SWITCH` to the appropriate names in the command environment; these are not prescribed switch names. Before each compiler job, inspect `opam list --switch="$COQ820_SWITCH" --installed` or its Rocq equivalent for the packages above. Verify the selected compiler and Makefile tool:
+Use `opam switch list --short` to discover existing switches. Set `COQ820_SWITCH`, `ROCQ90_SWITCH`, and `ROCQ92_SWITCH` to the appropriate names in the command environment; these are not prescribed local switch names. Before each compiler job, inspect `opam list --switch="$COQ820_SWITCH" --installed` or its Rocq equivalent for the packages above. Verify the selected compiler and Makefile tool:
 
 ```bash
 opam exec --switch="${COQ820_SWITCH:?Select a Coq 8.20 switch}" -- coqc --version
@@ -59,6 +59,11 @@ opam exec --switch="$COQ820_SWITCH" -- sh -c 'command -v coq_makefile'
 ```bash
 opam exec --switch="${ROCQ90_SWITCH:?Select a Rocq 9.0 switch}" -- rocq --version
 opam exec --switch="$ROCQ90_SWITCH" -- sh -c 'command -v coq_makefile'
+```
+
+```bash
+opam exec --switch="${ROCQ92_SWITCH:?Select a Rocq 9.2 switch}" -- rocq --version
+opam exec --switch="$ROCQ92_SWITCH" -- rocq makefile --version
 ```
 
 For a non-opam installation, use an equivalent isolated environment and verify both tools there. Do not use whichever `coqc` happens to be on the global `PATH`: Rocq also supplies that compatibility command. Direct local Stack commands below omit container-only flags; shared Makefiles and check scripts already include `--allow-different-user` where needed and should run unchanged.
@@ -94,12 +99,13 @@ stack exec -- ghc --numeric-version
 stack test
 bash test/harness.sh
 bash test/concurrent.sh
+python3 test/assumptions.py
 BASH
 ```
 
 `stack test` runs the `edits`, `rocq-version`, and `ci-catalog` Cabal suites. The catalog suite validates job coverage, prerequisites, `/ci-fix` delegation, failure propagation, and Bash syntax without executing real builds or regeneration. Its complete self-tests run by default, including the pinned old catalog and mutations. CI uses `stack --allow-different-user test` in the `Run Haskell test suites` step.
 
-The separate shell steps check harness failure propagation with fake tools and concurrent real translations for both targets. The concurrent check also verifies the explicit GHC code-generation override. None of these checks requires a Coq/Rocq compiler; they do not replace the compiler suites. For focused commands and dependencies, see [test/README.md](../../test/README.md).
+The separate shell steps check harness failure propagation with fake tools and concurrent real translations for both targets. The concurrent check also verifies the explicit GHC code-generation override. The Python runner checks assumption-report rejection and compiler-error propagation without a Coq/Rocq installation. CI installs Python through the existing setup action. These fast checks do not replace compiler suites or the real-Rocq negative controls below. For focused commands and dependencies, see [test/README.md](../../test/README.md).
 
 ## Job: test-coq-files
 
@@ -172,18 +178,29 @@ BASH
 
 ## Job: test-rocq9
 
-Use the Rocq 9.0 environment with Equations. Check for local work before the submodule update and clean. The top-level `base` target must regenerate the missing base after clean; do not replace this sequence with compilation of the existing copy.
+Use the Rocq 9.0 environment with Equations for the shared suite, then an isolated Rocq 9.2 environment for fingertree. Check for local work before the pinned submodule update and both clean sequences. The top-level 9.0 `base` target must regenerate the missing base after clean; do not replace this sequence with compilation of the existing copy.
+
+CI creates its second switch with `--no-switch`, installs `rocq-prover.meta.1` with core/runtime/stdlib pinned to 9.2.0, and selects it explicitly for every new check. The local catalog uses existing switches; it does not install packages or change the global switch. The source generator still uses `--target-version 9.0` for the externally compiled 9.2 example.
 
 ```bash
-opam exec --switch="${ROCQ90_SWITCH:?Select a Rocq 9.0 switch}" -- bash -e -o pipefail <<'BASH'
-git submodule update --init examples/ghc/ghc
-make -C examples/rocq9.0 clean
-make -j2 -C examples/rocq9.0 base
-make -C examples/rocq9.0/tests
+bash -e -o pipefail <<'BASH'
+: "${ROCQ90_SWITCH:?Select a Rocq 9.0 switch}"
+: "${ROCQ92_SWITCH:?Select a Rocq 9.2 switch}"
+git submodule update --init examples/ghc/ghc examples/fingertree/fingertree
+opam exec --switch="$ROCQ90_SWITCH" -- make -C examples/rocq9.0 clean
+opam exec --switch="$ROCQ90_SWITCH" -- make -j2 -C examples/rocq9.0 base
+opam exec --switch="$ROCQ90_SWITCH" -- make -C examples/rocq9.0/tests
+opam exec --switch="$ROCQ92_SWITCH" -- python3 test/assumptions.py --rocq rocq
+opam exec --switch="$ROCQ92_SWITCH" -- make -C examples/fingertree clean
+opam exec --switch="$ROCQ92_SWITCH" -- make -C examples/rocq9.2 clean
+opam exec --switch="$ROCQ92_SWITCH" -- make -j2 -C examples/rocq9.2 check
+opam exec --switch="$ROCQ92_SWITCH" -- make -j2 -C examples/fingertree kernel-check core-check interval-check priority-check
 BASH
 ```
 
 The test wrapper selects `--target-version 9.0` and compiles with `rocq c -w +deprecated-dirpath-Coq` through the shared rules. Keep that warning check enabled.
+
+The 9.2 commands regenerate the isolated foundations and all three example modules, enforce the exact theory and declaration assumption inventories, and recursively kernel-check the final libraries and theories. The Python runner's requested compiler mode must reject unexpected direct/transitive axioms and fail for an unavailable or erroring compiler. Every nonzero status fails this job. These checks run within the existing `test-rocq9` job; the workflow still has seven jobs.
 
 ## Translation comparison criteria
 

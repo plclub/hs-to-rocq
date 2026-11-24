@@ -1,0 +1,21 @@
+constructorFields:
+  Data.PriorityQueue.FingerTree.MkEntry: NonRecordFields 2
+  Data.PriorityQueue.FingerTree.MkPQueue: NonRecordFields 1
+  Data.PriorityQueue.FingerTree.MkPrio: NonRecordFields 2
+  Data.PriorityQueue.FingerTree.NoPrio: NonRecordFields 0
+constructorTypes:
+  Data.PriorityQueue.FingerTree.MkEntry: Qualified "Data.PriorityQueue.FingerTree"
+    "Entry"
+  Data.PriorityQueue.FingerTree.MkPQueue: Qualified "Data.PriorityQueue.FingerTree"
+    "PQueue"
+  Data.PriorityQueue.FingerTree.MkPrio: Qualified "Data.PriorityQueue.FingerTree"
+    "Prio"
+  Data.PriorityQueue.FingerTree.NoPrio: Qualified "Data.PriorityQueue.FingerTree"
+    "Prio"
+constructors:
+  Data.PriorityQueue.FingerTree.Entry: '[Qualified "Data.PriorityQueue.FingerTree"
+    "MkEntry"]'
+  Data.PriorityQueue.FingerTree.PQueue: '[Qualified "Data.PriorityQueue.FingerTree"
+    "MkPQueue"]'
+  Data.PriorityQueue.FingerTree.Prio: '[Qualified "Data.PriorityQueue.FingerTree"
+    "NoPrio",Qualified "Data.PriorityQueue.FingerTree" "MkPrio"]'

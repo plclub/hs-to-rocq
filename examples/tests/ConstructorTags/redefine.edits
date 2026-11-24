@@ -1,0 +1,1 @@
+redefine Inductive ConstructorTags.Shape (p : Type) : Type := | CtorZ : Shape p | CtorA (_ : bool) : Shape p | CtorM (_ : bool) (_ : bool) : Shape p.

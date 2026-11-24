@@ -1,0 +1,34 @@
+# Rocq types and constructors share a namespace.
+rename value Data.IntervalMap.FingerTree.Interval = Data.IntervalMap.FingerTree.MkInterval
+rename value Data.IntervalMap.FingerTree.Node = Data.IntervalMap.FingerTree.MkNode
+rename value Data.IntervalMap.FingerTree.IntInterval = Data.IntervalMap.FingerTree.MkIntInterval
+rename value Data.IntervalMap.FingerTree.IntervalMap = Data.IntervalMap.FingerTree.MkIntervalMap
+
+# The core translation renames the recursive <| helper.
+rename value Data.FingerTree.<| = Data.FingerTree.consTree
+
+# Nested Foldable call: eta-expansion gives the element type to inference.
+in Data.IntervalMap.FingerTree.Foldable__IntervalMap_foldMap rewrite forall f t, Data.Foldable.foldMap (Data.Foldable.foldMap f) t = Data.Foldable.foldMap (fun (x : Node inst_v a) => Data.Foldable.foldMap f x) t
+
+# The local merge2 is a saturated relay helper; the translator expands its
+# call site before wfFix, leaving merge1 as the sole recursive definition.
+in Data.IntervalMap.FingerTree.union inline mutual merge2
+in Data.IntervalMap.FingerTree.union set type merge2 : @Data.FingerTree.FingerTree (IntInterval v) (Node v a) -> Data.FingerTree.FingerTree (IntInterval v) (Node v a) -> Data.FingerTree.FingerTree (IntInterval v) (Node v a)
+
+# merge1 recurses on one less element of either tree.
+in Data.IntervalMap.FingerTree.union termination merge1 {measure (interval_measure as_ bs)}
+obligations Data.IntervalMap.FingerTree.union interval_union_termination
+
+# inRange matches the suffix returned by dropUntil one view at a time.
+in Data.IntervalMap.FingerTree.inRange set type matches : Data.FingerTree.FingerTree (IntInterval v) (Node v a) -> list (prod (Interval v) a)
+in Data.IntervalMap.FingerTree.inRange termination matches {measure (size xs)}
+obligations Data.IntervalMap.FingerTree.inRange interval_inRange_termination
+
+# Derived codes compare first fields at the field type; keep the class method.
+in Data.IntervalMap.FingerTree.Ord__Interval_op_zl__ rename value GHC.Base.compare = GHC.Base.compare
+in Data.IntervalMap.FingerTree.Ord__Node_op_zl__ rename value GHC.Base.compare = GHC.Base.compare
+
+# Derived Node instances compare Interval fields; place Interval first.
+order Data.IntervalMap.FingerTree.Eq___Interval Data.IntervalMap.FingerTree.Eq___Node_op_zeze__
+order Data.IntervalMap.FingerTree.Ord__Interval Data.IntervalMap.FingerTree.Ord__Node_compare
+order Data.IntervalMap.FingerTree.Ord__Interval Data.IntervalMap.FingerTree.Ord__Node_op_zl__

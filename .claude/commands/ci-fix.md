@@ -30,15 +30,27 @@ For a failing Haskell suite, use the focused commands in [test/README.md](../../
 
 For harness failures, inspect `test/harness.sh` and the production Makefile rule it exercises. For concurrency failures, inspect `test/concurrent.sh` and its translation logs; fake-tool harness success cannot substitute for this real-translator check. Rerun the failing suite or the exact shell command from `ci.md`, then rerun the whole `build-haskell` job.
 
+For assumption-audit rejection failures, use `test/assumptions.py` and the two
+production checkers it exercises. The default mode needs only Python; the
+compiler mode additionally requires the selected Rocq 9.2 executable. Unexpected
+direct/transitive axioms and missing/erroring compilers are deliberate negative
+controls whose rejection is asserted by the runner. Preserve those expectations.
+
 ## Coq and Rocq failures
 
 Verify the job's compiler environment before changing code. Use the diagnostic's file and line to distinguish these cases:
 
-- **Generated files** (`base/`, `examples/rocq9.0/base/`, and generated example `lib/` files): fix the translator or the source edits, preamble, or midamble, following `CLAUDE.md`, "Translation Principles". Both base targets share inputs under `examples/base-src/`. Regenerate through the appropriate `base-src` or example `vfiles` target; do not patch generated output. Existing `.v` files may prevent regeneration, so follow the source Makefile's rules and protect local work before removing an output or cleaning.
+- **Generated files** (`base/`, the Rocq 9.0/9.2 foundation copies, and generated example `lib/` files): fix the translator or the source edits, preamble, or midamble, following `CLAUDE.md`, "Translation Principles". Base generation shares inputs under `examples/base-src/`; the isolated 9.2 wrappers additionally adapt their authoritative sources. Regenerate through the appropriate `base-src` or example `vfiles` target; do not patch generated output. Existing `.v` files may prevent regeneration, so follow the source Makefile's rules and protect local work before removing an output or cleaning.
 - **Manual files**: edit the actual source. In particular, files under `examples/ghc/manual/` are symlinked into `lib/`; check the symlink before editing. Base manual sources live in `examples/base-src/manual/`.
 - **Hand-written proofs** (`theories/` and `base-thy/`): fix the proof directly. Use available proof-state and search tools with the job's compiler version. Consult `CLAUDE.md`, "Coq 8.20 compatibility" and "Coq 8.20 proof tactics", for version-specific failures.
 - **Rocq namespace or loading errors**: consult `CLAUDE.md`, "Rocq 9.0 support". Check AST/text rewriting, the generated preamble, and the manual-copy rule as appropriate. Keep the unit suite's deprecated-`Coq` warning check enabled.
 - **Inconsistent assumptions**: confirm a toolchain mismatch or stale compiled artifacts, then follow `CLAUDE.md`, "Stale .vo recovery", to rebuild the dependency chain with one compiler version. Cleaning only the failing leaf can leave incompatible dependencies in place.
+
+For the fingertree part of `test-rocq9`, use its separate Rocq 9.2 switch and the
+example's `COVERAGE.md` and `ASSUMPTIONS.md`. Its checks enforce each export's
+exact transitive assumption set. Fix the proof, inventory, or checker defect;
+additional allowed assumptions require the documented user decision. Keep the
+9.0 suite and 9.2 outputs in their separate trees and compiler environments.
 
 Before changing a proof that unfolds a library function, check whether the function is axiomatized. Follow `CLAUDE.md`, "Axiomatized lib functions" and "False theorems", rather than adding assumptions or `Admitted` just to obtain a successful build. For edits conflicts, consult "Edits system gotchas"; in particular, `skip` takes precedence over `redefine`.
 

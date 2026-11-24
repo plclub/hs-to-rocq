@@ -1,0 +1,12 @@
+# Keep the build wrappers despite the repository-wide Makefile ignore rule.
+!Makefile
+!base-src/Makefile
+!base-thy-src/Makefile
+
+# All foundation copies and compiler products are regenerated locally.
+/base/
+/base-thy/
+/base-src/deps/
+/base-src/Base_preamble.v
+/base-src/Base_midamble.v
+__pycache__/

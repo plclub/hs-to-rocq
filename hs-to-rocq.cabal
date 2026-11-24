@@ -170,12 +170,16 @@ executable hs-to-rocq
 test-suite edits
   type:                exitcode-stdio-1.0
   main-is:             Edits.hs
+  other-modules:       SourcePolicyTests, SourcePolicy
   build-depends:       base >=4.14 && < 4.22
                      , hs-to-rocq
                      , containers
+                     , directory
+                     , filepath
                      , mtl
                      , text
-  hs-source-dirs:      test
+                     , yaml
+  hs-source-dirs:      test, examples/fingertree
   default-language:    Haskell2010
   ghc-options:         -Wall -Werror -fno-warn-name-shadowing
 

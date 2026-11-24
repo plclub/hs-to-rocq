@@ -1,0 +1,8 @@
+skip TagShadow.Default__Other
+skip TagShadow.Default__Outer
+skip TagLetShadow.Default__Other
+skip TagLetShadow.Default__Outer
+skip TagLambdaShadow.Default__Other
+skip TagLambdaShadow.Default__Outer
+skip TagBuiltin.Default__Outer
+skip TagGadt.Default__G

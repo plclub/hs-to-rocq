@@ -4,7 +4,7 @@
 module HsToRocq.ConvertHaskell.TypeEnv.Instances where
 
 import Data.Foldable
-import Data.Generics (Data)
+import Data.Generics (Data, everywhere, mkT)
 import Data.Map as M
 import Data.Maybe
 
@@ -65,16 +65,22 @@ convertInstance inst = do
           typ  <- convertType $ varType tv
           pure $ mkTypedBinder Implicit (Ident name) typ
 
-lookupInstance :: ConversionMonad r m => Term -> Qualid -> ConvertedInstanceEnv -> m ConvertedInstance
-lookupInstance instTy className env = case find matchInstance env of
-  Just t -> pure t
-  _      -> throwProgramError $ "The class " <> showP className <> " of " <> showP instTy <> " is not found"
-  where matchInstance i = any (matchType instTy) (convertedInstanceTypes i) &&
-          convertedTyClName (convertedInstanceClass i) == className
+lookupInstance :: ConversionMonad r m => [Term] -> Qualid -> ConvertedInstanceEnv -> m ConvertedInstance
+lookupInstance instTys className env = case Prelude.filter matchInstance env of
+  [i] -> pure i
+  []  -> throwProgramError $ "The instance " <> showP instHead <> " is not found"
+  _   -> throwProgramError $ "The instance " <> showP instHead <> " matches multiple checked instances"
+  where instHead = appList (Qualid className) (PosArg <$> instTys)
+        -- Source heads omit invisible kind arguments. Compare every visible
+        -- argument in order; sharing just one argument does not identify an instance.
+        matchInstance i = convertedTyClName (convertedInstanceClass i) == className &&
+          let tys = filterVisibleVars (convertedInstanceClass i) (convertedInstanceTypes i)
+          in length instTys == length tys && and (zipWith matchType instTys tys)
         -- Match types, allowing for the env type to have extra type arguments
         -- from GHC's representation polymorphism (e.g., instTy = GHC.Prim.arrow
         -- matching env type = GHC.Prim.arrow LiftedRep LiftedRep)
         matchType needle haystack
-          | needle == haystack = True
+          | normalize needle == normalize haystack = True
           | Qualid q <- needle, termHead haystack == Just q = True
           | otherwise = False
+        normalize = everywhere (mkT normalizeType)

@@ -1,0 +1,48 @@
+rename type ConstructorTags.Choice = ConstructorTags.Shape
+rename type ConstructorTags.Other = ConstructorTags.OtherShape
+data kinds ConstructorTags.Shape Type
+rename value ConstructorTags.Zulu = ConstructorTags.CtorZ
+rename value ConstructorTags.Alpha = ConstructorTags.CtorA
+rename value ConstructorTags.Middle = ConstructorTags.CtorM
+rename value ConstructorTags.Zed = ConstructorTags.ZZ
+rename value ConstructorTags.Ay = ConstructorTags.AA
+skip ConstructorTags.Default__Shape
+skip ConstructorTags.Default__OtherShape
+skip module GHC.Exts
+skip module GHC.Magic
+skip module GHC.Prim
+rename type GHC.Num.Int = Coq.Numbers.BinNums.Z
+rename type GHC.Types.Int = Coq.Numbers.BinNums.Z
+
+# Int# literals use the fixture's Z representation without a translated Num class.
+rewrite forall x, GHC.Num.fromInteger x = x
+# These existing expression edits handle only the required primitive shapes.
+rewrite forall x y, GHC.Prim./=# x y = if Coq.ZArith.BinInt.Z.eqb x y then Coq.Numbers.BinNums.Z0 else Coq.Numbers.BinNums.Zpos Coq.Numbers.BinNums.xH
+rewrite forall x y, (GHC.Prim.tagToEnum# (GHC.Prim.<# x y) : bool) = Coq.ZArith.BinInt.Z.ltb x y
+rewrite forall x y, (GHC.Prim.tagToEnum# (GHC.Prim.==# x y) : bool) = Coq.ZArith.BinInt.Z.eqb x y
+in ConstructorTags.Tags__Shape_tagStop rename value ConstructorTags.tagStop = ConstructorTags.Tags__Shape_tagStop
+
+add ConstructorTags Theorem ConstructorTags.shape_tag_matrix : tag_checks shape_cases.
+Proof. repeat split; reflexivity. Qed.
+order ConstructorTags.Tags__Shape ConstructorTags.shape_tag_matrix
+
+add ConstructorTags Theorem ConstructorTags.other_tag_matrix : tag_checks other_cases.
+Proof. repeat split; reflexivity. Qed.
+order ConstructorTags.Tags__OtherShape ConstructorTags.other_tag_matrix
+
+add ConstructorTags Theorem ConstructorTags.distinct_receiver_type :
+  (otherFirst (@CtorZ unit) ZZ = true) /\
+  (otherFirst (@CtorZ unit) AA = false).
+Proof. split; reflexivity. Qed.
+order ConstructorTags.Tags__Shape ConstructorTags.distinct_receiver_type
+
+add ConstructorTags Theorem ConstructorTags.explicit_receiver_ascription :
+  ascribedFirst (@CtorZ unit) = true.
+Proof. reflexivity. Qed.
+order ConstructorTags.Tags__Shape ConstructorTags.explicit_receiver_ascription
+
+add ConstructorTags Theorem ConstructorTags.recursive_tag_method :
+  (tagStop (@CtorZ unit) (cons false (cons true nil)) = true) /\
+  (tagStop (@CtorA unit false) (cons true nil) = false).
+Proof. split; reflexivity. Qed.
+order ConstructorTags.Tags__Shape ConstructorTags.recursive_tag_method

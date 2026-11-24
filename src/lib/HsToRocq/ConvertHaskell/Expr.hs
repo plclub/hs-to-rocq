@@ -14,6 +14,7 @@ module HsToRocq.ConvertHaskell.Expr (
   convertTypedModuleBinding,
   convertMethodBinding,
   convertTypedModuleBindings,
+  addRecursion,
   hsBindName,
   ) where
 
@@ -32,6 +33,7 @@ import Data.Bitraversable
 import HsToRocq.Util.Function
 import Data.Maybe
 import Data.Either
+import Data.Generics (Data, GenericM, everything, everywhere, extM, gmapM, mkQ, mkT)
 import Data.List (sortBy)
 import HsToRocq.Util.List hiding (unsnoc)
 import Data.List.NonEmpty (nonEmpty, NonEmpty(..))
@@ -40,7 +42,7 @@ import qualified HsToRocq.Util.List as NEL ((|>))
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Control.Monad (guard, replicateM, (<=<))
+import Control.Monad (filterM, foldM, guard, replicateM, unless, when, (<=<))
 import Control.Monad.Trans.Maybe
 import Control.Monad.Except
 import Control.Monad.Writer
@@ -95,7 +97,7 @@ import HsToRocq.Rocq.Gallina.UseTypeInBinders
 import HsToRocq.Rocq.Subst
 import HsToRocq.Rocq.Gallina.Rewrite as Coq
 import HsToRocq.Rocq.FreeVars
-import HsToRocq.Util.FVs (ErrOrVars(..))
+import HsToRocq.Util.FVs (ErrOrVars(..), HasBV)
 import HsToRocq.Rocq.Pretty
 
 import HsToRocq.Edits.Types
@@ -1472,6 +1474,181 @@ mutualRecursionInlining mutGroup = do
   
   pure $ ((Standalone,) <$> lets) <> recMap
 
+-- Expand only the helper lets introduced by mutualRecursionInlining. Source
+-- scopes are freshened first, and each applied copy gets fresh binders again.
+-- Thus subst's fresh formal keys cannot occur under an inner binder or capture
+-- a free variable of an actual argument. Helper free variables keep the lexical
+-- identities assigned at their definition, even below a shadowing call site.
+inlineNonstructuralHelpers :: forall r m. LocalConvMonad r m
+                          => Set Qualid -> RecDef -> m RecDef
+inlineNonstructuralHelpers selected rd@RecDef{..}
+  | S.null selected = pure rd
+  | otherwise = do
+      originals <- prefixNames selected rdBody
+      (sourceHelpers, _) <- collectHelpers originals rdBody
+      let captured = foldMap (\(_, bs, ty, body) ->
+            getFreeVars (maybeFun bs (maybe body (HasType body) ty))) sourceHelpers
+          rootNames = S.fromList (qualidBase <$> toListOf (traverse . binderIdents) rdArgs)
+          closureNames = S.map qualidBase (captured <> selected)
+      -- The preceding let-based inliner has already placed these declarations
+      -- below the root parameters. Do not guess at a lost outer binding identity.
+      unless (S.null (rootNames `S.intersection` closureNames)) $
+        convUnsupportedIn "closure/recursive-parameter name collision in nonstructural inlining"
+          "definition" (showP rdName)
+      renamed <- rename M.empty rdBody
+      (helpers, body) <- collectHelpers originals renamed
+      body' <- expand helpers body
+      pure rd{rdBody = body'}
+  where
+    used = everything S.union (mkQ S.empty (\q -> S.singleton (qualidBase (q :: Qualid))))
+      (rdArgs, rdStruct, rdResultType, rdFullType, rdBody)
+    freshName = do
+      q <- genqid "inlined"
+      if qualidBase q `S.member` used then freshName else pure q
+    lookupName env q = M.findWithDefault q q env
+    bindNames :: Traversable f => Map Qualid Qualid -> f Coq.Name -> m (Map Qualid Qualid, f Coq.Name)
+    bindNames env names = do
+      pairs <- for names $ \case
+        Ident q -> do q' <- freshName; pure (Just (q, q'), Ident q')
+        UnderscoreName -> pure (Nothing, UnderscoreName)
+      pure (M.fromList (catMaybes (toList (fst <$> pairs))) <> env, snd <$> pairs)
+    renameBinders env = foldM step (env, [])
+      where
+        step (e, done) b = do
+          (e', b') <- case b of
+            ExplicitBinder n -> second (ExplicitBinder . NEL.head) <$> bindNames e (n :| [])
+            ImplicitBinders ns -> second ImplicitBinders <$> bindNames e ns
+            Typed g ex ns ty -> do
+              ty' <- rename e ty
+              (e', ns') <- bindNames e ns
+              pure (e', Typed g ex ns' ty')
+            Generalized{} -> editFailure "inline mutual: generalized binders in nonstructural helper expansion are unsupported"
+          pure (e', done ++ [b'])
+    renamePatterns :: (Data p, HasBV Qualid p) => Map Qualid Qualid -> [p] -> m (Map Qualid Qualid, [p])
+    renamePatterns env pats = do
+      let names = S.toAscList . S.fromList $ concatMap definedBy pats
+      vars <- filterM (fmap not . isConstructor) names
+      (bindings, _) <- bindNames M.empty (Ident <$> vars)
+      let patRename = everywhere (mkT (lookupName bindings))
+      pure (bindings <> env, patRename <$> pats)
+    rename :: Map Qualid Qualid -> Term -> m Term
+    rename env t = case t of
+      Qualid q -> pure . Qualid $ lookupName env q
+      RawQualid q -> pure . RawQualid $ lookupName env q
+      ExplicitApp q args -> ExplicitApp (lookupName env q) <$> traverse (rename env) args
+      Fun bs body -> do
+        (e, bs') <- renameBinders env (toList bs)
+        Fun (NEL.fromList bs') <$> rename e body
+      Forall bs body -> do
+        (e, bs') <- renameBinders env (toList bs)
+        Forall (NEL.fromList bs') <$> rename e body
+      Let q bs ty val body -> do
+        (e, bs') <- renameBinders env bs
+        ty' <- traverse (rename e) ty
+        val' <- rename e val
+        q' <- freshName
+        Let q' bs' ty' val' <$> rename (M.insert q q' env) body
+      LetTick pat val body -> do
+        val' <- rename env val
+        (e, pats) <- renamePatterns env [pat]
+        case pats of
+          [pat'] -> LetTick pat' val' <$> rename e body
+          _ -> error "INTERNAL ERROR: lost inline pattern"
+      LetTuple ns Nothing val body -> do
+        val' <- rename env val
+        (e, ns') <- bindNames env ns
+        LetTuple ns' Nothing val' <$> rename e body
+      Coq.Match items Nothing eqns
+        | all (\case MatchItem _ Nothing Nothing -> True; _ -> False) items -> do
+          items' <- for items $ \(MatchItem scr _ _) ->
+            (\scr' -> MatchItem scr' Nothing Nothing) <$> rename env scr
+          eqns' <- for eqns $ \(Equation pats body) -> do
+            (e, pats') <- renamePatterns env (toList pats)
+            Equation (NEL.fromList pats') <$> rename e body
+          pure $ Coq.Match items' Nothing eqns'
+      Coq.Match{} -> unsupportedBinding
+      LetTuple{} -> unsupportedBinding
+      If _ _ (Just _) _ _ -> unsupportedBinding
+      Sigma q ty body -> do
+        ty' <- traverse (rename env) ty
+        q' <- freshName
+        Sigma q' ty' <$> rename (M.insert q q' env) body
+      Fix fbs -> Fix <$> renameFix env fbs
+      Cofix fbs -> Cofix <$> renameFix env fbs
+      _ -> gmapM (renameChild env) t
+    renameChild :: Map Qualid Qualid -> GenericM m
+    renameChild env = gmapM (renameChild env) `extM` rename env
+    unsupportedBinding = editFailure "inline mutual: dependent binding form in nonstructural helper expansion is unsupported"
+    renameFix env fbs = do
+      let bodies = case fbs of FixOne b -> [b]; FixMany b bs _ -> b : toList bs
+      (e, _) <- bindNames env [Ident q | FixBody q _ _ _ _ <- bodies]
+      bodies' <- for bodies $ \(FixBody q bs order ty body) -> do
+        (e', bs') <- renameBinders e (toList bs)
+        order' <- traverse (\case
+          StructOrder q' -> pure $ StructOrder (lookupName e' q')
+          MeasureOrder measure rel -> MeasureOrder <$> rename e' measure <*> traverse (rename e') rel
+          WFOrder rel q' -> (`WFOrder` lookupName e' q') <$> rename e' rel) order
+        FixBody (lookupName e q) (NEL.fromList bs') order'
+          <$> traverse (rename e') ty <*> rename e' body
+      case (fbs, bodies') of
+        (FixOne{}, [b]) -> pure $ FixOne b
+        (FixMany _ _ q, b:bs) -> pure $ FixMany b (NEL.fromList bs) (lookupName e q)
+        _ -> error "INTERNAL ERROR: lost inline fixpoint"
+    prefixNames remaining t
+      | S.null remaining = pure []
+      | Let q _ _ _ body <- t, q `S.member` remaining =
+          (q :) <$> prefixNames (S.delete q remaining) body
+      | otherwise = editFailure "inline mutual: cannot identify introduced helper lets"
+    collectHelpers [] t = pure (M.empty, t)
+    collectHelpers (original:rest) (Let q bs ty val body) = do
+      (helpers, body') <- collectHelpers rest body
+      pure (M.insert q (original, bs, ty, val) helpers, body')
+    collectHelpers _ _ = error "INTERNAL ERROR: lost renamed inline helper"
+    expand :: Map Qualid (Qualid, [Binder], Maybe Term, Term) -> Term -> m Term
+    expand helpers t
+      | simpleSpine t, Right (q, args) <- collectArgs t
+      , Just helper <- M.lookup q helpers = applyHelper helpers helper args
+      | ExplicitApp q args <- t, Just helper <- M.lookup q helpers =
+          applyHelper helpers helper args
+      | RawQualid q <- t, Just helper <- M.lookup q helpers = applyHelper helpers helper []
+      | otherwise = gmapM (expandChild helpers) t
+    expandChild :: Map Qualid (Qualid, [Binder], Maybe Term, Term) -> GenericM m
+    expandChild helpers = gmapM (expandChild helpers) `extM` expand helpers
+    simpleSpine (Qualid _) = True
+    simpleSpine (App f args) = simpleSpine f && all (\case PosArg _ -> True; _ -> False) args
+    simpleSpine (Parens f) = simpleSpine f
+    simpleSpine _ = False
+    applyHelper helpers (original, bs, ty, body) args = do
+      params <- concat <$> traverse (\case
+        ExplicitBinder n -> pure [(n, Nothing)]
+        Typed Ungeneralizable Explicit ns pty -> pure [(n, Just pty) | n <- toList ns]
+        _ -> convUnsupportedIn "implicit parameters in nonstructural inline applications" "helper" (showP original)) bs
+      when (length args < length params) $
+        convUnsupportedIn "partial application of a nonstructural inline helper" "helper" (showP original)
+      when (length args > length params) $
+        convUnsupportedIn "overapplication of a nonstructural inline helper" "helper" (showP original)
+      args' <- traverse (expand helpers) args
+      -- A new copy must not reuse binders from another application of this helper.
+      copied <- rename M.empty $ maybeFun bs (maybe body (HasType body) ty)
+      case copied of
+        Fun bs' copiedBody -> do
+          let paramNames = toListOf (traverse . binderIdents) bs'
+              explicitParamHead = everything (||) (mkQ False (\case
+                ExplicitApp q _ -> q `elem` paramNames
+                _ -> False :: Bool)) copiedBody
+          when explicitParamHead $
+            convUnsupportedIn "explicit applications of inline parameters" "helper" (showP original)
+          let copiedParams = concatMap (\case
+                ExplicitBinder n -> [(n, Nothing)]
+                Typed _ _ ns pty -> [(n, Just pty) | n <- toList ns]
+                _ -> []) (toList bs')
+              bind sub ((n, pty), actual) = case n of
+                Ident q -> M.insert q (maybe actual (HasType actual . subst sub) pty) sub
+                UnderscoreName -> sub
+              applied = subst (foldl bind M.empty (zip copiedParams args')) copiedBody
+          expand helpers applied
+        _ -> convUnsupportedIn "non-lambda inline helper" "helper" (showP original)
+
 addRecursion :: ConversionMonad r m => [Either e ConvertedBinding] -> m [Either e ConvertedBinding]
 addRecursion eBindings = do
   fixedBindings <-  M.fromList . fmap (view convDefName &&& id) . foldMap toList
@@ -1492,44 +1669,51 @@ addRecursion eBindings = do
       (commonArgs, cds) <- splitArgs cds
       tbodies <- for cds fixConvertedDefinition
 
-      let bodies = fst <$> tbodies
+      let originalBodies = fst <$> tbodies
+      -- Inlining can leave just one recursive member. Decide whether recursion
+      -- is mutual only after applying the existing helper-inlining machinery.
+      (bodies, extraDefs) <- case originalBodies of
+        _ :| [] -> pure (originalBodies, [])
+        _ :| _ : _ -> do
+          mutRecInfo <- mutualRecursionInlining originalBodies
+          let (recs', lets) = flip mapPartitionEithers cds $ \cd ->
+                case M.lookup (cd^.convDefName) mutRecInfo of
+                  Just (Standalone, _) -> Right $ cd & convDefArgs %~ (commonArgs ++)
+                  Just (Mutual, rd) -> Left rd
+                  Nothing -> error "INTERNAL ERROR: lost track of mutually-recursive function"
+              recs = fromMaybe (error "INTERNAL ERROR: all mutually-recursive functions vanished!")
+                     $ nonEmpty recs'
+          pure (recs, lets)
 
-      let nonstructural = listToMaybe [t | (_, Just t) <- toList tbodies, isNonstructural t]
+      let recursiveNames = S.fromList (rdName <$> toList bodies)
+          nonstructural = listToMaybe
+            [t | (rd, Just t) <- toList tbodies
+               , rdName rd `S.member` recursiveNames, isNonstructural t]
           isNonstructural (StructOrderTA _) = False
           isNonstructural _ = True
 
       let getInfo = fmap $ rdName &&& rdFullType
       
-      (fixFor, recInfos, extraDefs) <- case (nonstructural, bodies) of
+      (fixFor, recInfos) <- case (nonstructural, bodies) of
         (Just order, body1 :| []) -> do
-          fixed <- wfFix order . rdToFixBody $ rdStripResultType body1
-          pure (const fixed, getInfo bodies, [])
+          expanded <- case order of
+            WellFoundedTA{} | not (null extraDefs) ->
+              withCurrentDefinition (rdName body1) $
+                inlineNonstructuralHelpers (S.fromList (view convDefName <$> extraDefs)) body1
+            _ -> pure body1
+          fixed <- wfFix order . rdToFixBody $ rdStripResultType expanded
+          pure (const fixed, getInfo bodies)
         
         (Just _, _ :| _ : _) ->
           convUnsupportedIn "non-structural mutual recursion" "definitions"
                             (explainStrItems (showP . rdName) "" "," "and" "" "" bodies)
         
         (Nothing, body1 :| []) ->
-          pure (const . Fix . FixOne $ rdToFixBody body1, getInfo bodies, [])
+          pure (const . Fix . FixOne $ rdToFixBody body1, getInfo bodies)
         
-        (Nothing, _ :| _ : _) -> do
-          mutRecInfo <- mutualRecursionInlining bodies
-          let (recs', lets) = flip mapPartitionEithers cds $ \cd ->
-                case M.lookup (cd^.convDefName) mutRecInfo of
-                  Just (Standalone, _)  -> Right $ cd & convDefArgs %~ (commonArgs ++)
-                  Just (Mutual,     rd) -> Left rd
-                  Nothing               -> error "INTERNAL ERROR: lost track of mutually-recursive function"
-              recs = fromMaybe (error "INTERNAL ERROR: \
-                                      \all mutually-recursive functions in this group vanished!")
-                   $ nonEmpty recs'
-          
-          let fixFor = case recs of
-                body1 :| []              ->
-                  const . Fix . FixOne $ rdToFixBody body1
-                body1 :| body2 : bodies' ->
-                  Fix . FixMany (rdToFixBody body1) (rdToFixBody <$> (body2 :| bodies'))
-          
-          pure (fixFor, getInfo recs, lets)
+        (Nothing, body1 :| body2 : bodies') ->
+          pure (Fix . FixMany (rdToFixBody body1) (rdToFixBody <$> (body2 :| bodies')),
+                getInfo bodies)
           
       let recDefs = recInfos <&> \(name,mty) ->
             ConvertedDefinition { _convDefName = name

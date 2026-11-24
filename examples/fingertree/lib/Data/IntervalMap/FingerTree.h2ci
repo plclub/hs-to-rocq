@@ -1,0 +1,24 @@
+constructorFields:
+  Data.IntervalMap.FingerTree.MkIntInterval: NonRecordFields 2
+  Data.IntervalMap.FingerTree.MkInterval: NonRecordFields 2
+  Data.IntervalMap.FingerTree.MkIntervalMap: NonRecordFields 1
+  Data.IntervalMap.FingerTree.MkNode: NonRecordFields 2
+  Data.IntervalMap.FingerTree.NoInterval: NonRecordFields 0
+constructorTypes:
+  Data.IntervalMap.FingerTree.MkIntInterval: Qualified "Data.IntervalMap.FingerTree"
+    "IntInterval"
+  Data.IntervalMap.FingerTree.MkInterval: Qualified "Data.IntervalMap.FingerTree"
+    "Interval"
+  Data.IntervalMap.FingerTree.MkIntervalMap: Qualified "Data.IntervalMap.FingerTree"
+    "IntervalMap"
+  Data.IntervalMap.FingerTree.MkNode: Qualified "Data.IntervalMap.FingerTree" "Node"
+  Data.IntervalMap.FingerTree.NoInterval: Qualified "Data.IntervalMap.FingerTree"
+    "IntInterval"
+constructors:
+  Data.IntervalMap.FingerTree.IntInterval: '[Qualified "Data.IntervalMap.FingerTree"
+    "NoInterval",Qualified "Data.IntervalMap.FingerTree" "MkIntInterval"]'
+  Data.IntervalMap.FingerTree.Interval: '[Qualified "Data.IntervalMap.FingerTree"
+    "MkInterval"]'
+  Data.IntervalMap.FingerTree.IntervalMap: '[Qualified "Data.IntervalMap.FingerTree"
+    "MkIntervalMap"]'
+  Data.IntervalMap.FingerTree.Node: '[Qualified "Data.IntervalMap.FingerTree" "MkNode"]'

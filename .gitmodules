@@ -28,3 +28,6 @@
 [submodule "examples/graph/graph"]
 	path = examples/graph/graph
 	url = https://github.com/haskell/fgl.git
+[submodule "examples/fingertree/fingertree"]
+	path = examples/fingertree/fingertree
+	url = https://github.com/lastland/fingertree-mirror.git

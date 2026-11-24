@@ -14,6 +14,8 @@ import qualified Data.Set as S
 import qualified Data.Text as T
 import System.Exit (die)
 
+import SourcePolicyTests (runSourcePolicyTests)
+
 import HsToRocq.ConvertHaskell.Monad
   ( AxiomatizationMode(..), Leniency(Strict), ModuleEnv(..)
   , TranslationTask(..), definitionTask
@@ -1052,3 +1054,4 @@ main = do
           ++ definitionKeyChecks ++ invariantChecks ++ taskChecks ++ programChecks
   sequence_ checks
   putStrLn ("Edits checks passed (" ++ show (length checks) ++ " assertions).")
+  runSourcePolicyTests

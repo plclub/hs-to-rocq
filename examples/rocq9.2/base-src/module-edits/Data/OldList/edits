@@ -1,0 +1,7 @@
+
+# Deferred recursion was authorized for the finger-tree queue and its unfoldr.
+in Data.OldList.unfoldr termination go deferred
+
+# Specialize the source's fusion producer to lists. Its original worker and
+# branches remain generated; default_list supplies the deferred result witness.
+in Data.OldList.unfoldr rewrite forall g, GHC.Base.build g = g cons nil

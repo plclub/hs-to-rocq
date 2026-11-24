@@ -1,0 +1,51 @@
+# Rocq types and constructors share a namespace.
+rename value Data.FingerTree.Split = Data.FingerTree.MkSplit
+
+# Keep the generated error body; only internal error sites need inhabitants.
+set type Data.FingerTree.illegal_argument : forall {a}, forall `{HsToRocq.Err.Default a}, GHC.Base.String -> a
+in Data.FingerTree.consDigit rewrite forall , Data.FingerTree.illegal_argument = @Data.FingerTree.illegal_argument _ (HsToRocq.Err.Build_Default _ arg_1__)
+in Data.FingerTree.snocDigit rewrite forall , Data.FingerTree.illegal_argument = @Data.FingerTree.illegal_argument _ (HsToRocq.Err.Build_Default _ arg_0__)
+in Data.FingerTree.ltailDigit rewrite forall , Data.FingerTree.illegal_argument = @Data.FingerTree.illegal_argument _ (HsToRocq.Err.Build_Default _ arg_0__)
+in Data.FingerTree.rtailDigit rewrite forall , Data.FingerTree.illegal_argument = @Data.FingerTree.illegal_argument _ (HsToRocq.Err.Build_Default _ arg_0__)
+
+# Measured instances precede their first uses; Digit measurement uses Foldable.
+order Data.FingerTree.Measured__Node__5 Data.FingerTree.deep
+order Data.FingerTree.Measured__Digit__5 Data.FingerTree.deep
+order Data.FingerTree.Measured__FingerTree__5 Data.FingerTree.deep
+order Data.FingerTree.Foldable__Digit Data.FingerTree.Measured__Digit__5_measure
+order Data.FingerTree.Foldable__Node Data.FingerTree.Foldable__FingerTree_foldMap
+polyrec Data.FingerTree.Foldable__FingerTree_foldMap
+in Data.FingerTree.Foldable__FingerTree_foldMap rewrite forall f t, Data.Foldable.foldMap (Data.Foldable.foldMap f) t = Data.FingerTree.Foldable__FingerTree_foldMap (Data.Foldable.foldMap f) t
+
+# Recursive infix references otherwise precede their notation declarations.
+rename value Data.FingerTree.<| = Data.FingerTree.consTree
+rename value Data.FingerTree.|> = Data.FingerTree.snocTree
+inline mutual Data.FingerTree.addDigits1
+polyrec Data.FingerTree.appendTree2
+inline mutual Data.FingerTree.addDigits2
+inline mutual Data.FingerTree.addDigits3
+inline mutual Data.FingerTree.addDigits4
+inline mutual Data.FingerTree.rotL
+inline mutual Data.FingerTree.rotR
+
+# Only these internal partial helpers require element evidence.
+set type Data.FingerTree.searchTree : forall {v a}, forall `{Data.FingerTree.Measured v a}, forall `{HsToRocq.Err.Default a}, (v -> v -> bool) -> v -> Data.FingerTree.FingerTree v a -> v -> Data.FingerTree.Split (Data.FingerTree.FingerTree v a) a
+set type Data.FingerTree.splitTree : forall {v a}, forall `{Data.FingerTree.Measured v a}, forall `{HsToRocq.Err.Default a}, (v -> bool) -> v -> Data.FingerTree.FingerTree v a -> Data.FingerTree.Split (Data.FingerTree.FingerTree v a) a
+in Data.FingerTree.search rewrite forall , Data.FingerTree.searchTree = @Data.FingerTree.searchTree _ _ _ _ _ _
+in Data.FingerTree.split rewrite forall , Data.FingerTree.splitTree = @Data.FingerTree.splitTree _ _ _ _ _ _
+obligations Data.FingerTree.search core_inhabitant
+obligations Data.FingerTree.split core_inhabitant
+
+# Native derived Eq/Ord: lower only the emitted tag primitives, not methods.
+rewrite forall x y, GHC.Prim./=# x y = if Coq.ZArith.BinInt.Z.eqb x y then (#0 : GHC.Num.Int) else (#1 : GHC.Num.Int)
+rewrite forall x y, (GHC.Prim.tagToEnum# (GHC.Prim.<# x y) : bool) = Coq.ZArith.BinInt.Z.ltb x y
+rewrite forall x y, (GHC.Prim.tagToEnum# (GHC.Prim.==# x y) : bool) = Coq.ZArith.BinInt.Z.eqb x y
+in Data.FingerTree.Ord__ViewL_op_zl__ rename value GHC.Base.compare = GHC.Base.compare
+in Data.FingerTree.Ord__ViewR_op_zl__ rename value GHC.Base.compare = GHC.Base.compare
+
+# These dictionary dependencies are implicit in the generated methods.
+order Data.FingerTree.Foldable__FingerTree Data.FingerTree.Eq___FingerTree_op_zeze__
+order Data.FingerTree.Foldable__FingerTree Data.FingerTree.Ord__FingerTree_compare
+order Data.FingerTree.Eq___FingerTree Data.FingerTree.Eq___SearchResult_op_zeze__
+order Data.FingerTree.Ord__FingerTree Data.FingerTree.Ord__SearchResult_compare
+order Data.FingerTree.Foldable__Digit Data.FingerTree.Foldable__FingerTree_foldMap

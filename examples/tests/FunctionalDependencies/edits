@@ -1,0 +1,111 @@
+simple class FunctionalDependencies.Codec
+simple class FunctionalDependencies.Collision
+skip FunctionalDependencies.Default__Mark
+skip FunctionalDependencies.Default__Element
+skip FunctionalDependencies.Default__OtherElement
+skip FunctionalDependencies.Default__Box
+
+add FunctionalDependencies Theorem FunctionalDependencies.fd_class_shapes : True.
+Proof.
+  Check (@Measured : forall v a : Type, Flag v -> Type).
+  Check (@Measured__Dict : Type -> Type -> Type).
+  Check (@Measured__Dict_Build : forall v a : Type,
+    (a -> bool) -> (a -> v) -> Measured__Dict v a).
+  Check (@measure : forall (v a : Type) (super : Flag v),
+    @Measured v a super -> a -> v).
+  Check (@marked : forall (v a : Type) (super : Flag v),
+    @Measured v a super -> a -> bool).
+  Check (@Codec : forall v a : Type, Flag v -> Type).
+  Check (@Build_Codec : forall (v a : Type) (super : Flag v),
+    (v -> a) -> (a -> v) -> (a -> bool) -> @Codec v a super).
+  Check (@encode : forall (v a : Type) (super : Flag v),
+    @Codec v a super -> a -> v).
+  Check (@decode : forall (v a : Type) (super : Flag v),
+    @Codec v a super -> v -> a).
+  Check (@encodedFlag : forall (v a : Type) (super : Flag v),
+    @Codec v a super -> a -> bool).
+  Fail Check Codec__Dict.
+  Check (@collision : forall a b : Type, Collision a b -> a -> b -> bool).
+  Fail Check Collision__Dict.
+  exact I.
+Qed.
+
+add FunctionalDependencies Theorem FunctionalDependencies.cps_fd_compute :
+  (FunctionalDependencies.measure (MkElement false) = Off) /\
+  ((FunctionalDependencies.measure (MkElement true) = On) /\
+  ((marked (MkElement false) = false) /\
+  ((marked (MkElement true) = true) /\
+  ((observeElement (MkElement false) = false) /\
+  ((observeElement (MkElement true) = true) /\
+   (inferred = true)))))).
+Proof. repeat split; reflexivity. Qed.
+order FunctionalDependencies.Measured__Mark__Element FunctionalDependencies.cps_fd_compute
+order FunctionalDependencies.observeElement FunctionalDependencies.cps_fd_compute
+order FunctionalDependencies.inferred FunctionalDependencies.cps_fd_compute
+
+add FunctionalDependencies Theorem FunctionalDependencies.direct_fd_compute :
+  (encode (MkElement false) = Off) /\
+  ((encode (MkElement true) = On) /\
+  ((decode Off = MkElement false) /\
+  ((decode On = MkElement true) /\
+  ((encodedFlag (MkElement false) = false) /\
+  ((encodedFlag (MkElement true) = true) /\
+  ((observeCode Off = false) /\
+  ((observeCode On = true) /\
+  ((roundTrip (MkElement false) = MkElement false) /\
+   (roundTrip (MkElement true) = MkElement true))))))))).
+Proof. repeat split; reflexivity. Qed.
+order FunctionalDependencies.Codec__Mark__Element FunctionalDependencies.direct_fd_compute
+order FunctionalDependencies.observeCode FunctionalDependencies.direct_fd_compute
+order FunctionalDependencies.roundTrip FunctionalDependencies.direct_fd_compute
+
+add FunctionalDependencies Theorem FunctionalDependencies.fd_explicit_overrides :
+  (observeElement true = true) /\
+  ((marked true = false) /\
+  ((encode true = true) /\
+  ((decode true = true) /\
+  ((encodedFlag true = false) /\
+   (observeCode true = false))))).
+Proof. repeat split; reflexivity. Qed.
+order FunctionalDependencies.Measured__bool__bool FunctionalDependencies.fd_explicit_overrides
+order FunctionalDependencies.Codec__bool__bool FunctionalDependencies.fd_explicit_overrides
+order FunctionalDependencies.observeElement FunctionalDependencies.fd_explicit_overrides
+order FunctionalDependencies.observeCode FunctionalDependencies.fd_explicit_overrides
+
+add FunctionalDependencies Theorem FunctionalDependencies.fd_shared_result :
+  (marked (MkOtherElement false) = true) /\
+  ((marked (MkOtherElement true) = false) /\
+  ((marked (MkElement false) = false) /\
+   (marked (MkElement true) = true))).
+Proof. repeat split; reflexivity. Qed.
+order FunctionalDependencies.Measured__Mark__OtherElement FunctionalDependencies.fd_shared_result
+order FunctionalDependencies.Measured__Mark__Element FunctionalDependencies.fd_shared_result
+
+add FunctionalDependencies Theorem FunctionalDependencies.fd_parameterized :
+  (FunctionalDependencies.measure (MkBox On) = On) /\
+  ((marked (MkBox On) = true) /\
+  ((marked (MkBox Off) = false) /\
+  ((FunctionalDependencies.measure (MkBox true) = true) /\
+   (marked (MkBox false) = false)))).
+Proof. repeat split; reflexivity. Qed.
+order FunctionalDependencies.Measured__Box__5 FunctionalDependencies.fd_parameterized
+
+add FunctionalDependencies Theorem FunctionalDependencies.fd_explicit_dictionaries :
+  (@FunctionalDependencies.measure Mark Element Flag__Mark Measured__Mark__Element
+    (MkElement true) = On) /\
+  (@encode Mark Element Flag__Mark Codec__Mark__Element (MkElement false) = Off).
+Proof. split; reflexivity. Qed.
+
+add FunctionalDependencies Theorem FunctionalDependencies.all_instance_arguments :
+  (collisionDefault Off (MkElement false) = true) /\
+  ((collisionDefault Off false = false) /\
+  ((collisionDefault false (MkElement false) = false) /\
+  ((collisionDefault true (MkElement false) = true) /\
+  ((collisionDefault (cons On nil) On = false) /\
+   (collisionDefault (cons On nil) true = true))))).
+Proof. repeat split; reflexivity. Qed.
+order FunctionalDependencies.Collision__Mark__Element FunctionalDependencies.all_instance_arguments
+order FunctionalDependencies.Collision__Mark__bool FunctionalDependencies.all_instance_arguments
+order FunctionalDependencies.Collision__bool__Element FunctionalDependencies.all_instance_arguments
+order FunctionalDependencies.Collision__list__Mark FunctionalDependencies.all_instance_arguments
+order FunctionalDependencies.Collision__list__bool FunctionalDependencies.all_instance_arguments
