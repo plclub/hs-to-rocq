@@ -278,17 +278,20 @@ Proof.
   exfalso. eapply take_empty; eassumption.
 Qed.
 
-Local Notation pos := (Choreography.Execution.positions (fun p => At unit B p)).
-Local Notation queue := (Choreography.Execution.deliveries (fun p => At unit B
-  p)).
 Definition state (c : @Choreography.Execution.configuration Id no_event unit
     (fun p => At unit B p)) : Prop :=
-  (pos c A = Code [] (family A) /\
-   pos c B = Code [] (family B) /\ queue c = []) \/
-  (terminal (pos c A) /\
-   pos c B = Code [] (family B) /\ queue c = [packet]) \/
-  (terminal (pos c A) /\
-   terminal (pos c B) /\ queue c = []).
+  (Choreography.Execution.positions (fun p => At unit B p) c A =
+     Code [] (family A) /\
+   Choreography.Execution.positions (fun p => At unit B p) c B =
+     Code [] (family B) /\
+   Choreography.Execution.deliveries (fun p => At unit B p) c = []) \/
+  (terminal (Choreography.Execution.positions (fun p => At unit B p) c A) /\
+   Choreography.Execution.positions (fun p => At unit B p) c B =
+     Code [] (family B) /\
+   Choreography.Execution.deliveries (fun p => At unit B p) c = [packet]) \/
+  (terminal (Choreography.Execution.positions (fun p => At unit B p) c A) /\
+   terminal (Choreography.Execution.positions (fun p => At unit B p) c B) /\
+   Choreography.Execution.deliveries (fun p => At unit B p) c = []).
 
 Lemma state_preserved c a c' :
   state c -> Choreography.Execution.step model [A;B] c a c' -> state c'.
@@ -296,7 +299,9 @@ Proof.
   intros Hstate Hstep. destruct Hstep as [p a c' Hp Hact Hframe].
   change (A = p \/ B = p \/ False) in Hp.
   destruct Hp as [Hp | [Hp | Hp]]; [subst p | subst p | contradiction].
-  - assert (HB : pos c B = pos c' B) by (apply Hframe; exact BA).
+  - assert (HB : Choreography.Execution.positions (fun p => At unit B p) c B =
+      Choreography.Execution.positions (fun p => At unit B p) c' B)
+      by (apply Hframe; exact BA).
     destruct Hstate as [[HA [HB0 Hq]] | [[HA [HB0 Hq]] | [HA [HB0 Hq]]]].
     + rewrite HA, Hq in Hact.
       destruct (sender_source_step _ _ _ _ _ _ Hact) as [Ht Hq'].
@@ -304,7 +309,9 @@ Proof.
       right; left. split; [exact Ht |]. split; congruence.
     + exfalso. exact (step_not_terminal _ _ _ _ _ _ _ _ _ Hact HA).
     + exfalso. exact (step_not_terminal _ _ _ _ _ _ _ _ _ Hact HA).
-  - assert (HA : pos c A = pos c' A) by (apply Hframe; exact AB).
+  - assert (HA : Choreography.Execution.positions (fun p => At unit B p) c A =
+      Choreography.Execution.positions (fun p => At unit B p) c' A)
+      by (apply Hframe; exact AB).
     destruct Hstate as [[HA0 [HB Hq]] | [[HA0 [HB Hq]] | [HA0 [HB Hq]]]].
     + rewrite HB, Hq in Hact.
       destruct (receiver_source_step _ _ _ _ _ _ Hact) as [_ [x Htake]].
@@ -320,7 +327,7 @@ Definition update (c : @Choreography.Execution.configuration Id no_event unit
     (fun p => At unit B p)) p (t : @cursor Id no_event p (At unit B p)) r :=
   match symbol_eq_dec p r with
   | left e => eq_rect p (fun r => @cursor Id no_event r (At unit B r)) t r e
-  | right _ => pos c r
+  | right _ => Choreography.Execution.positions (fun p => At unit B p) c r
   end.
 Lemma update_same c p t : update c p t p = t.
 Proof.
@@ -328,15 +335,18 @@ Proof.
   - rewrite (symbol_uip p p e eq_refl). reflexivity.
   - contradiction.
 Qed.
-Lemma update_other c p t r : r <> p -> update c p t r = pos c r.
+Lemma update_other c p t r : r <> p -> update c p t r =
+  Choreography.Execution.positions (fun p => At unit B p) c r.
 Proof.
   intros H. unfold update. destruct (symbol_eq_dec p r); [congruence |
     reflexivity].
 Qed.
 Lemma commit c p t' s' q' a :
   In p [A;B] ->
-  role_step model [A;B] (At unit B p) (pos c p)
-    (Choreography.Execution.shared_store _ c) (queue c) a t' s' q' ->
+  role_step model [A;B] (At unit B p)
+    (Choreography.Execution.positions (fun p => At unit B p) c p)
+    (Choreography.Execution.shared_store _ c)
+    (Choreography.Execution.deliveries (fun p => At unit B p) c) a t' s' q' ->
   exists c', Choreography.Execution.step model [A;B] c a c'.
 Proof.
   intros Hp H.

@@ -57,7 +57,7 @@ def checked(path: Path, expected: str) -> bytes:
 def verify(root: Path, generated: Path, *, local: bool) -> None:
     # One historical input may now live in more than one module. Check each
     # part, including the library definitions used by an independent fixture.
-    table = checked(PARKOUR / "tests/namespace-migration.tsv", "19c7c62e8195bc10fbe7343e77cf1230f87b2397b2fc87b5a183de3c5f0f5536")
+    table = checked(PARKOUR / "tests/namespace-migration.tsv", "dfa5b91c676d956f32351a92b512e017bd1f9e4db1519075fdaefd2cd622a5af")
     relocated: dict[str, list[tuple[str, str]]] = {}
     for row in table.decode().splitlines():
         old, new, path = row.split("\t")

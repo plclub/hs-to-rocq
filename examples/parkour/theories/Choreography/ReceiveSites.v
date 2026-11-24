@@ -10,10 +10,7 @@ Local Arguments ContextLeft {M E p X Y Z} _ _.
 Local Arguments ContextRight {M E p X Y Z} _ _.
 Local Arguments erased_cursor {M E Store model configured p A} _.
 Local Arguments archive {M E Store model configured p A} _.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
-Local Notation At := Choreography.Choreo2.At.
-Local Notation Comm := Choreography.Choreo2.Comm.
-Local Notation Cond := Choreography.Choreo2.Cond.
+Import Choreography.Choreo2 (Choreo, At, Comm, Cond).
 
 (* Source sites include the finite bookkeeping that an alignment witness
    may hide. They do not mention an endpoint, a wire head, or readiness. *)

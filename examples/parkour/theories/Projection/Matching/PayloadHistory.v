@@ -9,11 +9,7 @@ From ParkourTheories Require Import Projection.Matching.PrefixRelation
 Require Import Parkour.Symbol Parkour.Codec Control.Monad.Tree.
 Require Choreography.Choreo2.
 Import ListNotations.
-Local Notation At := Choreography.Choreo2.At.
-Local Notation unAt := Choreography.Choreo2.unAt.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
-Local Notation Comm := Choreography.Choreo2.Comm.
-Local Notation Cond := Choreography.Choreo2.Cond.
+Import Choreography.Choreo2 (At, unAt, Choreo, Comm, Cond).
 Arguments ContextHole {M E p X}.
 Arguments ContextSeq {M E p X Y Z} _ _ _.
 Arguments ContextLeft {M E p X Y Z} _ _.
@@ -378,28 +374,29 @@ Variable input : Input.
 Variable R : list role.
 Variable A : role -> Type.
 Variable c : forall p, Choreo M p (A p).
-Local Notation sm := (shared_model model).
-Local Notation SC := (@Choreography.Execution.configuration M E ((role -> Store)
-  *
-  Input) A).
-Local Notation NC := (@Network.Execution.configuration M E ((role -> Store) *
-  Input)).
 
 (* Same scheduled-role and typed-step indices as paired_step, with the
    payload batch attached to that very operational transition. *)
-Inductive paired_observed (s : SC) (n : NC) gs :
-    @source_action E ((role -> Store) * Input) -> SC ->
-    @action E ((role -> Store) * Input) -> NC -> list message -> list
+Inductive paired_observed
+    (s : @Choreography.Execution.configuration M E ((role -> Store) * Input) A)
+    (n : @Network.Execution.configuration M E ((role -> Store) * Input)) gs :
+    @source_action E ((role -> Store) * Input) ->
+    @Choreography.Execution.configuration M E ((role -> Store) * Input) A ->
+    @action E ((role -> Store) * Input) ->
+    @Network.Execution.configuration M E ((role -> Store) * Input) ->
+    list message -> list
       payload_event -> Prop :=
 | ObservedPair p pre post t t' s' n' a na gs' ev :
     In p R ->
     endpoints n = pre ++ Endpoint (A p) p t :: post ->
     endpoints n' = pre ++ Endpoint (A p) p t' :: post ->
-    observed sm R (A p) (positions s p) (Choreography.Execution.shared_store s)
+    observed (shared_model model) R (A p) (positions s p)
+      (Choreography.Execution.shared_store s)
       (deliveries s) a (positions s' p) (Choreography.Execution.shared_store s')
       (deliveries s') na gs gs' ev ->
     (forall r, r <> p -> positions s r = positions s' r) ->
-    Endpoints.step sm R p (A p) t (mailboxes n) (Network.Execution.shared_store
+    Endpoints.step (shared_model model) R p (A p) t (mailboxes n)
+      (Network.Execution.shared_store
       n)
       na t' (mailboxes n') (Network.Execution.shared_store n') ->
     paired_observed s n gs a s' na n' gs' ev.
@@ -427,8 +424,10 @@ Proof.
 Qed.
 
 Inductive payload_history :
-    list (@source_action E ((role -> Store) * Input)) -> SC ->
-    list (@action E ((role -> Store) * Input)) -> NC ->
+    list (@source_action E ((role -> Store) * Input)) ->
+    @Choreography.Execution.configuration M E ((role -> Store) * Input) A ->
+    list (@action E ((role -> Store) * Input)) ->
+    @Network.Execution.configuration M E ((role -> Store) * Input) ->
     list message -> list payload_event -> Prop :=
 | PayloadInitial :
     payload_history [] (PrefixRelation.source_initial stores input A c)
@@ -495,7 +494,7 @@ Theorem actual_production_focus kind o sender recipient operand :
     matched_prefix model stores input R A c tc s tn n gs /\
     paired_observed s n gs a s' na n' gs' ev /\
     In p R /\
-    production_focus sm R p (A p) (positions s p)
+    production_focus (shared_model model) R p (A p) (positions s p)
       (Choreography.Execution.shared_store
       s)
       (deliveries s) a (positions s' p) (Choreography.Execution.shared_store s')

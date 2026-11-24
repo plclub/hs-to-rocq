@@ -11,36 +11,35 @@ Section Stamped.
 Context {M E Store Input} (model : local_model M E role (Store * Input))
   (stores : role -> Store) (input : Input) (R : list role) (A : role -> Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation sm := (shared_model model).
-Local Notation entry := (observed_entry model stores input R A c).
-Local Notation archives := (observed_archives model stores input R A c).
-Local Notation action_of := (entry_action model stores input R A c).
-Local Notation source_of := (entry_source model stores input R A c).
-Local Notation after_of := (entry_source_after model stores input R A c).
 Local Arguments positions {M E Store A} _ _.
 Local Arguments Choreography.Execution.shared_store {M E Store A} _.
 Local Arguments deliveries {M E Store A} _.
 
-Definition stamped p B (t : @cursor M E p B) (e : entry p) u :=
-  let s := source_of p e in let s' := after_of p e in
+Definition stamped p B (t : @cursor M E p B) (e : (observed_entry model stores
+  input R A c) p) u :=
+  let s := (entry_source model stores input R A c) p e in let s' :=
+    (entry_source_after model stores input R A c) p e in
   let st := Choreography.Execution.shared_store s in let st' :=
     Choreography.Execution.shared_store s' in
-  primitive_action sm R B t st (deliveries s) (action_of p e) u st' (deliveries
+  primitive_action (shared_model model) R B t st (deliveries s) ((entry_action
+    model stores input R A c) p e) u st' (deliveries
     s') /\
-  observed sm R B t st (deliveries s) (action_of p e) u st' (deliveries s')
+  observed (shared_model model) R B t st (deliveries s) ((entry_action model
+    stores input R A c) p e) u st' (deliveries s')
     (entry_network_action model stores input R A c p e)
     (entry_ghosts model stores input R A c p e) (entry_ghosts_after model stores
       input R A c p e)
     (entry_batch model stores input R A c p e).
 
-Definition actor_log p := @local_log M E _ sm p (entry p) (stamped p).
+Definition actor_log p := @local_log M E _ (shared_model model) p
+  ((observed_entry model stores input R A c) p) (stamped p).
 
 Fixpoint in_order p (items : list (located model stores input R A c p)) : list
-  (entry p) :=
+  ((observed_entry model stores input R A c) p) :=
   match items with [] => [] | (_,e) :: tail => in_order p tail ++ [e] end.
 
 Theorem archive_role_log tc s tn n gs past ar :
-  archives tc s tn n gs past ar ->
+  (observed_archives model stores input R A c) tc s tn n gs past ar ->
   forall p, actor_log p (A p) (Code [] (c p))
     (in_order p (ar p))
     (positions s p).
@@ -61,13 +60,18 @@ Proof.
   - rewrite add_entry_other by exact Ne.
     pose proof (entry_pair model stores input R A c who e) as Pair.
     pose proof (entry_primitive model stores input R A c who e) as Prim.
-    pose proof (CursorHistories.role_step_actor sm R _ _ _ _ _ _ _ _ _
-      (primitive_is_role_step sm R _ _ _ _ _ _ _ _ _ Prim)) as Actor.
+    pose proof (CursorHistories.role_step_actor
+      (shared_model model) R _ _ _ _ _ _ _ _ _
+      (primitive_is_role_step (shared_model model) R _ _ _ _ _ _ _ _ _ Prim)) as
+        Actor.
     destruct Pair as [r pre post t u s1 n1 a b gs1 ev Member Before After Obs
       Frame NS].
-    pose proof (observed_decorated sm R _ _ _ _ _ _ _ _ _ _ _ _ _ Obs) as D.
-    pose proof (CursorHistories.role_step_actor sm R _ _ _ _ _ _ _ _ _
-      (PrefixRelation.decorated_source sm R _ _ _ _ _ _ _ _ _ _ _ _ D)) as Same.
+    pose proof (observed_decorated (shared_model model) R
+      _ _ _ _ _ _ _ _ _ _ _ _ _ Obs) as D.
+    pose proof (CursorHistories.role_step_actor
+      (shared_model model) R _ _ _ _ _ _ _ _ _
+      (PrefixRelation.decorated_source (shared_model model) R
+        _ _ _ _ _ _ _ _ _ _ _ _ D)) as Same.
     rewrite <- Frame by congruence. rewrite Source. exact (IH p).
 Qed.
 End Stamped.

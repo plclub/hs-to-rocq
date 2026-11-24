@@ -33,17 +33,16 @@ Proof.
   rewrite IHrun. f_equal. destruct H. cbn. eapply observed_update. eassumption.
 Qed.
 
-Local Notation arrival := [
-  Announced wire_A Choreography.Network.Root (GHC.Base.hs_string__ "True");
-  Sent wire_A wire_C Choreography.Network.Root (GHC.Base.hs_string__ "False");
-  Received wire_A wire_B Choreography.Network.Root (GHC.Base.hs_string__
-    "True")].
-Local Notation key_c := (wire_A,wire_C,Choreography.Network.Root).
-
 Lemma peer_queue tc s n :
   PrefixRelation.matches wire_model wire_stores tt wire_roles (fun _ => bool)
-    wire_choice tc s arrival n ->
-  mailboxes n key_c = [GHC.Base.hs_string__ "True"; GHC.Base.hs_string__
+    wire_choice tc s
+    [Announced wire_A Choreography.Network.Root (GHC.Base.hs_string__ "True");
+     Sent wire_A wire_C Choreography.Network.Root
+       (GHC.Base.hs_string__ "False");
+     Received wire_A wire_B Choreography.Network.Root
+       (GHC.Base.hs_string__ "True")] n ->
+  mailboxes n (wire_A,wire_C,Choreography.Network.Root) =
+    [GHC.Base.hs_string__ "True"; GHC.Base.hs_string__
     "False"].
 Proof.
   intros [gs P].

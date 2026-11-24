@@ -50,15 +50,13 @@ Qed.
 Section Decompose.
 Context {M E : Type -> Type} {S : Type}
   (model : local_model M E Symbol S) (p : Symbol) (Label : Type).
-Local Notation cur := (@cursor M E p).
-Variable leaf : forall B, cur B -> Label -> cur B -> Prop.
-Local Notation step := (labelled_step model p Label leaf).
-Local Notation log := (local_log model p Label leaf).
+Variable leaf :
+  forall B, @cursor M E p B -> Label -> @cursor M E p B -> Prop.
 
 (* This is solely a source restriction; the actual stamped primitive steps
    supply it by inspecting primitive_action, without forgetting their tokens
    or imposing any value/reply determinism. *)
-Definition primitive_cursor {B} (t : cur B) : Prop :=
+Definition primitive_cursor {B} (t : @cursor M E p B) : Prop :=
   match t with
   | Code _ c =>
     match c with Perf _ => True | _ => False end
@@ -66,17 +64,17 @@ Definition primitive_cursor {B} (t : cur B) : Prop :=
   | _ => False
   end.
 Hypothesis leaf_primitive :
-  forall B (t : cur B) e u, leaf B t e u -> primitive_cursor t.
+  forall B (t : @cursor M E p B) e u, leaf B t e u -> primitive_cursor t.
 
 Lemma primitive_action_cursor R B t s q a u s' q' :
   primitive_action model R B t s q a u s' q' -> primitive_cursor t.
 Proof. destruct 1; exact I. Qed.
 
-Definition labelled_step_shape {B} (t : cur B) (label : option Label) : cur B ->
-  Prop :=
-  match t in cursor _ C return cur C -> Prop with
+Definition labelled_step_shape {B} (t : @cursor M E p B)
+    (label : option Label) : @cursor M E p B -> Prop :=
+  match t in cursor _ C return @cursor M E p C -> Prop with
   | Code o c =>
-    match c in Tree _ C return cur C -> Prop with
+    match c in Tree _ C return @cursor M E p C -> Prop with
     | Pure x => fun u => label = None /\ u = Returned x
     | Bind a k => fun u =>
         label = None /\ u = Seq o (Code (child o BindPrefix) a) k
@@ -90,16 +88,20 @@ Definition labelled_step_shape {B} (t : cur B) (label : option Label) : cur B ->
   | Seq o t k => fun u =>
       (exists x, label = None /\ t = Returned x /\
         u = Code (child o BindBody) (k x)) \/
-      (exists v, step _ t label v /\ u = Seq o v k)
+      (exists v, labelled_step model p Label leaf _ t label v /\
+        u = Seq o v k)
   | Fork f x => fun u =>
-      (exists v, step _ f label v /\ u = Fork v x) \/
-      (exists v, step _ x label v /\ u = Fork f v) \/
+      (exists v, labelled_step model p Label leaf _ f label v /\
+        u = Fork v x) \/
+      (exists v, labelled_step model p Label leaf _ x label v /\
+        u = Fork f v) \/
       (exists fv xv, label = None /\ f = Returned fv /\ x = Returned xv /\
         u = Returned (fv xv))
   end.
 
 Lemma labelled_step_shape_correct B t label u :
-  step B t label u -> labelled_step_shape t label u.
+  labelled_step model p Label leaf B t label u ->
+  labelled_step_shape t label u.
 Proof.
   destruct 1.
   - destruct H; cbn; auto.
@@ -115,19 +117,20 @@ Qed.
 
 Inductive bind_log_cut {X Y} (o : occurrence)
     (a : Choreo M p X) (k : X -> Choreo M p Y) :
-    list Label -> cur Y -> Prop :=
+    list Label -> @cursor M E p Y -> Prop :=
 | BindUnopened : bind_log_cut o a k [] (Code o (Bind a k))
 | BindInPrefix tr t :
-    log (Code (child o BindPrefix) a) tr t ->
+    local_log model p Label leaf (Code (child o BindPrefix) a) tr t ->
     bind_log_cut o a k tr (Seq o t k)
 | BindInBody prefix body x t :
-    log (Code (child o BindPrefix) a) prefix (Returned x) ->
-    log (Code (child o BindBody) (k x)) body t ->
+    local_log model p Label leaf
+      (Code (child o BindPrefix) a) prefix (Returned x) ->
+    local_log model p Label leaf (Code (child o BindBody) (k x)) body t ->
     bind_log_cut o a k (prefix ++ body) t.
 
 Lemma bind_log_cut_step X Y o (a : Choreo M p X) (k : X -> Choreo M p Y)
     tr t label u :
-  bind_log_cut o a k tr t -> step Y t label u ->
+  bind_log_cut o a k tr t -> labelled_step model p Label leaf Y t label u ->
   bind_log_cut o a k (snoc_token Label tr label) u.
 Proof.
   intros Cut Step. destruct Cut.
@@ -147,7 +150,8 @@ Qed.
 
 Theorem local_log_bind X Y o (a : Choreo M p X)
     (k : X -> Choreo M p Y) tr t :
-  log (Code o (Bind a k)) tr t -> bind_log_cut o a k tr t.
+  local_log model p Label leaf (Code o (Bind a k)) tr t ->
+  bind_log_cut o a k tr t.
 Proof.
   intro Run. induction Run.
   - constructor.
@@ -158,13 +162,15 @@ Qed.
    In particular consumers need not inject existential cursor Type indices. *)
 Corollary local_log_bind_cases X Y o (a : Choreo M p X)
     (k : X -> Choreo M p Y) tr t :
-  log (Code o (Bind a k)) tr t ->
+  local_log model p Label leaf (Code o (Bind a k)) tr t ->
   (tr = [] /\ t = Code o (Bind a k)) \/
-  (exists ct, log (Code (child o BindPrefix) a) tr ct /\ t = Seq o ct k) \/
+  (exists ct, local_log model p Label leaf
+    (Code (child o BindPrefix) a) tr ct /\ t = Seq o ct k) \/
   (exists prefix body x,
     tr = prefix ++ body /\
-    log (Code (child o BindPrefix) a) prefix (Returned x) /\
-    log (Code (child o BindBody) (k x)) body t).
+    local_log model p Label leaf
+      (Code (child o BindPrefix) a) prefix (Returned x) /\
+    local_log model p Label leaf (Code (child o BindBody) (k x)) body t).
 Proof.
   intro Run. destruct (local_log_bind _ _ _ _ _ _ _ Run).
   - left. split; reflexivity.
@@ -175,11 +181,13 @@ Qed.
 
 Corollary local_log_bind_return X Y o (a : Choreo M p X)
     (k : X -> Choreo M p Y) tr (y : Y) :
-  log (Code o (Bind a k)) tr (Returned y) ->
+  local_log model p Label leaf (Code o (Bind a k)) tr (Returned y) ->
   exists prefix body x,
     tr = prefix ++ body /\
-    log (Code (child o BindPrefix) a) prefix (Returned x) /\
-    log (Code (child o BindBody) (k x)) body (Returned y).
+    local_log model p Label leaf
+      (Code (child o BindPrefix) a) prefix (Returned x) /\
+    local_log model p Label leaf
+      (Code (child o BindBody) (k x)) body (Returned y).
 Proof.
   intro Run. destruct (local_log_bind_cases _ _ _ _ _ _ _ Run)
     as [[_ Bad]|[(ct & _ & Bad)|Done]]; try discriminate; exact Done.
@@ -187,22 +195,26 @@ Qed.
 
 Inductive app_log_cut {X Y} (o : occurrence)
     (f : Choreo M p (X -> Y)) (x : Choreo M p X) :
-    list Label -> cur Y -> Prop :=
+    list Label -> @cursor M E p Y -> Prop :=
 | AppUnopened : app_log_cut o f x [] (Code o (App f x))
 | AppInChildren function_log argument_log tr cf cx :
-    log (Code (child o AppFunction) f) function_log cf ->
-    log (Code (child o AppArgument) x) argument_log cx ->
+    local_log model p Label leaf
+      (Code (child o AppFunction) f) function_log cf ->
+    local_log model p Label leaf
+      (Code (child o AppArgument) x) argument_log cx ->
     log_shuffle function_log argument_log tr ->
     app_log_cut o f x tr (Fork cf cx)
 | AppJoined function_log argument_log tr fv xv :
-    log (Code (child o AppFunction) f) function_log (Returned fv) ->
-    log (Code (child o AppArgument) x) argument_log (Returned xv) ->
+    local_log model p Label leaf
+      (Code (child o AppFunction) f) function_log (Returned fv) ->
+    local_log model p Label leaf
+      (Code (child o AppArgument) x) argument_log (Returned xv) ->
     log_shuffle function_log argument_log tr ->
     app_log_cut o f x tr (Returned (fv xv)).
 
 Lemma app_log_cut_step X Y o (f : Choreo M p (X -> Y))
     (x : Choreo M p X) tr t label u :
-  app_log_cut o f x tr t -> step Y t label u ->
+  app_log_cut o f x tr t -> labelled_step model p Label leaf Y t label u ->
   app_log_cut o f x (snoc_token Label tr label) u.
 Proof.
   intros Cut Step. destruct Cut.
@@ -220,7 +232,8 @@ Qed.
 
 Theorem local_log_app X Y o (f : Choreo M p (X -> Y))
     (x : Choreo M p X) tr t :
-  log (Code o (App f x)) tr t -> app_log_cut o f x tr t.
+  local_log model p Label leaf (Code o (App f x)) tr t ->
+  app_log_cut o f x tr t.
 Proof.
   intro Run. induction Run.
   - constructor.
@@ -229,15 +242,19 @@ Qed.
 
 Corollary local_log_app_cases X Y o (f : Choreo M p (X -> Y))
     (x : Choreo M p X) tr t :
-  log (Code o (App f x)) tr t ->
+  local_log model p Label leaf (Code o (App f x)) tr t ->
   (tr = [] /\ t = Code o (App f x)) \/
   (exists function_log argument_log cf cx,
-    log (Code (child o AppFunction) f) function_log cf /\
-    log (Code (child o AppArgument) x) argument_log cx /\
+    local_log model p Label leaf
+      (Code (child o AppFunction) f) function_log cf /\
+    local_log model p Label leaf
+      (Code (child o AppArgument) x) argument_log cx /\
     log_shuffle function_log argument_log tr /\ t = Fork cf cx) \/
   (exists function_log argument_log fv xv,
-    log (Code (child o AppFunction) f) function_log (Returned fv) /\
-    log (Code (child o AppArgument) x) argument_log (Returned xv) /\
+    local_log model p Label leaf
+      (Code (child o AppFunction) f) function_log (Returned fv) /\
+    local_log model p Label leaf
+      (Code (child o AppArgument) x) argument_log (Returned xv) /\
     log_shuffle function_log argument_log tr /\ t = Returned (fv xv)).
 Proof.
   intro Run. destruct (local_log_app _ _ _ _ _ _ _ Run).
@@ -246,7 +263,7 @@ Proof.
   - right. right. do 4 eexists. repeat split; eassumption || reflexivity.
 Qed.
 
-Definition cursor_result {B} (t : cur B) : option B :=
+Definition cursor_result {B} (t : @cursor M E p B) : option B :=
   match t in cursor _ C return option C with
   | Returned x => Some x
   | _ => None
@@ -254,10 +271,12 @@ Definition cursor_result {B} (t : cur B) : option B :=
 
 Corollary local_log_app_return X Y o (f : Choreo M p (X -> Y))
     (x : Choreo M p X) tr (y : Y) :
-  log (Code o (App f x)) tr (Returned y) ->
+  local_log model p Label leaf (Code o (App f x)) tr (Returned y) ->
   exists function_log argument_log fv xv,
-    log (Code (child o AppFunction) f) function_log (Returned fv) /\
-    log (Code (child o AppArgument) x) argument_log (Returned xv) /\
+    local_log model p Label leaf
+      (Code (child o AppFunction) f) function_log (Returned fv) /\
+    local_log model p Label leaf
+      (Code (child o AppArgument) x) argument_log (Returned xv) /\
     log_shuffle function_log argument_log tr /\ y = fv xv.
 Proof.
   intro Run. destruct (local_log_app_cases _ _ _ _ _ _ _ Run)

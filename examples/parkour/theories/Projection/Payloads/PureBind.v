@@ -129,7 +129,6 @@ Section Originals.
 Context {M E Store Input} (model : local_model M E role (Store * Input))
   (stores : role -> Store) (input : Input) (R : list role) (A : role -> Type)
   (c body : forall p, Choreo M p (A p)).
-Local Notation sm := (shared_model model).
 Hypothesis Shape : forall p, In p R ->
   exists X (value : X) (k : X -> Choreo M p (A p)),
     c p = Bind (Pure value) k /\ body p = k value.
@@ -138,12 +137,14 @@ Lemma pure_bind_inner_code tc s tn n gs p B (C : @cursor_context M E p B (A p))
     code path :
   matched_prefix model stores input R A c tc s tn n gs -> In p R ->
   static_path path ->
-  silent_prefix sm (positions s p) (plug C (Code (BindBody :: path) code)) ->
+  silent_prefix (shared_model model) (positions s p)
+    (plug C (Code (BindBody :: path) code)) ->
   choreo_at_static_path path (body p) = Some (existT _ B code).
 Proof.
   intros Prefix Member Static Silent.
   destruct (Shape p Member) as (X & value & k & Root & Body).
-  pose proof (initial_actor_history sm R A c (stores,input) tc s
+  pose proof (initial_actor_history (shared_model model) R A c (stores,input)
+    tc s
     (prefix_source_run model stores input R A c _ _ _ _ _ Prefix) p) as History.
   rewrite Root in History. rewrite Body.
   eapply pure_bind_focus_original; eassumption.
@@ -181,7 +182,8 @@ Theorem pure_bind_body_originals tc s tn n gs p :
   well_formed R M A body ->
   matched_prefix model stores input R A c tc s tn n gs -> In p R ->
   forall Y kind path sender reader, static_path path ->
-  receive_site sm p (A p) (positions s p) Y kind (BindBody :: path) sender
+  receive_site (shared_model model) p (A p) (positions s p)
+    Y kind (BindBody :: path) sender
     reader ->
   exists (v : Y) (dict : Show Y),
     (forall g, In g gs ->

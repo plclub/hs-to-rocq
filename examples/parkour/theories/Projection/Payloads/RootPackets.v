@@ -12,7 +12,7 @@ From ParkourTheories Require Import Choreography.ReceiveSites
   Projection.SessionPaths.
 Require Import Parkour.Codec.
 Import ListNotations.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
+Import Choreography.Choreo2 (Choreo).
 
 (* The original syntax of a root event can be recovered without comparing
    existential payload types. Carry any predicate on the whole typed program. *)

@@ -101,21 +101,13 @@ Context {M E Store Input}
   (A : Symbol -> Type) (c : forall p, Choreo M p (A p)).
 Local Arguments tokens {M E Store Input} model stores input R A c {p B} _.
 Local Arguments cursor_at {M E Store Input} model stores input R A c {p B} _.
-Local Notation sm := (shared_model model).
-Local Notation entry := (observed_entry model stores input R A c).
-Local Notation cut := (logged_cut model stores input R A c).
-Local Notation tok := (tokens model stores input R A c).
-Local Notation cur := (cursor_at model stores input R A c).
-Local Notation batch := (entry_batch model stores input R A c).
-Local Notation act := (entry_action model stores input R A c).
-Local Notation path_of := (entry_site model stores input R A c).
-Local Notation ret := (finished model stores input R A c).
 
-Lemma entry_batch_path p (e : entry p) ev :
-  In ev (batch p e) -> payload_path ev = path_of p e.
+Lemma entry_batch_path p (e : (observed_entry model stores input R A c) p) ev :
+  In ev ((entry_batch model stores input R A c) p e) -> payload_path ev =
+    (entry_site model stores input R A c) p e.
 Proof.
   intro Member.
-  rewrite (observed_batch_path sm R p _ _ _ _ _ _ _ _ _ _ _ _
+  rewrite (observed_batch_path (shared_model model) R p _ _ _ _ _ _ _ _ _ _ _ _
     (observation_at_focus model stores input R A c p e) ev Member).
   pose proof (entry_primitive model stores input R A c p e) as Primitive.
   unfold entry_site, event_route.
@@ -126,10 +118,12 @@ Lemma stamped_choice_header p X Y owner root sh rd kl sl input_value k e u :
   stamped model stores input R A c p Y
     (Code root (Perf (@Cond M p X owner Y sh rd kl sl input_value k))) e u ->
   forall peer, owner <> peer -> (p = owner \/ p = peer) ->
-    action_at ChoiceDelivery root owner peer p (act p e).
+    action_at ChoiceDelivery root owner peer p ((entry_action model stores input
+      R A c) p e).
 Proof.
   intros [Primitive _].
-  exact (primitive_choice_coverage_correct sm R p _ _ _ _ _ _ _ _ Primitive).
+  exact (primitive_choice_coverage_correct (shared_model model) R p _ _ _ _ _ _
+    _ _ Primitive).
 Qed.
 
 (* This excludes the merely existential layouts that cannot support the
@@ -137,29 +131,35 @@ Qed.
    returned role. Receive coverage concerns immediate zipper foci only; a
    selected receiver is silently advanced before applying this interface. *)
 #[universes(template)]
-Record realized F active root (cuts : family cut F active) tree : Prop := {
+Record realized F active root (cuts : family (logged_cut model stores input R A
+  c) F active) tree : Prop := {
   realized_tokens : forall p d e,
-    In e (tok (cuts p d)) ->
-    forall ev, In ev (batch p e) -> payload_in_layout root tree ev;
+    In e ((tokens model stores input R A c) (cuts p d)) ->
+    forall ev, In ev ((entry_batch model stores input R A c) p e) ->
+      payload_in_layout root tree ev;
   realized_receives : forall p d B
       (C : @cursor_context M E p B (F p)) focus X kind o sender rd,
-    cur (cuts p d) = plug C focus ->
+    (cursor_at model stores input R A c) (cuts p d) = plug C focus ->
     receive_focus p B focus X kind o sender rd ->
     layout_site root tree o kind sender p;
   realized_returned : forall p d v,
-    ret p (F p) (cuts p d) v ->
+    (finished model stores input R A c) p (F p) (cuts p d) v ->
     forall path kind sender receiver,
     site tree path kind sender receiver ->
     (p = sender \/ p = receiver) ->
-    exists e, In e (tok (cuts p d)) /\
-      action_at kind (root ++ path) sender receiver p (act p e)
+    exists e, In e ((tokens model stores input R A c) (cuts p d)) /\
+      action_at kind (root ++ path) sender receiver p ((entry_action model
+        stores input R A c) p e)
 }.
 
-Definition cut_receive p B (node : cut p B) X kind o sender rd : Prop :=
+Definition cut_receive p B (node : (logged_cut model stores input R A c) p B) X
+  kind o sender rd : Prop :=
   exists Z (C : @cursor_context M E p Z B) focus,
-    cur node = plug C focus /\ receive_focus p Z focus X kind o sender rd.
+    (cursor_at model stores input R A c) node = plug C focus /\ receive_focus p
+      Z focus X kind o sender rd.
 
-Lemma realized_receive_site F active root (cuts : family cut F active) tree :
+Lemma realized_receive_site F active root (cuts : family (logged_cut model
+  stores input R A c) F active) tree :
   realized F active root cuts tree ->
   forall p d X kind o sender rd,
     cut_receive p (F p) (cuts p d) X kind o sender rd ->
@@ -174,17 +174,21 @@ Qed.
    actual entries, and ReturnSplit retains BOTH actual returned children.
    The child logs themselves may be chronologically interleaved. *)
 Theorem realized_parallel F X active root
-    (cuts : family cut F active)
-    (functions : family cut (fun p => X p -> F p) active)
-    (arguments : family cut X active) function_tree argument_tree :
+    (cuts : family (logged_cut model stores input R A c) F active)
+    (functions : family (logged_cut model stores input R A c) (fun p => X p -> F
+      p) active)
+    (arguments : family (logged_cut model stores input R A c) X active)
+      function_tree argument_tree :
   realized _ active (child root AppFunction) functions function_tree ->
   realized _ active (child root AppArgument) arguments argument_tree ->
   (forall p d e,
-    In e (tok (cuts p d)) <->
-    In e (tok (functions p d)) \/ In e (tok (arguments p d))) ->
-  (forall p d v, ret p (F p) (cuts p d) v ->
+    In e ((tokens model stores input R A c) (cuts p d)) <->
+    In e ((tokens model stores input R A c) (functions p d)) \/ In e ((tokens
+      model stores input R A c) (arguments p d))) ->
+  (forall p d v, (finished model stores input R A c) p (F p) (cuts p d) v ->
     exists fv xv,
-      ret p _ (functions p d) fv /\ ret p _ (arguments p d) xv) ->
+      (finished model stores input R A c) p _ (functions p d) fv /\ (finished
+        model stores input R A c) p _ (arguments p d) xv) ->
   (forall p d Y kind o sender rd,
     cut_receive p (F p) (cuts p d) Y kind o sender rd ->
     cut_receive p _ (functions p d) Y kind o sender rd \/
@@ -236,18 +240,21 @@ Proof.
 Qed.
 
 Theorem realized_sequence F X active entered root
-    (cuts : family cut F active)
-    (prefixes : family cut X active) (bodies : family cut F entered)
+    (cuts : family (logged_cut model stores input R A c) F active)
+    (prefixes : family (logged_cut model stores input R A c) X active) (bodies :
+      family (logged_cut model stores input R A c) F entered)
     prefix_tree body_tree :
   realized _ active (child root BindPrefix) prefixes prefix_tree ->
   realized _ entered (child root BindBody) bodies body_tree ->
   (forall p d e,
-    In e (tok (cuts p d)) <->
-    In e (tok (prefixes p d)) \/
-    exists body_member, In e (tok (bodies p body_member))) ->
-  (forall p d v, ret p (F p) (cuts p d) v ->
+    In e ((tokens model stores input R A c) (cuts p d)) <->
+    In e ((tokens model stores input R A c) (prefixes p d)) \/
+    exists body_member, In e ((tokens model stores input R A c) (bodies p
+      body_member))) ->
+  (forall p d v, (finished model stores input R A c) p (F p) (cuts p d) v ->
     exists x body_member y,
-      ret p _ (prefixes p d) x /\ ret p _ (bodies p body_member) y) ->
+      (finished model stores input R A c) p _ (prefixes p d) x /\ (finished
+        model stores input R A c) p _ (bodies p body_member) y) ->
   (forall p d Y kind o sender rd,
     cut_receive p (F p) (cuts p d) Y kind o sender rd ->
     cut_receive p _ (prefixes p d) Y kind o sender rd \/
@@ -311,19 +318,24 @@ Qed.
    received value equals the owner value. Coherent branch selection must be
    established before the body realization can be supplied. *)
 Theorem realized_choice F active entered root owner
-    (cuts : family cut F active) (bodies : family cut F entered) body_tree :
+    (cuts : family (logged_cut model stores input R A c) F active) (bodies :
+      family (logged_cut model stores input R A c) F entered) body_tree :
   realized _ entered (child root ChoiceBody) bodies body_tree ->
-  (forall p d e, In e (tok (cuts p d)) ->
-    (forall ev, In ev (batch p e) -> choice_root_event root owner ev) \/
-    exists body_member, In e (tok (bodies p body_member))) ->
+  (forall p d e, In e ((tokens model stores input R A c) (cuts p d)) ->
+    (forall ev, In ev ((entry_batch model stores input R A c) p e) ->
+      choice_root_event root owner ev) \/
+    exists body_member, In e ((tokens model stores input R A c) (bodies p
+      body_member))) ->
   (forall p d body_member e,
-    In e (tok (bodies p body_member)) -> In e (tok (cuts p d))) ->
-  (forall p d v, ret p (F p) (cuts p d) v ->
+    In e ((tokens model stores input R A c) (bodies p body_member)) -> In e
+      ((tokens model stores input R A c) (cuts p d))) ->
+  (forall p d v, (finished model stores input R A c) p (F p) (cuts p d) v ->
     exists body_member y,
-      ret p _ (bodies p body_member) y /\
+      (finished model stores input R A c) p _ (bodies p body_member) y /\
       forall peer, owner <> peer -> (p = owner \/ p = peer) ->
-        exists e, In e (tok (cuts p d)) /\
-          action_at ChoiceDelivery root owner peer p (act p e)) ->
+        exists e, In e ((tokens model stores input R A c) (cuts p d)) /\
+          action_at ChoiceDelivery root owner peer p ((entry_action model stores
+            input R A c) p e)) ->
   (forall p d Y kind o sender rd,
     cut_receive p (F p) (cuts p d) Y kind o sender rd ->
     (kind = ChoiceDelivery /\ o = root /\ sender = owner /\ owner <> p) \/
@@ -364,7 +376,7 @@ Variable past : list payload_event.
 Variable ar : actor_archive model stores input R A c.
 
 Theorem realized_past_sites tc s tn n gs F active root
-    (cuts : family cut F active) tree :
+    (cuts : family (logged_cut model stores input R A c) F active) tree :
   observed_archives model stores input R A c tc s tn n gs past ar ->
   owns_region model stores input R A c ar F active root cuts ->
   realized F active root cuts tree ->
@@ -385,16 +397,18 @@ Proof.
     (proj2 (Own p Member e) Region) ev InBatch).
 Qed.
 
-Theorem realized_returned_archive F active root (cuts : family cut F active)
+Theorem realized_returned_archive F active root (cuts : family (logged_cut model
+  stores input R A c) F active)
   tree :
   owns_region model stores input R A c ar F active root cuts ->
   realized F active root cuts tree ->
-  forall p d v, ret p (F p) (cuts p d) v ->
+  forall p d v, (finished model stores input R A c) p (F p) (cuts p d) v ->
   forall path kind sender receiver,
     site tree path kind sender receiver -> (p = sender \/ p = receiver) ->
-    exists e, In (path_of p e,e) (ar p) /\
-      In e (tok (cuts p d)) /\
-      action_at kind (root ++ path) sender receiver p (act p e).
+    exists e, In ((entry_site model stores input R A c) p e,e) (ar p) /\
+      In e ((tokens model stores input R A c) (cuts p d)) /\
+      action_at kind (root ++ path) sender receiver p ((entry_action model
+        stores input R A c) p e).
 Proof.
   intros [_ [_ Own]] Layout p d v Done path kind sender receiver At Peer.
   destruct (realized_returned _ _ _ _ _ Layout p d v Done
@@ -407,17 +421,19 @@ Qed.
    completed_subtree history. This is the interface needed by a barrier proof.
    *)
 Theorem realized_returned_trace tc s tn n gs F active root
-    (cuts : family cut F active) tree :
+    (cuts : family (logged_cut model stores input R A c) F active) tree :
   observed_archives model stores input R A c tc s tn n gs past ar ->
   owns_region model stores input R A c ar F active root cuts ->
   realized F active root cuts tree ->
-  forall p d v, ret p (F p) (cuts p d) v ->
+  forall p d v, (finished model stores input R A c) p (F p) (cuts p d) v ->
   forall path kind sender receiver,
     site tree path kind sender receiver -> (p = sender \/ p = receiver) ->
     exists e suffix,
-      In e (tok (cuts p d)) /\
-      tc = entry_tc model stores input R A c p e ++ [act p e] ++ suffix /\
-      action_at kind (root ++ path) sender receiver p (act p e).
+      In e ((tokens model stores input R A c) (cuts p d)) /\
+      tc = entry_tc model stores input R A c p e ++ [(entry_action model stores
+        input R A c) p e] ++ suffix /\
+      action_at kind (root ++ path) sender receiver p ((entry_action model
+        stores input R A c) p e).
 Proof.
   intros Hist Own Layout p d v Done path kind sender receiver At Peer.
   destruct (realized_returned_archive _ _ _ _ _ Own Layout
@@ -428,7 +444,8 @@ Proof.
   exists e, suffix. now repeat split.
 Qed.
 
-Theorem realized_compatible F active root (cuts : family cut F active) tree :
+Theorem realized_compatible F active root (cuts : family (logged_cut model
+  stores input R A c) F active) tree :
   realized F active root cuts tree ->
   forall o kind sender receiver b other_kind other_sender other_receiver,
     layout_site root tree o kind sender receiver ->

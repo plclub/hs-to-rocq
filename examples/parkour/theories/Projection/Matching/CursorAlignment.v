@@ -8,11 +8,7 @@ From ParkourTheories Require Import Semantics.LocalEffects
 Require Import Parkour.Symbol Parkour.Codec Control.Monad.Tree.
 Require Choreography.Choreo2.
 Import Choreography.Network.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
-Local Notation At := Choreography.Choreo2.At.
-Local Notation unAt := Choreography.Choreo2.unAt.
-Local Notation Comm := Choreography.Choreo2.Comm.
-Local Notation Cond := Choreography.Choreo2.Cond.
+Import Choreography.Choreo2 (Choreo, At, unAt, Comm, Cond).
 Import ListNotations.
 
 (* A concrete, finite administrative fragment. In particular Exec, Send and

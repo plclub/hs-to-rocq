@@ -8,7 +8,7 @@ From ParkourTheories Require Import Semantics.Runs
 Require Choreography.Choreo2.
 From ParkourTheories.Choreography Require WellFormedness.
 Import ListNotations.
-Local Notation At := Choreography.Choreo2.At.
+Import Choreography.Choreo2 (At).
 
 (* New acceptance inputs; existing source/FIFO expectations remain untouched. *)
 Definition result_family p := At bool B p.

@@ -9,27 +9,29 @@ Import ListNotations.
 Section Log.
 Context {M E : Type -> Type} {S : Type} (model : local_model M E Symbol S)
   (p : Symbol) (Label : Type).
-Local Notation cur := (@cursor M E p).
-Variable leaf : forall B, cur B -> Label -> cur B -> Prop.
+Variable leaf :
+  forall B, @cursor M E p B -> Label -> @cursor M E p B -> Prop.
 
-Inductive labelled_step : forall B, cur B -> option Label -> cur B -> Prop :=
+Inductive labelled_step :
+  forall B, @cursor M E p B -> option Label -> @cursor M E p B -> Prop :=
 | LabelledSilent B t u : primitive_silent model B t u -> labelled_step B t None
   u
 | LabelledLeaf B t token u : leaf B t token u -> labelled_step B t (Some token)
   u
 | LabelledSeq X Y o t label u (k : X -> Choreo M p Y) :
     labelled_step X t label u -> labelled_step Y (Seq o t k) label (Seq o u k)
-| LabelledForkLeft X Y (f g : cur (X -> Y)) label t :
+| LabelledForkLeft X Y (f g : @cursor M E p (X -> Y)) label t :
     labelled_step (X -> Y) f label g -> labelled_step Y (Fork f t) label (Fork g
       t)
-| LabelledForkRight X Y (f : cur (X -> Y)) t label u :
+| LabelledForkRight X Y (f : @cursor M E p (X -> Y)) t label u :
     labelled_step X t label u -> labelled_step Y (Fork f t) label (Fork f u).
 
 Definition snoc_token (labels : list Label) (t : option Label) :=
   match t with None => labels | Some x => labels ++ [x] end.
 
 #[universes(template)]
-Inductive local_log {B} (start : cur B) : list Label -> cur B -> Prop :=
+Inductive local_log {B} (start : @cursor M E p B) :
+  list Label -> @cursor M E p B -> Prop :=
 | LogStart : local_log start [] start
 | LogStep tr t token u : local_log start tr t -> labelled_step B t token u ->
     local_log start (snoc_token tr token) u.

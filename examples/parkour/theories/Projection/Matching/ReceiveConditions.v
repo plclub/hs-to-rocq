@@ -160,13 +160,14 @@ Context {M E : Type -> Type} {Store Input : Type}.
 Variable model : LocalEffects.local_model M E role (Store * Input).
 Variable R : list role.
 Variable A : role -> Type.
-Local Notation sm := (SharedState.shared_model model).
 
 Theorem covered_residuals s n gs :
   PrefixRelation.state_match model R A s n gs ->
   (forall p, In p R ->
-    source_head_paths sm p (A p) (positions s p) gs /\
-    source_originals sm p (A p) (positions s p) gs) ->
+    source_head_paths (SharedState.shared_model model)
+      p (A p) (positions s p) gs /\
+    source_originals (SharedState.shared_model model)
+      p (A p) (positions s p) gs) ->
   safe_residuals model R A s n gs /\
   DeliveryAvailability.inputs_available model R A s n.
 Proof.

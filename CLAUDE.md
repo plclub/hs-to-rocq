@@ -123,8 +123,8 @@ Key lemmas: `bin_Desc0` (combine Desc0), `Desc_outside` (f=None outside range), 
 
 ## Test Structure
 
-For Parkour theory imports, `_CoqProject` builds, source pinning, edit policy,
-origin checks, or local-effect semantics, follow the
+For Parkour imports, the local-notation check, `_CoqProject` builds, source
+pinning, edit policy, origin checks, or local-effect semantics, follow the
 [Parkour build and checks](examples/parkour/README.md). `make -C examples/parkour`
 builds the library and theories. Keep assumption queries in `make check`;
 validate with a clean `make -C examples/parkour check`, including the separate

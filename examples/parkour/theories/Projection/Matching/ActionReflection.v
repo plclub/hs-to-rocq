@@ -10,9 +10,7 @@ Require Import Parkour.Symbol Parkour.Codec Control.Monad.Tree.
 From ParkourTheories.Projection Require Import EndpointRunner.
 Require Choreography.Choreo2.
 Import ListNotations.
-Local Notation At := Choreography.Choreo2.At.
-Local Notation unAt := Choreography.Choreo2.unAt.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
+Import Choreography.Choreo2 (At, unAt, Choreo).
 
 (* A safety statement about successful receives, not an assertion that any
    receive can execute. The dictionary is the exposed receiver's dictionary;
@@ -289,28 +287,27 @@ Context {M E : Type -> Type} {Store Input : Type}.
 Variable model : local_model M E role (Store * Input).
 Variable R : list role.
 Variable A : role -> Type.
-Local Notation sm := (shared_model model).
-Local Notation SC := (@Choreography.Execution.configuration M E ((role -> Store)
-  *
-  Input) A).
-Local Notation NC := (@Network.Execution.configuration M E ((role -> Store) *
-  Input)).
 
 (* This adds only exposed-receive safety to a residual alignment witness.
    There is no invariant-preservation, scheduling, or progress clause here. *)
-Definition safe_residuals (s : SC) (n : NC) gs : Prop :=
+Definition safe_residuals
+    (s : @Choreography.Execution.configuration M E ((role -> Store) * Input) A)
+    (n : @Network.Execution.configuration M E ((role -> Store) * Input))
+    gs : Prop :=
   exists f : forall p, @control M E (A p),
     endpoints n = map (entry A f) R /\
     forall p, In p R ->
-      exists Ha : aligned sm Choreography.Network.Root p (A p) (positions s p)
+      exists Ha : aligned (shared_model model) Choreography.Network.Root
+        p (A p) (positions s p)
         (f p),
-        receive_safety sm p (A p) (positions s p) (f p) Ha (mailboxes n) gs.
+        receive_safety (shared_model model) p (A p) (positions s p)
+          (f p) Ha (mailboxes n) gs.
 
 Theorem state_step s n gs na n' :
   NoDup R ->
   state_match model R A s n gs ->
   safe_residuals s n gs ->
-  Network.Execution.step sm R n na n' ->
+  Network.Execution.step (shared_model model) R n na n' ->
   exists sa s' gs',
     paired_step model R A s n gs sa s' na n' gs' /\
     state_match model R A s' n' gs'.
@@ -320,23 +317,25 @@ Proof.
     (Network.Execution.shared_store n)).
   { destruct n as [es q st]. cbn in *. unfold assembled. now rewrite Entries. }
   rewrite Assembled in Net.
-  destruct (roster_step sm R A f _ _ na n' ND Net)
+  destruct (roster_step (shared_model model) R A f _ _ na n' ND Net)
     as (p & u & q' & st' & Member & Step & Result).
   destruct (Safe p Member) as [Ha HS].
   assert (RepMap : represents (map pending_of gs) (mailboxes n) gs).
   { split; [reflexivity|exact (proj2 Rep)]. }
-  destruct (endpoint_decorated_step sm R p (A p) (positions s p) (f p) Ha
+  destruct (endpoint_decorated_step (shared_model model)
+    R p (A p) (positions s p) (f p) Ha
     (mailboxes n) (Network.Execution.shared_store n) gs na u q' st' HS RepMap
       Step)
     as (sa & cp & gs' & Decor & [Align] & Rep').
   rewrite <- StoreEq in Decor.
-  assert (Decor' : decorated sm R (A p) (positions s p)
+  assert (Decor' : decorated (shared_model model) R (A p) (positions s p)
       (Choreography.Execution.shared_store s) (deliveries s) sa cp st'
       (map pending_of gs') na gs gs').
   { rewrite <- (proj1 Rep). exact Decor. }
   set (s' := ({| positions := set_cursor A (positions s) p cp;
                      Choreography.Execution.shared_store := st';
-                     deliveries := map pending_of gs' |} : SC)).
+                     deliveries := map pending_of gs' |} :
+      @Choreography.Execution.configuration M E ((role -> Store) * Input) A)).
   exists sa, s', gs'. split.
   - apply in_split in Member. destruct Member as [before [after Roles]].
     eapply PairStep with (p := p)
@@ -381,11 +380,11 @@ Theorem matched_prefix_step tc s tn n gs na n' :
   NoDup R ->
   matched_prefix model stores input R A c tc s tn n gs ->
   safe_residuals s n gs ->
-  Network.Execution.step sm R n na n' ->
+  Network.Execution.step (shared_model model) R n na n' ->
   exists sa s' gs',
     matched_prefix model stores input R A c
       (tc ++ [sa]) s' (tn ++ [na]) n' gs' /\
-    Choreography.Execution.step sm R s sa s'.
+    Choreography.Execution.step (shared_model model) R s sa s'.
 Proof.
   intros ND Prefix Safe Net.
   destruct (state_step s n gs na n' ND
@@ -402,7 +401,8 @@ Lemma initial_safe_residuals :
 Proof.
   exists (fun p => load (runner (c p) Choreography.Network.Root)).
   split; [reflexivity|]. intros p _.
-  exists (generated_initial_alignment sm Choreography.Network.Root p (A p) (c
+  exists (generated_initial_alignment (shared_model model)
+    Choreography.Network.Root p (A p) (c
     p)).
   apply empty_receive_safety.
 Qed.
@@ -411,12 +411,14 @@ Qed.
    certificate is proved here from empty queues, not required from a caller. *)
 Theorem initial_prefix_step na n' :
   NoDup R ->
-  Network.Execution.step sm R (PrefixRelation.network_initial stores input R A
+  Network.Execution.step (shared_model model) R
+    (PrefixRelation.network_initial stores input R A
     c) na n' ->
   exists sa s' gs',
     matched_prefix model stores input R A c
       [sa] s' [na] n' gs' /\
-    Choreography.Execution.step sm R (PrefixRelation.source_initial stores input
+    Choreography.Execution.step (shared_model model) R
+      (PrefixRelation.source_initial stores input
       A c) sa
       s'.
 Proof.

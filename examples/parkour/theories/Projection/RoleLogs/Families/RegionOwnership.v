@@ -10,7 +10,6 @@ From ParkourTheories Require Import Choreography.Results.CutFamilySoundness
   Choreography.ReceiveSites.
 Require Import Parkour.Symbol Choreography.Choreo2.
 Import ListNotations.
-Local Notation role_eq_dec := Mailboxes.role_eq_dec.
 
 Polymorphic Lemma in_append_large {U : Type} (x : U) (pre post : list U) :
   In x (pre ++ post) <-> In x pre \/ In x post.
@@ -24,16 +23,12 @@ Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol) (A : Symbol ->
     Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation entry := (observed_entry model stores input R A c).
-Local Notation entry_path := (entry_site model stores input R A c).
-Local Notation has_stamp := (entry_in_past model stores input R A c).
-Local Notation alog := (actor_log model stores input R A c).
 Local Arguments positions {M E Store A} _ _.
 
 #[universes(template)]
 Record logged_cut (p : Symbol) (B : Type) : Type := LoggedCut {
   cursor_at : @cursor M E p B;
-  tokens : list (entry p)
+  tokens : list ((observed_entry model stores input R A c) p)
 }.
 Arguments LoggedCut {p B} _ _.
 Arguments cursor_at {p B} _.
@@ -43,16 +38,19 @@ Variable past : list payload_event.
 Variable ar : actor_archive model stores input R A c.
 
 Definition at_node p B o code (cut : logged_cut p B) :=
-  alog p B (Code o code) (tokens cut) (cursor_at cut) /\
-  forall e, In e (tokens cut) -> has_stamp p past e.
+  (actor_log model stores input R A c) p B (Code o code) (tokens cut) (cursor_at
+    cut) /\
+  forall e, In e (tokens cut) -> (entry_in_past model stores input R A c) p past
+    e.
 Definition finished p B (cut : logged_cut p B) v := cut_returned p (cursor_at
   cut) v.
 
 (* Every role that did work inside the region is present. Its cut owns
    exactly its logged entries from that region. A blocked or merely entered
    role may also be present without having produced any entries yet. *)
-Definition in_region p root (e : entry p) :=
-  In (entry_path p e,e) (ar p) /\ RoleChronology.path_prefix root (entry_path p
+Definition in_region p root (e : (observed_entry model stores input R A c) p) :=
+  In ((entry_site model stores input R A c) p e,e) (ar p) /\
+    RoleChronology.path_prefix root ((entry_site model stores input R A c) p
     e).
 
 Definition owns_region F active root (cuts : family logged_cut F active) :=
@@ -95,8 +93,9 @@ Proof.
     + intros p d e. unfold root_cuts; cbn [tokens]. rewrite in_order_member.
       unfold in_region. split.
       * intros [r Seen]. destruct (Valid p r e Seen) as [-> Stamp].
-        split; [exact Seen|]. now exists (entry_path p e).
-      * intros [Seen _]. now exists (entry_path p e).
+        split; [exact Seen|]. now exists ((entry_site model stores input R A c)
+          p e).
+      * intros [Seen _]. now exists ((entry_site model stores input R A c) p e).
   - intros p d; split.
     + exact (archive_role_log model stores input R A c _ _ _ _ _ _ _ Hist p).
     + intros e Seen. apply in_order_member in Seen as [r Seen].
@@ -129,8 +128,8 @@ Proof.
   exists path. symmetry; exact Location.
 Qed.
 Lemma node_silent p B o code (cut : logged_cut p B) u :
-  at_node p B o code cut -> silent_prefix (shared_model model) (cursor_at cut) u
-    ->
+  at_node p B o code cut ->
+  silent_prefix (shared_model model) (cursor_at cut) u ->
   at_node p B o code (LoggedCut u (tokens cut)).
 Proof.
   intros [Log Stamps] Steps. split; [|exact Stamps].
@@ -140,7 +139,7 @@ Qed.
 Definition expose_root (s : @configuration M E ((Symbol -> Store) * Input) A)
     who (u : @cursor M E who (A who)) : family logged_cut A R :=
   fun p _ => LoggedCut
-    (match role_eq_dec who p with
+    (match Mailboxes.role_eq_dec who p with
      | left eq => eq_rect who (fun r => @cursor M E r (A r)) u p eq
      | right _ => positions s p end)
     (in_order model stores input R A c p (ar p)).
@@ -161,12 +160,13 @@ Proof.
   exists (expose_root s who (plug C focus)), B, C, focus.
   split; [exact Own|]. split.
   - intros p d. pose proof (Nodes p d) as Start. unfold expose_root.
-    destruct (role_eq_dec who p) as [Eq|Ne]; [destruct Eq|exact Start].
+    destruct (Mailboxes.role_eq_dec who p) as [Eq|Ne]; [destruct Eq|exact
+      Start].
     exact (node_silent who (A who) [] (c who) (root_cuts s who d) (plug C focus)
       Start Sil).
   - split; [|exact Site]. intros d. unfold expose_root; cbn [cursor_at].
-    destruct (role_eq_dec who who) as [Eq|Ne]; [|contradiction].
-    now rewrite (Eqdep_dec.UIP_dec role_eq_dec Eq eq_refl).
+    destruct (Mailboxes.role_eq_dec who who) as [Eq|Ne]; [|contradiction].
+    now rewrite (Eqdep_dec.UIP_dec Mailboxes.role_eq_dec Eq eq_refl).
 Qed.
 
 End FamilyLog.

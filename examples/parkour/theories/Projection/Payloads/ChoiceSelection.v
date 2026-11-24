@@ -230,10 +230,6 @@ Variable sh : forall p : role, Show X.
 Variable rd : forall p : role, Read X.
 Variable value : forall p, At X l p.
 Variable k : forall p, X -> Choreo M p (A p).
-Local Notation sm := (shared_model model).
-Local Notation SC := (@Choreography.Execution.configuration M E ((role -> Store)
-  *
-  Input) A).
 Local Arguments positions {M E Store A} _ _.
 
 Definition selected_origin p : @cursor M E p (A p) :=
@@ -242,20 +238,26 @@ Definition selected_origin p : @cursor M E p (A p) :=
 (* The witness records a REAL first transition at an earlier global prefix,
    together with the ordered suffix of this actor's actions. Its start is
    fixed even when its current erased cursor lies deep in a later branch. *)
-Definition choice_started p tc (s : SC) : Prop :=
+Definition choice_started p tc
+    (s :
+      @Choreography.Execution.configuration M E ((role -> Store) * Input) A) :
+    Prop :=
   exists tc0 s0 tn0 n0 gs0 past0 first s1 net n1 gs1 ev suffix,
     payload_history model stores input R A c tc0 s0 tn0 n0 gs0 past0 /\
     actor_actions p tc0 = [] /\
     positions s0 p = Code [] (c p) /\
     paired_observed model R A s0 n0 gs0 first s1 net n1 gs1 ev /\
-    @observed M E _ sm R p (A p) (Code [] (c p))
+    @observed M E _ (shared_model model) R p (A p) (Code [] (c p))
       (Choreography.Execution.shared_store s0) (deliveries s0) first
         (selected_origin p)
       (Choreography.Execution.shared_store s1) (deliveries s1) net gs0 gs1 ev /\
     actor_actions p tc = first :: suffix /\
-    cursor_history sm R (selected_origin p) suffix (positions s p).
+    cursor_history (shared_model model) R (selected_origin p) suffix
+      (positions s p).
 
-Lemma choice_started_frame p tc (s s' : SC) :
+Lemma choice_started_frame p tc
+    (s s' :
+      @Choreography.Execution.configuration M E ((role -> Store) * Input) A) :
   positions s p = positions s' p ->
   choice_started p tc s -> choice_started p tc s'.
 Proof.
@@ -265,8 +267,12 @@ Proof.
   repeat split; try assumption. now rewrite <- Frame.
 Qed.
 
-Lemma choice_started_actor_step p tc (s s' : SC) act :
-  role_step sm R (A p) (positions s p) (Choreography.Execution.shared_store s)
+Lemma choice_started_actor_step p tc
+    (s s' :
+      @Choreography.Execution.configuration M E ((role -> Store) * Input) A)
+    act :
+  role_step (shared_model model) R (A p) (positions s p)
+    (Choreography.Execution.shared_store s)
     (deliveries s) act (positions s' p) (Choreography.Execution.shared_store s')
     (deliveries s') ->
   choice_started p tc s -> choice_started p (tc ++ [act]) s'.
@@ -276,7 +282,8 @@ Proof.
   exists tc0, s0, tn0, n0, gs0, past0, first, s1, net, n1, gs1, ev,
     (suffix ++ [act]).
   repeat split; try assumption.
-  - rewrite actor_actions_snoc, (role_step_actor sm R _ _ _ _ _ _ _ _ _ Step).
+  - rewrite actor_actions_snoc,
+      (role_step_actor (shared_model model) R _ _ _ _ _ _ _ _ _ Step).
     destruct (List.list_eq_dec BinNat.N.eq_dec p p); [|contradiction].
     now rewrite Trace.
   - eapply history_after_role_step; eassumption.
@@ -300,18 +307,20 @@ Proof.
   - pose proof Pair as ActualPair.
     destruct Pair as
       [r pre post t t' s' n' act net gs' ev InR Before After Obs Frame NetStep].
-    pose proof (observed_decorated sm R r (A r)
+    pose proof (observed_decorated (shared_model model) R r (A r)
       (positions s r) (Choreography.Execution.shared_store s) (deliveries s) act
       (positions s' r) (Choreography.Execution.shared_store s') (deliveries s')
       net gs gs' ev Obs) as Decorated.
-    pose proof (decorated_source sm R r (A r)
+    pose proof (decorated_source (shared_model model) R r (A r)
       (positions s r) (Choreography.Execution.shared_store s) (deliveries s) act
       (positions s' r) (Choreography.Execution.shared_store s') (deliveries s')
       net gs gs' Decorated) as Step.
-    pose proof (role_step_actor sm R _ _ _ _ _ _ _ _ _ Step) as Actor.
+    pose proof (role_step_actor (shared_model model) R _ _ _ _ _ _ _ _ _ Step)
+      as Actor.
     destruct (List.list_eq_dec BinNat.N.eq_dec r p) as [Same|Other].
     + clear Actor. subst r.
-      pose proof (role_step_actor sm R _ _ _ _ _ _ _ _ _ Step) as Actor.
+      pose proof (role_step_actor (shared_model model) R _ _ _ _ _ _ _ _ _ Step)
+        as Actor.
       destruct (IH p Member) as [[Empty Root]|Started].
       * assert (Selected : positions s' p = selected_origin p).
         { unfold selected_origin.

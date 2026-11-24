@@ -24,13 +24,11 @@ Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol) (A : Symbol ->
     Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation Cut := (logged_cut model stores input R A c).
-Local Notation atc := (at_node model stores input R A c).
-Local Notation done := (finished model stores input R A c).
-Local Notation wire := (token_wires model stores input R A c).
 
-Lemma actual_pure_law past p B o (x v : B) (cut : Cut p B) :
-  atc past p B o (Pure x) cut -> done p B cut v -> v = x.
+Lemma actual_pure_law past p B o (x v : B)
+    (cut : logged_cut model stores input R A c p B) :
+  at_node model stores input R A c past p B o (Pure x) cut ->
+  finished model stores input R A c p B cut v -> v = x.
 Proof.
   destruct cut as [t trace]. intros [Log _] Return.
   destruct t; try contradiction.
@@ -41,8 +39,10 @@ Qed.
 Lemma actual_comm_law tc s tn n gs past ar p X l r sh rd kl kr sl arg sr o cut v
   :
   observed_archives model stores input R A c tc s tn n gs past ar ->
-  atc past p _ o (Perf (@Comm M p X l r sh rd kl kr sl arg sr)) cut ->
-  done p _ cut v -> comm_observed past o rd p arg v.
+  at_node model stores input R A c past p _ o
+    (Perf (@Comm M p X l r sh rd kl kr sl arg sr)) cut ->
+  finished model stores input R A c p _ cut v ->
+  comm_observed past o rd p arg v.
 Proof.
   intros Archives [Log Stamps] Return.
   pose proof (observed_archives_history model stores input R A c _ _ _ _ _ _ _
@@ -64,14 +64,13 @@ Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol) (A : Symbol ->
     Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation Cut := (logged_cut model stores input R A c).
-Local Notation atc := (at_node model stores input R A c).
-Local Notation done := (finished model stores input R A c).
-Local Notation good := (owns_region model stores input R A c).
 
 Theorem actual_replay_laws tc s tn n gs past ar :
   observed_archives model stores input R A c tc s tn n gs past ar ->
-  cut_family_laws Cut (atc past) done past (good ar).
+  cut_family_laws (logged_cut model stores input R A c)
+    (at_node model stores input R A c past)
+    (finished model stores input R A c) past
+    (owns_region model stores input R A c ar).
 Proof.
   intro Hist. constructor.
   - exact (actual_pure_law model stores input R A c past).
@@ -100,7 +99,10 @@ Proof.
     as (past & ar & Hist & Archives & Valid).
   destruct (root_log_family model stores input R A c _ _ _ _ _ _ _ Archives ND)
     as [Own Nodes].
-  eapply (structural_cut_family_results Cut (atc past) done past (good ar)
+  eapply (structural_cut_family_results (logged_cut model stores input R A c)
+    (at_node model stores input R A c past)
+    (finished model stores input R A c) past
+    (owns_region model stores input R A c ar)
     (actual_replay_laws _ _ _ _ _ _ _ Archives) _ _ _ _ _ WF R completed
     (fun p d => d) [] (root_cuts model stores input R A c ar s) vals Inc);
     try eassumption.

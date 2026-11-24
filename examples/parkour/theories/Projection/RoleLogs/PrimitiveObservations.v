@@ -133,21 +133,18 @@ Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol) (A : Symbol ->
     Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation sm := (shared_model model).
-Local Notation entry := (observed_entry model stores input R A c).
-Local Notation stamp := (stamped model stores input R A c).
-Local Notation log := (actor_log model stores input R A c).
-Local Notation batch := (entry_batch model stores input R A c).
 Variable past : list payload_event.
 
-Definition token_wires p (e : entry p) : Prop :=
+Definition token_wires p (e : (observed_entry model stores input R A c) p) :
+  Prop :=
   forall kind site sender recipient wire,
-    In (Consumed kind site sender recipient wire) (batch p e) ->
+    In (Consumed kind site sender recipient wire) ((entry_batch model stores
+      input R A c) p e) ->
     past_receive past kind site sender recipient wire.
 
 Theorem comm_log_shape p X l r o sh rd kl kr sl input_value sr tr t :
-  log p _ (Code o (Perf (@Comm M p X l r sh rd kl kr sl input_value sr))) tr t
-    ->
+  (actor_log model stores input R A c) p _ (Code o (Perf (@Comm M p X l r sh rd
+    kl kr sl input_value sr))) tr t ->
   (forall e, In e tr -> token_wires p e) ->
   (tr = [] /\ t = Code o (Perf (@Comm M p X l r sh rd kl kr sl input_value sr)))
     \/
@@ -155,7 +152,8 @@ Theorem comm_log_shape p X l r o sh rd kl kr sl input_value sr tr t :
     comm_observed past o rd p input_value output /\
     forall e, In e tr ->
       forall kind site sender recipient operand,
-        In (Produced kind site sender recipient operand) (batch p e) ->
+        In (Produced kind site sender recipient operand) ((entry_batch model
+          stores input R A c) p e) ->
         site = o /\ sender = p /\
         sender_operand
           (Perf (@Comm M p X l r sh rd kl kr sl input_value sr)) = Some operand.
@@ -169,20 +167,23 @@ Proof.
     destruct (IHRun Earlier) as [[Empty Initial]|(output & End & Value &
       Original)].
     + subst tr t.
-      pose proof (labelled_atom_shape_correct sm p (entry p) (stamp p) _ _ _ _
+      pose proof (labelled_atom_shape_correct (shared_model model) p
+        ((observed_entry model stores input R A c) p) ((stamped model stores
+        input R A c) p) _ _ _ _
         H)
         as View.
       cbn [labelled_atom_shape] in View.
       destruct View as [[Tok Silent]|(e & Tok & Leaf)].
       * subst token.
-        destruct (silent_atom_shape_correct sm p past _ _ _ Silent)
+        destruct (silent_atom_shape_correct (shared_model model) p past _ _ _
+          Silent)
           as (output & End & Value).
         right. exists output. split; [exact End|]. split; [exact Value|].
         intros e Member. contradiction.
       * subst token.
         destruct Leaf as [Prim Obs].
-        destruct (observed_atom_shape_correct sm R p past _ _ _ _ _ _ _ _ _ _ _
-          _ Obs)
+        destruct (observed_atom_shape_correct (shared_model model) R p past
+          _ _ _ _ _ _ _ _ _ _ _ _ Obs)
           as (output & End & Value & Original).
         -- apply Wires. cbn [snoc_token]. now left.
         -- right. exists output. split; [exact End|]. split; [exact Value|].
@@ -190,15 +191,19 @@ Proof.
            destruct Member as [Eq|No]; [subst item; exact
              Original|contradiction].
     + subst t.
-      pose proof (labelled_atom_shape_correct sm p (entry p) (stamp p) _ _ _ _
+      pose proof (labelled_atom_shape_correct (shared_model model) p
+        ((observed_entry model stores input R A c) p) ((stamped model stores
+        input R A c) p) _ _ _ _
         H)
         as View.
       cbn [labelled_atom_shape] in View.
       destruct View as [[Tok Silent]|(e & Tok & [Prim Obs])].
-      * pose proof (silent_shape_correct sm p _ _ _
-          (primitive_is_silent sm _ _ _ _ Silent)) as Impossible.
+      * pose proof (silent_shape_correct (shared_model model) p _ _ _
+          (primitive_is_silent (shared_model model) _ _ _ _ Silent)) as
+            Impossible.
         contradiction.
-      * pose proof (primitive_shape_correct sm R p _ _ _ _ _ _ _ _ Prim) as
+      * pose proof (primitive_shape_correct (shared_model model) R p _ _ _ _ _ _
+        _ _ Prim) as
         Impossible.
         contradiction.
 Qed.
@@ -211,7 +216,8 @@ Proof.
 Qed.
 
 Theorem comm_log_observed p X l r o sh rd kl kr sl input_value sr tr output :
-  log p _ (Code o (Perf (@Comm M p X l r sh rd kl kr sl input_value sr))) tr
+  (actor_log model stores input R A c) p _ (Code o (Perf (@Comm M p X l r sh rd
+    kl kr sl input_value sr))) tr
     (Returned output) ->
   (forall e, In e tr -> token_wires p e) ->
   comm_observed past o rd p input_value output.
@@ -224,12 +230,13 @@ Proof.
 Qed.
 
 Theorem comm_log_original_tokens p X l r o sh rd kl kr sl input_value sr tr t :
-  log p _ (Code o (Perf (@Comm M p X l r sh rd kl kr sl input_value sr))) tr t
-    ->
+  (actor_log model stores input R A c) p _ (Code o (Perf (@Comm M p X l r sh rd
+    kl kr sl input_value sr))) tr t ->
   (forall e, In e tr -> token_wires p e) ->
   forall e, In e tr ->
     forall kind site sender recipient operand,
-      In (Produced kind site sender recipient operand) (batch p e) ->
+      In (Produced kind site sender recipient operand) ((entry_batch model
+        stores input R A c) p e) ->
       site = o /\ sender = p /\
       sender_operand
         (Perf (@Comm M p X l r sh rd kl kr sl input_value sr)) = Some operand.
@@ -259,7 +266,8 @@ Qed.
 Theorem comm_log_observed_in_archive tc s tn n gs ar
     p X l r o sh rd kl kr sl input_value sr tr output :
   observed_archives model stores input R A c tc s tn n gs past ar ->
-  log p _ (Code o (Perf (@Comm M p X l r sh rd kl kr sl input_value sr))) tr
+  (actor_log model stores input R A c) p _ (Code o (Perf (@Comm M p X l r sh rd
+    kl kr sl input_value sr))) tr
     (Returned output) ->
   (forall e, In e tr -> In ([],e)
     (subarchive model stores input R A c p o (ar p))) ->
@@ -276,8 +284,8 @@ Qed.
 Theorem comm_log_recorded_sender tc s tn n gs ar
     p X l r o sh rd kl kr sl input_value sr tr t kind recipient :
   observed_archives model stores input R A c tc s tn n gs past ar ->
-  log p _ (Code o (Perf (@Comm M p X l r sh rd kl kr sl input_value sr))) tr t
-    ->
+  (actor_log model stores input R A c) p _ (Code o (Perf (@Comm M p X l r sh rd
+    kl kr sl input_value sr))) tr t ->
   (forall e, In e tr -> In ([],e)
     (subarchive model stores input R A c p o (ar p))) ->
   (forall e, In ([],e)
@@ -305,8 +313,8 @@ Qed.
 Theorem comm_log_original_operand tc s tn n gs ar
     p X l r o sh rd kl kr sl input_value sr tr t kind recipient sent :
   observed_archives model stores input R A c tc s tn n gs past ar ->
-  log p _ (Code o (Perf (@Comm M p X l r sh rd kl kr sl input_value sr))) tr t
-    ->
+  (actor_log model stores input R A c) p _ (Code o (Perf (@Comm M p X l r sh rd
+    kl kr sl input_value sr))) tr t ->
   (forall e, In e tr <-> In ([],e)
     (subarchive model stores input R A c p o (ar p))) ->
   sender_operand
@@ -322,32 +330,39 @@ Proof.
 Qed.
 
 Theorem pure_log_shape p B o (x : B) tr t :
-  log p B (Code o (Pure x)) tr t ->
+  (actor_log model stores input R A c) p B (Code o (Pure x)) tr t ->
   tr = [] /\ (t = Code o (Pure x) \/ t = Returned x).
 Proof.
   intro Run. induction Run.
   - split; [reflexivity|now left].
   - destruct IHRun as [Empty [Initial|End]]; subst tr t;
-      pose proof (labelled_atom_shape_correct sm p (entry p) (stamp p) _ _ _ _
+      pose proof (labelled_atom_shape_correct (shared_model model) p
+        ((observed_entry model stores input R A c) p) ((stamped model stores
+        input R A c) p) _ _ _ _
         H)
         as View;
       cbn [labelled_atom_shape] in View;
       destruct View as [[Tok Silent]|(e & Tok & [Prim Obs])].
     + subst token. split; [reflexivity|]. right.
-      exact (silent_atom_shape_correct sm p past _ _ _ Silent).
-    + pose proof (primitive_shape_correct sm R p _ _ _ _ _ _ _ _ Prim) as
+      exact (silent_atom_shape_correct (shared_model model) p past _ _ _
+        Silent).
+    + pose proof (primitive_shape_correct (shared_model model) R p _ _ _ _ _ _ _
+      _ Prim) as
       Impossible.
       contradiction.
-    + pose proof (silent_shape_correct sm p _ _ _
-        (primitive_is_silent sm _ _ _ _ Silent)) as Impossible.
+    + pose proof (silent_shape_correct (shared_model model) p _ _ _
+        (primitive_is_silent (shared_model model) _ _ _ _ Silent)) as
+          Impossible.
       contradiction.
-    + pose proof (primitive_shape_correct sm R p _ _ _ _ _ _ _ _ Prim) as
+    + pose proof (primitive_shape_correct (shared_model model) R p _ _ _ _ _ _ _
+      _ Prim) as
       Impossible.
       contradiction.
 Qed.
 
 Theorem pure_log_returned p B o (x v : B) tr :
-  log p B (Code o (Pure x)) tr (Returned v) -> v = x.
+  (actor_log model stores input R A c) p B (Code o (Pure x)) tr (Returned v) ->
+    v = x.
 Proof.
   intro Run. destruct (pure_log_shape _ _ _ _ _ _ Run) as [Empty [Initial|End]].
   - discriminate.

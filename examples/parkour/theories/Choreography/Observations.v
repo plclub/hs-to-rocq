@@ -5,10 +5,7 @@ From ParkourTheories Require Import Semantics.Roles Semantics.LocalEffects
   Choreography.RoleSteps.
 Require Import Parkour.Symbol Parkour.Codec Control.Monad.Tree.
 Require Choreography.Choreo2.
-Local Notation At := Choreography.Choreo2.At.
-Local Notation Mk_At := Choreography.Choreo2.Mk_At.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
-Local Notation ChoreoSig := Choreography.Choreo2.ChoreoSig.
+Import Choreography.Choreo2 (At, Mk_At, Choreo, ChoreoSig).
 
 Lemma off_at_canonical X l p (h h' : l <> p) :
   @off_at X l p h = off_at h'.

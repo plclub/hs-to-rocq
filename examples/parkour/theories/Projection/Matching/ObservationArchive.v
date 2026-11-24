@@ -123,31 +123,29 @@ Variable input : Input.
 Variable R : list role.
 Variable A : role -> Type.
 Variable c : forall p, Choreography.Choreo2.Choreo M p (A p).
-Local Notation sm := (shared_model model).
-Local Notation SC := (@Choreography.Execution.configuration M E ((role -> Store)
-  *
-  Input) A).
-Local Notation NC := (@Network.Execution.configuration M E ((role -> Store) *
-  Input)).
-Local Notation history := (payload_history model stores input R A c).
 
 (* Every entry retains its real matched prefix, its actual paired step, and
    the focused observation of that same step. All wire/decoder evidence is
    still available by eliminating observation_at_focus. *)
 Record observed_entry (p : role) : Type := ObservedEntry {
   entry_tc : list (@source_action E ((role -> Store) * Input));
-  entry_source : SC;
+  entry_source :
+    @Choreography.Execution.configuration M E ((role -> Store) * Input) A;
   entry_tn : list (@action E ((role -> Store) * Input));
-  entry_network : NC;
+  entry_network :
+    @Network.Execution.configuration M E ((role -> Store) * Input);
   entry_ghosts : list message;
   entry_past : list payload_event;
   entry_action : @source_action E ((role -> Store) * Input);
-  entry_source_after : SC;
+  entry_source_after :
+    @Choreography.Execution.configuration M E ((role -> Store) * Input) A;
   entry_network_action : @action E ((role -> Store) * Input);
-  entry_network_after : NC;
+  entry_network_after :
+    @Network.Execution.configuration M E ((role -> Store) * Input);
   entry_ghosts_after : list message;
   entry_batch : list payload_event;
-  entry_prefix : history entry_tc entry_source entry_tn entry_network
+  entry_prefix : payload_history model stores input R A c
+    entry_tc entry_source entry_tn entry_network
     entry_ghosts entry_past;
   entry_pair : paired_observed model R A entry_source entry_network entry_ghosts
     entry_action entry_source_after entry_network_action entry_network_after
@@ -157,14 +155,15 @@ Record observed_entry (p : role) : Type := ObservedEntry {
   entry_context : @cursor_context M E p entry_type (A p);
   entry_before : @cursor M E p entry_type;
   entry_after : @cursor M E p entry_type;
-  entry_silent : silent_prefix sm (positions entry_source p)
+  entry_silent : silent_prefix (shared_model model) (positions entry_source p)
     (plug entry_context entry_before);
-  entry_primitive : primitive_action sm R entry_type entry_before
+  entry_primitive : primitive_action (shared_model model) R entry_type
+    entry_before
     (Choreography.Execution.shared_store entry_source) (deliveries entry_source)
     entry_action entry_after (Choreography.Execution.shared_store
       entry_source_after)
     (deliveries entry_source_after);
-  observation_at_focus : observed sm R entry_type entry_before
+  observation_at_focus : observed (shared_model model) R entry_type entry_before
     (Choreography.Execution.shared_store entry_source) (deliveries entry_source)
     entry_action entry_after (Choreography.Execution.shared_store
       entry_source_after)
@@ -255,8 +254,10 @@ Qed.
 (* This relation is constructed in lockstep with the global matched history.
    A role cannot choose a different path or a different wire history. *)
 Inductive observed_archives :
-    list (@source_action E ((role -> Store) * Input)) -> SC ->
-    list (@action E ((role -> Store) * Input)) -> NC ->
+    list (@source_action E ((role -> Store) * Input)) ->
+    @Choreography.Execution.configuration M E ((role -> Store) * Input) A ->
+    list (@action E ((role -> Store) * Input)) ->
+    @Network.Execution.configuration M E ((role -> Store) * Input) ->
     list message -> list payload_event -> actor_archive -> Prop :=
 | ArchivesInitial :
     observed_archives [] (source_initial stores input A c)
@@ -282,7 +283,7 @@ Proof.
 Qed.
 
 Theorem payload_has_observed_archives tc s tn n gs past :
-  history tc s tn n gs past ->
+  payload_history model stores input R A c tc s tn n gs past ->
   exists archives, observed_archives tc s tn n gs past archives.
 Proof.
   induction 1 as [|tc s tn n gs past a s' na n' gs' ev Hist IH Pair State].
@@ -290,7 +291,8 @@ Proof.
   - destruct IH as [archives Archives].
     destruct Pair as [p pre post t u s' n' a na gs' ev Member Before After Obs
       Frame Step].
-    destruct (observed_primitive_focus_with_origin sm R p _ _ _ _ _ _ _ _ _ _ _
+    destruct (observed_primitive_focus_with_origin (shared_model model)
+      R p _ _ _ _ _ _ _ _ _ _ _
       _ Obs)
       as (X & C & before & after & Sil & Prim & Focus & End & Origin).
     set (entry := ObservedEntry p tc s tn n gs past a s' na n' gs' ev Hist
@@ -304,7 +306,8 @@ Proof.
 Qed.
 
 Theorem observed_archives_history tc s tn n gs past archives :
-  observed_archives tc s tn n gs past archives -> history tc s tn n gs past.
+  observed_archives tc s tn n gs past archives ->
+  payload_history model stores input R A c tc s tn n gs past.
 Proof.
   induction 1 as [|tc s tn n gs past archives p e Prior IH Tc Source Tn Net
     Ghost Past Match].
@@ -318,14 +321,15 @@ Qed.
    derivation. In particular no role supplies an independently guessed run. *)
 Theorem observed_archives_syntax tc s tn n gs past archives :
   observed_archives tc s tn n gs past archives ->
-  forall p, syntax_cut sm R p (A p) [] (c p) (positions s p).
+  forall p, syntax_cut (shared_model model) R p (A p) [] (c p) (positions s p).
 Proof.
   intros Archives p.
   pose proof (observed_archives_history _ _ _ _ _ _ _ Archives) as Hist.
   pose proof (prefix_source_run model stores input R A c _ _ _ _ _
     (history_is_matched model stores input R A c _ _ _ _ _ _ Hist)) as Run.
   apply code_history_has_syntax_cut with (tr := actor_actions p tc).
-  exact (initial_actor_history sm R A c (stores,input) tc s Run p).
+  exact (initial_actor_history (shared_model model) R A c (stores,input)
+    tc s Run p).
 Qed.
 
 Definition archive_trace_valid tc (archives : actor_archive) : Prop :=
@@ -626,7 +630,7 @@ Qed.
 Theorem matched_has_observed_archives tc s tn n gs :
   matched_prefix model stores input R A c tc s tn n gs ->
   exists past archives,
-    history tc s tn n gs past /\
+    payload_history model stores input R A c tc s tn n gs past /\
     observed_archives tc s tn n gs past archives /\
     archive_valid past archives.
 Proof.
@@ -639,9 +643,11 @@ Proof.
   split; [exact Archives|]. eapply observed_archives_valid; exact Archives.
 Qed.
 
-Definition actor_observed_cut p tc (s : SC) past (items : list (located p)) :
+Definition actor_observed_cut p tc
+    (s : @Choreography.Execution.configuration M E ((role -> Store) * Input) A)
+    past (items : list (located p)) :
   Prop :=
-  syntax_cut sm R p (A p) [] (c p) (positions s p) /\
+  syntax_cut (shared_model model) R p (A p) [] (c p) (positions s p) /\
   branch_valid p past [] items /\
   forall path e, In (path,e) items ->
     exists suffix, tc = entry_tc p e ++ [entry_action p e] ++ suffix.

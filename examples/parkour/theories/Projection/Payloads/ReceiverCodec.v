@@ -104,11 +104,6 @@ Section AllOrigins.
 Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol)
   (A0 : Symbol -> Type) (c0 : forall p, Choreo M p (A0 p)).
-Local Notation Cut := (logged_cut model stores input R A0 c0).
-Local Notation cur := (cursor_at model stores input R A0 c0).
-Local Notation node := (at_node model stores input R A0 c0).
-Local Notation ret := (finished model stores input R A0 c0).
-Local Notation good := (owns_region model stores input R A0 c0).
 Local Arguments cursor_at {M E Store Input model stores input R A c p B} _.
 Variable tc : list (@source_action E ((Symbol -> Store) * Input)).
 Variable s : @Choreography.Execution.configuration M E ((Symbol -> Store) *
@@ -120,14 +115,17 @@ Variable past : list payload_event.
 Variable ar : actor_archive model stores input R A0 c0.
 Hypothesis Archives :
   observed_archives model stores input R A0 c0 tc s tn n gs past ar.
-Variable Laws : cut_family_laws Cut (node past) ret past (good ar).
-Local Notation Readers := (cursor_readers (packet_codec gs)).
+Variable Laws : cut_family_laws (logged_cut model stores input R A0 c0)
+  (at_node model stores input R A0 c0 past)
+  (finished model stores input R A0 c0) past
+  (owns_region model stores input R A0 c0 ar).
 
-Lemma logged_atomic_readers p B o code (cut : Cut p B) :
+Lemma logged_atomic_readers p B o code
+    (cut : logged_cut model stores input R A0 c0 p B) :
   @atomic_cursor M E p B (Code o code) ->
-  node past p B o code cut ->
+  at_node model stores input R A0 c0 past p B o code cut ->
   reader_contract code (packet_codec gs p o) ->
-  Readers p B (cur cut).
+  cursor_readers (packet_codec gs) p B (cursor_at cut).
 Proof.
   intros Atomic [Run _] Reader.
   destruct (actor_log_history model stores input R A0 c0 p B _ _ _ Run)
@@ -139,12 +137,14 @@ Qed.
 Theorem structural_logged_readers S A prog Q :
   structural R M S A prog Q ->
   forall active (inc : includes (fun p => In p active) S) o
-    (cuts : family Cut A active),
+    (cuts : family (logged_cut model stores input R A0 c0) A active),
   (forall p (x y : S p), x = y) ->
   NoDup active ->
-  good ar A active o cuts ->
-  family_at Cut (node past) S A prog active inc o cuts ->
-  forall p d, Readers p (A p) (cur (cuts p d)).
+  owns_region model stores input R A0 c0 ar A active o cuts ->
+  family_at (logged_cut model stores input R A0 c0)
+    (at_node model stores input R A0 c0 past) S A prog active inc o cuts ->
+  forall p d, cursor_readers (packet_codec gs) p (A p)
+    (cursor_at (cuts p d)).
 Proof.
   intro WF.
   induction WF as
@@ -166,7 +166,8 @@ Proof.
     + exact (owned_node_codec model stores input R A0 c0 tc s tn n gs past ar
         Archives S _ prog active inc o cuts Own At _
         (WFComm R M S X l r sh rd input0 prog Sender Receiver Codec Shape) p d).
-  - assert (Head : family_at Cut (node past) S A (fun p s =>
+  - assert (Head : family_at (logged_cut model stores input R A0 c0)
+      (at_node model stores input R A0 c0 past) S A (fun p s =>
         Perf (@Cond M p X l (A p) (sh p s) (rd p s)
           (known l) MkSSymbol (input0 p s) (k p s))) active inc o cuts).
     { intros p d. rewrite <- Shape. apply At. }
@@ -195,7 +196,7 @@ Proof.
       set (a := unAt (input0 l (inc l Present)) eq_refl).
       fold a in Common.
       assert (BranchReaders : forall p d,
-        Readers p (A p) (cur (branch p d))).
+        cursor_readers (packet_codec gs) p (A p) (cursor_at (branch p d))).
       { eapply (IH a (first :: rest) (fun p d => inc p (inside p d))
           (child o ChoiceBody) branch PI NE BranchOwn).
         intros p d. rewrite <- (Common p d). apply BranchAt. }
@@ -205,7 +206,8 @@ Proof.
         rewrite Entered. apply BranchReaders.
       * rewrite (Outside p d NotHere). cbn [cursor_readers].
         rewrite <- Shape. apply RootReader.
-  - assert (Head : family_at Cut (node past) S B
+  - assert (Head : family_at (logged_cut model stores input R A0 c0)
+      (at_node model stores input R A0 c0 past) S B
         (fun p s => App (f p s) (x p s)) active inc o cuts).
     { intros p d. rewrite <- Shape. apply At. }
     destruct (logged_replay_app model stores input R A0 c0 past ar S A B
@@ -218,7 +220,8 @@ Proof.
     intros p d. destruct (CursorShape p d)
       as [[Parent _]|[Parent|(g & a & FRet & XRet & Parent)]]; rewrite Parent;
       cbn [cursor_readers reader_contract]; auto.
-  - assert (Head : family_at Cut (node past) S B
+  - assert (Head : family_at (logged_cut model stores input R A0 c0)
+      (at_node model stores input R A0 c0 past) S B
         (fun p s => Bind (t p s) (k p s)) active inc o cuts).
     { intros p d. rewrite <- Shape. apply At. }
     destruct (logged_replay_bind model stores input R A0 c0 past ar S A B t k
@@ -229,7 +232,11 @@ Proof.
         NE & PrefixOwn & PrefixAt & PrefixRet & BodyOwn & BodyAt & BodyRet &
           CursorShape).
     assert (PrefixResult : P (fun p => In p entered) x).
-    { eapply (structural_cut_family_results Cut (node past) ret past (good ar)
+    { eapply (structural_cut_family_results
+        (logged_cut model stores input R A0 c0)
+        (at_node model stores input R A0 c0 past)
+        (finished model stores input R A0 c0) past
+        (owns_region model stores input R A0 c0 ar)
       Laws
         R S A t P WFt active entered inc (child o BindPrefix) prefix x inside
         PI ND NE PrefixOwn PrefixAt PrefixRet). }

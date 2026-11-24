@@ -74,7 +74,6 @@ Variable input : Input.
 Variable R : list Symbol.
 Variable A : Symbol -> Type.
 Variable c : forall p, Choreography.Choreo2.Choreo M p (A p).
-Local Notation sm := (shared_model model).
 
 (* Freshness is a consequence of the actual matched history; it is not a
    premise supplied alongside an alleged source frontier. *)
@@ -88,7 +87,7 @@ Proof.
     as (a & InA & Actor & Path & Consume).
   pose proof (prefix_source_run model stores input R A c
     _ _ _ _ _ Prefix) as Run.
-  pose proof (initial_actor_history sm R A c (stores,input)
+  pose proof (initial_actor_history (shared_model model) R A c (stores,input)
     _ _ Run receiver) as Hist.
   rewrite <- Path. eapply cursor_history_consumed_safe.
   - exact Hist.

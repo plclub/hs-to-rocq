@@ -121,26 +121,17 @@ Section AtomicLog.
 Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol)
   (A : Symbol -> Type) (c : forall p, Choreo M p (A p)).
-Local Notation sm := (shared_model model).
-Local Notation entry := (observed_entry model stores input R A c).
-Local Notation stamp := (stamped model stores input R A c).
-Local Notation log := (actor_log model stores input R A c).
-Local Notation tok := (tokens model stores input R A c).
-Local Notation cur := (cursor_at model stores input R A c).
-Local Notation act := (entry_action model stores input R A c).
-Local Notation batch := (entry_batch model stores input R A c).
-Local Notation path_of := (entry_site model stores input R A c).
-Local Notation cut := (logged_cut model stores input R A c).
 Local Arguments tokens {M E Store Input} model stores input R A c {p B} _.
 Local Arguments cursor_at {M E Store Input} model stores input R A c {p B} _.
 
 Lemma atomic_primitive_path p B t e u root tree :
-  stamp p B t e u ->
+  (stamped model stores input R A c) p B t e u ->
   atomic_cursor root tree t ->
-  path_of p e = root.
+  (entry_site model stores input R A c) p e = root.
 Proof.
   intros [Prim Obs] State.
-  assert (Path : path_of p e = action_path (act p e)).
+  assert (Path : (entry_site model stores input R A c) p e = action_path
+    ((entry_action model stores input R A c) p e)).
   { pose proof (entry_primitive model stores input R A c p e) as Actual.
     unfold entry_site, event_route. destruct Actual; reflexivity. }
   rewrite Path.
@@ -149,25 +140,27 @@ Proof.
 Qed.
 
 Lemma atomic_log_invariant p B root code tree tr t :
-  log p B (Code root code) tr t ->
+  (actor_log model stores input R A c) p B (Code root code) tr t ->
   atomic_layout code tree ->
   atomic_cursor root tree t /\
   (forall e, In e tr ->
-    path_of p e = root /\
-    forall ev, In ev (batch p e) -> payload_in_layout root tree ev) /\
+    (entry_site model stores input R A c) p e = root /\
+    forall ev, In ev ((entry_batch model stores input R A c) p e) ->
+      payload_in_layout root tree ev) /\
   (forall v, cut_returned p t v ->
     forall path kind sender receiver, site tree path kind sender receiver ->
     (p = sender \/ p = receiver) ->
     exists e, In e tr /\
-      action_at kind (root ++ path) sender receiver p (act p e)).
+      action_at kind (root ++ path) sender receiver p ((entry_action model
+        stores input R A c) p e)).
 Proof.
   intros Run Shape. induction Run.
   - split; [now split|]. split; [intros e []|].
     intros v Done. contradiction Done.
   - destruct IHRun as [State [Tokens Returns]].
     assert (View :
-      (token = None /\ primitive_silent sm B t u) \/
-      exists e, token = Some e /\ stamp p B t e u).
+      (token = None /\ primitive_silent (shared_model model) B t u) \/
+      exists e, token = Some e /\ (stamped model stores input R A c) p B t e u).
     { destruct H; cbn [atomic_cursor] in State; try contradiction.
       - left. auto.
       - right. eauto. }
@@ -207,8 +200,9 @@ Proof.
 Qed.
 
 Theorem realized_atomic S F code active inc root
-    (cuts : family cut F active) past tree :
-  family_at cut (at_node model stores input R A c past)
+    (cuts : family (logged_cut model stores input R A c) F active) past tree :
+  family_at (logged_cut model stores input R A c) (at_node model stores input R
+    A c past)
     S F code active inc root cuts ->
   (forall p d, atomic_layout (code p (inc p d)) tree) ->
   realized model stores input R A c F active root cuts tree.
@@ -230,8 +224,9 @@ Proof.
 Qed.
 
 Theorem tracked_atomic S F code active inc root
-    (cuts : family cut F active) past tree :
-  family_at cut (at_node model stores input R A c past)
+    (cuts : family (logged_cut model stores input R A c) F active) past tree :
+  family_at (logged_cut model stores input R A c) (at_node model stores input R
+    A c past)
     S F code active inc root cuts ->
   (forall p d, atomic_layout (code p (inc p d)) tree) ->
   tracked_realization model stores input R A c F active root cuts tree.
@@ -272,8 +267,9 @@ Proof.
 Qed.
 
 Theorem tracked_atomic_node S F code active inc root
-    (cuts : family cut F active) past tree :
-  family_at cut (at_node model stores input R A c past)
+    (cuts : family (logged_cut model stores input R A c) F active) past tree :
+  family_at (logged_cut model stores input R A c) (at_node model stores input R
+    A c past)
     S F code active inc root cuts ->
   (forall p d, (exists x, code p (inc p d) = Pure x) \/
     atomic p (F p) (code p (inc p d))) ->

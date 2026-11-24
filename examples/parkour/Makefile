@@ -1,6 +1,9 @@
+# The source-only gates need no Stack or compiler setup.
+ifneq ($(filter-out check-layout check-no-local-notation,$(or $(MAKECMDGOALS),all)),)
 include ../../common.mk
+endif
 
-.PHONY: all deps check check-layout lint check-edits check-required check-deadlock-local check-cond-haskell test-checks verify-source clean
+.PHONY: all deps check check-layout check-no-local-notation lint check-edits check-required check-deadlock-local check-cond-haskell test-checks verify-source clean
 
 BUILD_EXAMPLE = python3 scripts/build-example.py $(if $(filter 1,$(SCRATCH)),--scratch)
 
@@ -16,8 +19,11 @@ check: check-layout lint
 	$(MAKE) test-checks
 	$(MAKE) check-required
 
-check-layout:
+check-layout: check-no-local-notation
 	python3 scripts/check_layout.py
+
+check-no-local-notation:
+	python3 scripts/check_local_notation.py
 
 PYTHON_SOURCES := $(wildcard scripts/*.py)
 SHELL_SOURCES := $(addprefix scripts/,check-ghc checked-tool \
@@ -48,7 +54,7 @@ check-required: check-layout
 	$(BUILD_EXAMPLE) --check
 
 test-checks:
-	python3 -m unittest discover -s scripts -p test_layout.py
+	python3 -m unittest discover -s scripts -p 'test_*.py'
 	bash scripts/test-checks.sh
 
 verify-source:

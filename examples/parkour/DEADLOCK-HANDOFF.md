@@ -179,7 +179,7 @@ From ParkourTheories Require Projection.RunCorrespondence Projection.Progress
 The [native project validation](README.md#checking-the-translation) compiled
 both [`theories/`](theories/) and [`tests/`](tests/) from their `_CoqProject`
 files. An independent migration review against `fe8a2152` in Rocq 9.0.1
-confirmed all 42 digest triples in
+confirmed all 42 digest triples recorded at `e69c765a` in
 [`tests/namespace-migration.tsv`](tests/namespace-migration.tsv), matched all
 818 historical exports with the same normalized elaborated types, and matched
 all 467 mutually unfoldable definitions on their normalized bodies (the other

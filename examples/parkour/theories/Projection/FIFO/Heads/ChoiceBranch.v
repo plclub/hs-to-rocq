@@ -200,8 +200,6 @@ Section SelectedHead.
 Context {M E Store Input} (model : local_model M E role (Store * Input))
   (stores : role -> Store) (input : Input) (R : list role) (A : role -> Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation sm := (shared_model model).
-Local Notation prefix := (matched_prefix model stores input R A c).
 Variable X : Type.
 Variable l : role.
 Variables (sh : forall p : role, Show X) (rd : forall p : role, Read X)
@@ -215,13 +213,14 @@ Hypothesis Shape : forall p, In p R ->
 Hypothesis Law : forall p, In p R -> l <> p -> wire_law (sh l) (rd p).
 
 Lemma choice_actor_body tc s tn n gs p :
-  prefix tc s tn n gs -> In p R ->
+  matched_prefix model stores input R A c tc s tn n gs -> In p R ->
   (actor_actions p tc = [] /\ positions s p = Code [] (c p)) \/
   exists first suffix,
     ((p = l /\ first = AnnounceAction X [] p chosen) \/
       (l <> p /\ first = HearAction X [] l p chosen)) /\
     actor_actions p tc = first :: suffix /\
-    cursor_history sm R (Code [ChoiceBody] (body p)) suffix (positions s p).
+    cursor_history (shared_model model) R (Code [ChoiceBody] (body p)) suffix
+      (positions s p).
 Proof.
   intros Run Member.
   destruct (matched_payload_history model stores input R A c _ _ _ _ _ Run) as
@@ -242,7 +241,7 @@ Proof.
 Qed.
 
 Lemma choice_body_entry tc s tn n gs :
-  prefix tc s tn n gs -> forall p, In p R ->
+  matched_prefix model stores input R A c tc s tn n gs -> forall p, In p R ->
   entered_body_or_waiting model R A c X l arg k s p.
 Proof.
   intros Run p Member.
@@ -253,9 +252,11 @@ Proof.
 Qed.
 
 Theorem choice_body_head_paths tc s tn n gs p :
-  well_formed R M A body -> prefix tc s tn n gs -> In p R ->
+  well_formed R M A body ->
+  matched_prefix model stores input R A c tc s tn n gs -> In p R ->
   forall Y kind path sender reader, static_path path ->
-  receive_site sm p (A p) (positions s p) Y kind (ChoiceBody :: path) sender
+  receive_site (shared_model model) p (A p) (positions s p) Y kind
+    (ChoiceBody :: path) sender
     reader ->
   forall g, first_message_at_key (sender,p,session_at (ChoiceBody :: path)
     Choreography.Network.Root) gs g ->
@@ -264,7 +265,8 @@ Proof.
   intros [ND [Q WF]] Run Member Y kind path sender reader Static Site g Head.
   set (site := ChoiceBody :: path).
   set (key := (sender,p,session_at site Choreography.Network.Root)).
-  pose proof (receive_site_future sm p (A p) _ Y kind _ _ _ Site) as Future.
+  pose proof (receive_site_future (shared_model model) p (A p)
+    _ Y kind _ _ _ Site) as Future.
   assert (Ne : sender <> p).
   { destruct Site as (B & C & focus & Sil & Focus). destruct Focus; assumption.
   }
@@ -315,7 +317,8 @@ Proof.
   { exfalso. destruct Site as (D & C & focus & Sil & Focus).
     destruct (focus_reader _ _ _ _ _ _ Focus) as (actual & -> & Reads).
     rewrite Waiting, (Shape p Member) in Sil.
-    pose proof (before_choice_no_child sm p X l (A p) (sh p) (rd p) (known l)
+    pose proof (before_choice_no_child (shared_model model)
+      p X l (A p) (sh p) (rd p) (known l)
       MkSSymbol (arg p) (k p) [] D C (ChoiceBody :: path) actual Sil).
     discriminate. }
   assert (ReceiveFactor : received key tc = receives key recv ++ received key
@@ -324,7 +327,8 @@ Proof.
     - rewrite RTrace. reflexivity.
     - apply receives_other_actor. }
   assert (ReceivedBody : received key rsuffix = []).
-  { destruct (guarded_history_front sm R false p sender site _ _ _ rsuffix
+  { destruct (guarded_history_front (shared_model model)
+      R false p sender site _ _ _ rsuffix
       [ChoiceBody] RHist ReceiverGuard (path_prefix_refl _)) as [[Empty _]|[tail
         Nonempty]];
       [exact Empty|].
@@ -360,7 +364,8 @@ Proof.
   apply app_inv_head in Ledger.
   destruct (head_key_path _ _ _ Head) as [tail Pending].
   change (key_paths key gs = message_path g :: tail) in Pending.
-  destruct (guarded_history_front sm R true sender p site _ _ _ ssuffix
+  destruct (guarded_history_front (shared_model model)
+    R true sender p site _ _ _ ssuffix
     [ChoiceBody] SHist SenderGuard (path_prefix_refl _)) as [[Empty _]|[rest
       Nonempty]].
   - change (sent R key ssuffix = []) in Empty.

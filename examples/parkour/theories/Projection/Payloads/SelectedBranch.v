@@ -18,8 +18,6 @@ Section Selected.
 Context {M E Store Input} (model : local_model M E role (Store * Input))
   (stores : role -> Store) (input : Input) (R : list role) (A : role -> Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation sm := (shared_model model).
-Local Notation prefix := (matched_prefix model stores input R A c).
 Variable X : Type.
 Variable l : role.
 Variables (sh : forall p : role, Show X) (rd : forall p : role, Read X)
@@ -36,26 +34,30 @@ Definition entered_body_or_waiting (s : @Choreography.Execution.configuration M
   E ((role
   -> Store) * Input) A) p :=
   positions s p = Code [] (c p) \/
-  exists tr, cursor_history sm R (Code [ChoiceBody] (body p)) tr (positions s
+  exists tr, cursor_history (shared_model model) R (Code [ChoiceBody] (body p))
+    tr (positions s
     p).
 
-Hypothesis Entry : forall tc s tn n gs, prefix tc s tn n gs ->
+Hypothesis Entry : forall tc s tn n gs,
+  matched_prefix model stores input R A c tc s tn n gs ->
   forall p, In p R -> entered_body_or_waiting s p.
 
 Lemma select_inner_code tc s tn n gs p Y (C : @cursor_context M E p Y (A p))
     (code : Choreo M p Y) path :
-  prefix tc s tn n gs -> In p R -> static_path path ->
-  silent_prefix sm (positions s p)
+  matched_prefix model stores input R A c tc s tn n gs ->
+  In p R -> static_path path ->
+  silent_prefix (shared_model model) (positions s p)
     (plug C (Code (ChoiceBody :: path) code)) ->
   choreo_at_static_path path (body p) = Some (existT _ Y code).
 Proof.
   intros P InP Static Sil.
   destruct (Entry _ _ _ _ _ P p InP) as [Waiting|[tr Hist]].
-  - assert (Wait : silent_prefix sm (Code [] (c p)) (plug C (Code (ChoiceBody ::
-    path) code))).
+  - assert (Wait : silent_prefix (shared_model model) (Code [] (c p))
+      (plug C (Code (ChoiceBody :: path) code))).
     { rewrite <- Waiting. exact Sil. }
     rewrite (Shape p InP) in Wait.
-    pose proof (before_choice_no_child sm p X l (A p) (sh p) (rd p) (known l)
+    pose proof (before_choice_no_child (shared_model model)
+      p X l (A p) (sh p) (rd p) (known l)
       MkSSymbol (arg p) (k p) [] Y C (ChoiceBody :: path) code Wait).
       discriminate.
   - eapply entered_focus_original; [exact Hist|exact Sil|exact Static].
@@ -89,9 +91,11 @@ Proof.
 Qed.
 
 Theorem selected_body_originals tc s tn n gs p :
-  well_formed R M A body -> prefix tc s tn n gs -> In p R ->
+  well_formed R M A body ->
+  matched_prefix model stores input R A c tc s tn n gs -> In p R ->
   forall Y kind path sender reader, static_path path ->
-  receive_site sm p (A p) (positions s p) Y kind (ChoiceBody :: path) sender
+  receive_site (shared_model model) p (A p) (positions s p)
+    Y kind (ChoiceBody :: path) sender
     reader ->
   exists (v : Y) (dict : Show Y),
     (forall g, In g gs ->

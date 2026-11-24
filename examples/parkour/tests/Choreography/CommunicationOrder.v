@@ -6,12 +6,7 @@ From ParkourTheories Require Import Semantics.LocalEffects
   Choreography.Occurrences Choreography.PendingDeliveries
   Choreography.RoleSteps.
 Require Choreography.Choreo2.
-Local Notation At := Choreography.Choreo2.At.
-Local Notation Mk_At := Choreography.Choreo2.Mk_At.
-Local Notation unAt := Choreography.Choreo2.unAt.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
-Local Notation Locally := Choreography.Choreo2.Locally.
-Local Notation Comm := Choreography.Choreo2.Comm.
+Import Choreography.Choreo2 (At, Mk_At, unAt, Choreo, Locally, Comm).
 Import ListNotations.
 
 Definition A : Symbol := [].

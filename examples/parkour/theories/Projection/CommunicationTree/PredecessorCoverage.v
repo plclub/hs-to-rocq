@@ -163,36 +163,35 @@ Context {M E Store Input}
   (model : LocalEffects.local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol)
   (A : Symbol -> Type) (c : forall p, Choreo M p (A p)).
-Local Notation cut := (logged_cut model stores input R A c).
-Local Notation entry := (observed_entry model stores input R A c).
-Local Notation tok := (tokens model stores input R A c).
-Local Notation path_of := (entry_site model stores input R A c).
-Local Notation act := (entry_action model stores input R A c).
-Local Notation ret := (finished model stores input R A c).
-Local Notation realized := (ObservationCoverage.realized model stores input R A
-  c).
-Local Notation receive := (cut_receive model stores input R A c).
 Local Arguments tokens {M E Store Input} model stores input R A c {p B} _.
 
-Definition cut_reached p B (node : cut p B) o : Prop :=
-  (exists e, In e (tok node) /\ path_of p e = o) \/
-  exists X kind sender rd, receive p B node X kind o sender rd.
+Definition cut_reached p B (node : (logged_cut model stores input R A c) p B) o
+  : Prop :=
+  (exists e, In e ((tokens model stores input R A c) node) /\ (entry_site model
+    stores input R A c) p e = o) \/
+  exists X kind sender rd, (cut_receive model stores input R A c) p B node X
+    kind o sender rd.
 
-Definition cut_covered p B (node : cut p B) kind o sender receiver : Prop :=
-  exists e, In e (tok node) /\ action_at kind o sender receiver p (act p e).
+Definition cut_covered p B (node : (logged_cut model stores input R A c) p B)
+  kind o sender receiver : Prop :=
+  exists e, In e ((tokens model stores input R A c) node) /\ action_at kind o
+    sender receiver p ((entry_action model stores input R A c) p e).
 
 #[universes(template)]
-Record tracked_realization F active root (cuts : family cut F active) tree :
+Record tracked_realization F active root (cuts : family (logged_cut model stores
+  input R A c) F active) tree :
   Prop := {
-  tracked_realized : realized F active root cuts tree;
+  tracked_realized : (ObservationCoverage.realized model stores input R A c) F
+    active root cuts tree;
   tracked_order : forall p d,
     predecessor_coverage root tree p (cut_reached p (F p) (cuts p d))
       (cut_covered p (F p) (cuts p d))
 }.
 
-Lemma tracked_completed F active root (cuts : family cut F active) tree :
+Lemma tracked_completed F active root (cuts : family (logged_cut model stores
+  input R A c) F active) tree :
   tracked_realization F active root cuts tree ->
-  forall p d v, ret p (F p) (cuts p d) v ->
+  forall p d v, (finished model stores input R A c) p (F p) (cuts p d) v ->
   forall path kind sender receiver, site tree path kind sender receiver ->
     (p = sender \/ p = receiver) ->
     cut_covered p (F p) (cuts p d) kind (root ++ path) sender receiver.
@@ -202,15 +201,19 @@ Proof.
     p d v Done path kind sender receiver At Peer).
 Qed.
 
-Lemma cut_covered_lift p B C (one : cut p B) (two : cut p C) :
-  (forall e, In e (tok one) -> In e (tok two)) ->
+Lemma cut_covered_lift p B C (one : (logged_cut model stores input R A c) p B)
+  (two : (logged_cut model stores input R A c) p C) :
+  (forall e, In e ((tokens model stores input R A c) one) -> In e ((tokens model
+    stores input R A c) two)) ->
   forall k o s r, cut_covered p B one k o s r -> cut_covered p C two k o s r.
 Proof. intros Lift k o s r (e & Member & Action). exists e; auto. Qed.
 
 (* The atomic interface uses only position bounds and the existing realization.
    It does not assume any predecessor coverage. *)
-Theorem tracked_exchange F active root (cuts : family cut F active) s r :
-  realized F active root cuts (Exchange s r) ->
+Theorem tracked_exchange F active root (cuts : family (logged_cut model stores
+  input R A c) F active) s r :
+  (ObservationCoverage.realized model stores input R A c) F active root cuts
+    (Exchange s r) ->
   (forall p d o, cut_reached p (F p) (cuts p d) o -> o = root) ->
   tracked_realization F active root cuts (Exchange s r).
 Proof.
@@ -218,8 +221,10 @@ Proof.
   intros p d. apply predecessor_coverage_exchange. exact (Bounds p d).
 Qed.
 
-Theorem tracked_leaf F active root (cuts : family cut F active) :
-  realized F active root cuts Leaf ->
+Theorem tracked_leaf F active root (cuts : family (logged_cut model stores input
+  R A c) F active) :
+  (ObservationCoverage.realized model stores input R A c) F active root cuts
+    Leaf ->
   (forall p d o, cut_reached p (F p) (cuts p d) o -> path_prefix root o) ->
   tracked_realization F active root cuts Leaf.
 Proof.
@@ -228,21 +233,27 @@ Proof.
 Qed.
 
 Theorem tracked_parallel F X active root
-    (cuts : family cut F active)
-    (functions : family cut (fun p => X p -> F p) active)
-    (arguments : family cut X active) function_tree argument_tree :
-  tracked_realization _ active (child root AppFunction) functions function_tree
-    ->
-  tracked_realization _ active (child root AppArgument) arguments argument_tree
-    ->
-  (forall p d e, In e (tok (cuts p d)) <->
-    In e (tok (functions p d)) \/ In e (tok (arguments p d))) ->
-  (forall p d v, ret p (F p) (cuts p d) v ->
-    exists fv xv, ret p _ (functions p d) fv /\ ret p _ (arguments p d) xv) ->
-  (forall p d Y kind o sender rd, receive p (F p) (cuts p d) Y kind o sender rd
-    ->
-    receive p _ (functions p d) Y kind o sender rd \/
-    receive p _ (arguments p d) Y kind o sender rd) ->
+    (cuts : family (logged_cut model stores input R A c) F active)
+    (functions : family (logged_cut model stores input R A c) (fun p => X p -> F
+      p) active)
+    (arguments : family (logged_cut model stores input R A c) X active)
+      function_tree argument_tree :
+  tracked_realization _ active (child root AppFunction)
+    functions function_tree ->
+  tracked_realization _ active (child root AppArgument)
+    arguments argument_tree ->
+  (forall p d e, In e ((tokens model stores input R A c) (cuts p d)) <->
+    In e ((tokens model stores input R A c) (functions p d)) \/ In e ((tokens
+      model stores input R A c) (arguments p d))) ->
+  (forall p d v, (finished model stores input R A c) p (F p) (cuts p d) v ->
+    exists fv xv, (finished model stores input R A c) p _ (functions p d) fv /\
+      (finished model stores input R A c) p _ (arguments p d) xv) ->
+  (forall p d Y kind o sender rd, (cut_receive model stores input R A c) p (F p)
+    (cuts p d) Y kind o sender rd ->
+    (cut_receive model stores input R A c) p _ (functions p d) Y kind o sender
+      rd \/
+    (cut_receive model stores input R A c) p _ (arguments p d) Y kind o sender
+      rd) ->
   tracked_realization F active root cuts (Parallel function_tree argument_tree).
 Proof.
   intros [Functions FO] [Arguments AO] Tokens Returns Focus. constructor.
@@ -265,23 +276,28 @@ Qed.
    of the corresponding prefix cut, so the SAME prefix_tree supplies coverage.
    *)
 Theorem tracked_sequence F X active entered root
-    (cuts : family cut F active) (prefixes : family cut X active)
-    (bodies : family cut F entered) prefix_tree body_tree :
+    (cuts : family (logged_cut model stores input R A c) F active) (prefixes :
+      family (logged_cut model stores input R A c) X active)
+    (bodies : family (logged_cut model stores input R A c) F entered)
+      prefix_tree body_tree :
   tracked_realization _ active (child root BindPrefix) prefixes prefix_tree ->
   tracked_realization _ entered (child root BindBody) bodies body_tree ->
-  (forall p d e, In e (tok (cuts p d)) <->
-    In e (tok (prefixes p d)) \/
-    exists body_member, In e (tok (bodies p body_member))) ->
-  (forall p d v, ret p (F p) (cuts p d) v ->
+  (forall p d e, In e ((tokens model stores input R A c) (cuts p d)) <->
+    In e ((tokens model stores input R A c) (prefixes p d)) \/
+    exists body_member, In e ((tokens model stores input R A c) (bodies p
+      body_member))) ->
+  (forall p d v, (finished model stores input R A c) p (F p) (cuts p d) v ->
     exists x body_member y,
-      ret p _ (prefixes p d) x /\ ret p _ (bodies p body_member) y) ->
-  (forall p d Y kind o sender rd, receive p (F p) (cuts p d) Y kind o sender rd
-    ->
-    receive p _ (prefixes p d) Y kind o sender rd \/
-    exists body_member, receive p _ (bodies p body_member) Y kind o sender rd)
-      ->
+      (finished model stores input R A c) p _ (prefixes p d) x /\ (finished
+        model stores input R A c) p _ (bodies p body_member) y) ->
+  (forall p d Y kind o sender rd, (cut_receive model stores input R A c) p (F p)
+    (cuts p d) Y kind o sender rd ->
+    (cut_receive model stores input R A c) p _ (prefixes p d) Y kind o sender rd
+      \/
+    exists body_member, (cut_receive model stores input R A c) p _ (bodies p
+      body_member) Y kind o sender rd) ->
   (forall p d (body_member : In p entered),
-    exists x, ret p _ (prefixes p d) x) ->
+    exists x, (finished model stores input R A c) p _ (prefixes p d) x) ->
   tracked_realization F active root cuts (Sequence prefix_tree body_tree).
 Proof.
   intros Prefixes Bodies Tokens Returns Focus Entered.
@@ -323,24 +339,28 @@ Qed.
 (* The extra header premise is tied to actual body membership, including a
    role poised at a body receive. It is not a predecessor-coverage premise. *)
 Theorem tracked_choice F active entered root owner
-    (cuts : family cut F active) (bodies : family cut F entered) body_tree :
+    (cuts : family (logged_cut model stores input R A c) F active) (bodies :
+      family (logged_cut model stores input R A c) F entered) body_tree :
   tracked_realization _ entered (child root ChoiceBody) bodies body_tree ->
-  (forall p d e, In e (tok (cuts p d)) ->
-    (path_of p e = root /\
+  (forall p d e, In e ((tokens model stores input R A c) (cuts p d)) ->
+    ((entry_site model stores input R A c) p e = root /\
       forall ev, In ev (entry_batch model stores input R A c p e) ->
         choice_root_event root owner ev) \/
-    exists body_member, In e (tok (bodies p body_member))) ->
+    exists body_member, In e ((tokens model stores input R A c) (bodies p
+      body_member))) ->
   (forall p d body_member e,
-    In e (tok (bodies p body_member)) -> In e (tok (cuts p d))) ->
-  (forall p d v, ret p (F p) (cuts p d) v ->
-    exists body_member y, ret p _ (bodies p body_member) y /\
+    In e ((tokens model stores input R A c) (bodies p body_member)) -> In e
+      ((tokens model stores input R A c) (cuts p d))) ->
+  (forall p d v, (finished model stores input R A c) p (F p) (cuts p d) v ->
+    exists body_member y, (finished model stores input R A c) p _ (bodies p
+      body_member) y /\
       forall peer, owner <> peer -> (p = owner \/ p = peer) ->
         cut_covered p (F p) (cuts p d) ChoiceDelivery root owner peer) ->
-  (forall p d Y kind o sender rd, receive p (F p) (cuts p d) Y kind o sender rd
-    ->
+  (forall p d Y kind o sender rd, (cut_receive model stores input R A c) p (F p)
+    (cuts p d) Y kind o sender rd ->
     (kind = ChoiceDelivery /\ o = root /\ sender = owner /\ owner <> p) \/
-    exists body_member, receive p _ (bodies p body_member) Y kind o sender rd)
-      ->
+    exists body_member, (cut_receive model stores input R A c) p _ (bodies p
+      body_member) Y kind o sender rd) ->
   (forall p d (body_member : In p entered) peer,
     owner <> peer -> (p = owner \/ p = peer) ->
     cut_covered p (F p) (cuts p d) ChoiceDelivery root owner peer) ->
@@ -375,28 +395,33 @@ Proof.
       exact (Header p d body_member peer Ne Peer).
 Qed.
 
-Theorem tracked_predecessor_token F active root (cuts : family cut F active)
+Theorem tracked_predecessor_token F active root (cuts : family (logged_cut model
+  stores input R A c) F active)
   tree :
   tracked_realization F active root cuts tree ->
   forall p d later, cut_reached p (F p) (cuts p d) later ->
   forall path kind sender receiver, site tree path kind sender receiver ->
     (p = sender \/ p = receiver) ->
     source_before (root ++ path) later ->
-    exists e, In e (tok (cuts p d)) /\
-      action_at kind (root ++ path) sender receiver p (act p e).
+    exists e, In e ((tokens model stores input R A c) (cuts p d)) /\
+      action_at kind (root ++ path) sender receiver p ((entry_action model
+        stores input R A c) p e).
 Proof.
   intros [_ Order] p d later Reached path kind sender receiver At Peer Before.
   exact (proj2 (Order p d) later Reached path kind sender receiver At Peer
     Before).
 Qed.
 
-Corollary tracked_acted_predecessor F active root (cuts : family cut F active)
+Corollary tracked_acted_predecessor F active root (cuts : family (logged_cut
+  model stores input R A c) F active)
   tree :
   tracked_realization F active root cuts tree ->
-  forall p d later_entry, In later_entry (tok (cuts p d)) ->
+  forall p d later_entry, In later_entry ((tokens model stores input R A c)
+    (cuts p d)) ->
   forall path kind sender receiver, site tree path kind sender receiver ->
     (p = sender \/ p = receiver) ->
-    source_before (root ++ path) (path_of p later_entry) ->
+    source_before (root ++ path) ((entry_site model stores input R A c) p
+      later_entry) ->
     cut_covered p (F p) (cuts p d) kind (root ++ path) sender receiver.
 Proof.
   intros Layout p d later_entry Member path kind sender receiver At Peer Before.
@@ -405,11 +430,13 @@ Proof.
   left; exists later_entry; auto.
 Qed.
 
-Corollary tracked_receive_predecessor F active root (cuts : family cut F active)
+Corollary tracked_receive_predecessor F active root (cuts : family (logged_cut
+  model stores input R A c) F active)
   tree :
   tracked_realization F active root cuts tree ->
   forall p d X later_kind later sender rd,
-    receive p (F p) (cuts p d) X later_kind later sender rd ->
+    (cut_receive model stores input R A c) p (F p) (cuts p d) X later_kind later
+      sender rd ->
   forall path kind from peer, site tree path kind from peer ->
     (p = from \/ p = peer) ->
     source_before (root ++ path) later ->
@@ -425,7 +452,7 @@ Qed.
 (* Archive ownership connects the OWN predecessor token to the exact matched
    source trace. No separately completed history is used for this extraction. *)
 Theorem tracked_predecessor_trace tc s tn n gs past ar F active root
-    (cuts : family cut F active) tree :
+    (cuts : family (logged_cut model stores input R A c) F active) tree :
   observed_archives model stores input R A c tc s tn n gs past ar ->
   owns_region model stores input R A c ar F active root cuts ->
   tracked_realization F active root cuts tree ->
@@ -434,9 +461,11 @@ Theorem tracked_predecessor_trace tc s tn n gs past ar F active root
     (p = sender \/ p = receiver) ->
     source_before (root ++ path) later ->
     exists e suffix,
-      In e (tok (cuts p d)) /\
-      tc = entry_tc model stores input R A c p e ++ [act p e] ++ suffix /\
-      action_at kind (root ++ path) sender receiver p (act p e).
+      In e ((tokens model stores input R A c) (cuts p d)) /\
+      tc = entry_tc model stores input R A c p e ++ [(entry_action model stores
+        input R A c) p e] ++ suffix /\
+      action_at kind (root ++ path) sender receiver p ((entry_action model
+        stores input R A c) p e).
 Proof.
   intros Hist [_ [_ Own]] Layout p d later Reached path kind sender receiver At
     Peer Before.
@@ -450,9 +479,11 @@ Proof.
 Qed.
 
 (* Both certificates are existentially attached to one selected tree. *)
-Theorem tracked_same_tree F active root (cuts : family cut F active) tree :
+Theorem tracked_same_tree F active root (cuts : family (logged_cut model stores
+  input R A c) F active) tree :
   tracked_realization F active root cuts tree ->
-  realized F active root cuts tree /\
+  (ObservationCoverage.realized model stores input R A c) F active root cuts
+    tree /\
   forall p d, predecessor_coverage root tree p (cut_reached p (F p) (cuts p d))
     (cut_covered p (F p) (cuts p d)).
 Proof. intros [Layout Order]; auto. Qed.

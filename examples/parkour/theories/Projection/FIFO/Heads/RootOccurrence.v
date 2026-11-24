@@ -10,9 +10,7 @@ From ParkourTheories Require Import Choreography.Occurrences
 Require Import Parkour.Symbol Parkour.Codec Control.Monad.Tree.
 Import ListNotations.
 Local Arguments positions {M E Store A} _ _.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
-Local Notation Comm := Choreography.Choreo2.Comm.
-Local Notation Cond := Choreography.Choreo2.Cond.
+Import Choreography.Choreo2 (Choreo, Comm, Cond).
 
 Definition sender_node {M p A} R (c : Choreo M p A) receiver : Prop :=
   match c with
@@ -194,16 +192,16 @@ Variable input : Input.
 Variable R : list role.
 Variable A : role -> Type.
 Variable c : forall p, Choreo M p (A p).
-Local Notation sm := (shared_model m).
 
 Lemma root_head_first_steps tc s tn n gs p X kind sender rd :
   matched_prefix m stores input R A c tc s tn n gs ->
-  receive_site sm p (A p) (positions s p) X kind [] sender rd ->
+  receive_site (shared_model m) p (A p) (positions s p) X kind [] sender rd ->
   (forall st q a u st' q',
-    role_step sm R (A sender) (Code [] (c sender)) st q a u st' q' ->
+    role_step (shared_model m) R (A sender) (Code [] (c sender))
+      st q a u st' q' ->
     exists tail, emits R (sender,p,Choreography.Network.Root) a = [] :: tail) ->
   (forall st q a u st' q',
-    role_step sm R (A p) (Code [] (c p)) st q a u st' q' ->
+    role_step (shared_model m) R (A p) (Code [] (c p)) st q a u st' q' ->
     exists tail, receives (sender,p,Choreography.Network.Root) a = [] :: tail)
       ->
   forall g, first_message_at_key (sender,p,Choreography.Network.Root) gs g ->
@@ -211,7 +209,7 @@ Lemma root_head_first_steps tc s tn n gs p X kind sender rd :
 Proof.
   intros Prefix Site Sender Receiver g Head.
   pose proof (prefix_source_run m stores input R A c _ _ _ _ _ Prefix) as Run.
-  pose proof (initial_ledger sm R A p
+  pose proof (initial_ledger (shared_model m) R A p
     (receives (sender,p,Choreography.Network.Root))
     (receives_other_actor sender p Choreography.Network.Root)
     (PrefixRelation.source_initial stores input A c) Receiver _ _ Run) as Recv.
@@ -222,7 +220,7 @@ Proof.
      - eapply receive_site_future; exact Site.
     - assert (Old : In [] ([] :: tail)) by now left.
       rewrite <- Eq in Old. exact Old. }
-  pose proof (initial_ledger sm R A sender
+  pose proof (initial_ledger (shared_model m) R A sender
     (emits R (sender,p,Choreography.Network.Root))
     (emits_other_actor R sender p Choreography.Network.Root)
     (PrefixRelation.source_initial stores input A c) Sender _ _ Run) as Send.
@@ -242,13 +240,13 @@ Theorem source_head_paths_root tc s tn n gs p :
   matched_prefix m stores input R A c tc s tn n gs ->
   In p R ->
   forall X kind sender rd,
-    receive_site sm p (A p) (positions s p) X kind [] sender rd ->
+    receive_site (shared_model m) p (A p) (positions s p) X kind [] sender rd ->
     forall g, first_message_at_key (sender,p,Choreography.Network.Root) gs g ->
       message_path g = [].
 Proof.
   intros [_ [Q WF]] Prefix Member X kind sender rd Site.
   pose proof (structural_root_ready WF p Member (fun l H => H) Member) as Ready.
-  destruct (root_site_contract sm R p A c (stores,input) tc s
+  destruct (root_site_contract (shared_model m) R p A c (stores,input) tc s
     X kind sender rd _ (prefix_source_run m stores input R A c _ _ _ _ _ Prefix)
     Site Ready) as [[present Sender] Receiver].
   eapply root_head_first_steps; [exact Prefix|exact Site| |].

@@ -24,37 +24,29 @@ Section ChoiceLayout.
 Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input0 : Input) (R : list Symbol)
   (A0 : Symbol -> Type) (c0 : forall p, Choreo M p (A0 p)).
-Local Notation Cut := (logged_cut model stores input0 R A0 c0).
-Local Notation cur := (cursor_at model stores input0 R A0 c0).
-Local Notation tok := (tokens model stores input0 R A0 c0).
-Local Notation entry := (observed_entry model stores input0 R A0 c0).
-Local Notation node := (at_node model stores input0 R A0 c0).
-Local Notation good := (owns_region model stores input0 R A0 c0).
-Local Notation tracked := (tracked_realization model stores input0 R A0 c0).
-Local Notation receive := (cut_receive model stores input0 R A0 c0).
-Local Notation ret := (finished model stores input0 R A0 c0).
-Local Notation covered := (cut_covered model stores input0 R A0 c0).
-Local Notation stamp := (stamped model stores input0 R A0 c0).
 
 Lemma initial_cond_receive p X B owner root sh rd kl sl v k
-    (cut : Cut p B) Y kind o sender reader :
-  cur cut = Code root (Perf (@Cond M p X owner B sh rd kl sl v k)) ->
-  receive p B cut Y kind o sender reader ->
+    (cut : logged_cut model stores input0 R A0 c0 p B) Y kind o sender reader :
+  cursor_at model stores input0 R A0 c0 cut =
+    Code root (Perf (@Cond M p X owner B sh rd kl sl v k)) ->
+  cut_receive model stores input0 R A0 c0 p B cut Y kind o sender reader ->
   kind = ChoiceDelivery /\ o = root /\ sender = owner /\ owner <> p.
 Proof.
   intros Eq (Z & C & focus & Cursor & Focus).
   set (G := fun (p : Symbol) (o : occurrence) (X : Type)
     (kind : delivery_kind) (sender : Symbol) (rd : Read X) =>
       kind = ChoiceDelivery /\ o = root /\ sender = owner /\ owner <> p).
-  assert (Root : cursor_readers G p B (cur cut)).
+  assert (Root : cursor_readers G p B ((cursor_at model stores input0 R A0 c0)
+    cut)).
   { rewrite Eq. cbn [cursor_readers reader_contract]. unfold G. auto. }
   rewrite Cursor in Root.
   exact (readers_receive G p Z focus Y kind o sender reader Focus
     (readers_focus G p B Z C focus Root)).
 Qed.
 
-Lemma tracked_empty F root (cuts : family Cut F []) tree :
-  tracked F [] root cuts tree.
+Lemma tracked_empty F root (cuts : family (logged_cut model stores input0 R A0
+  c0) F []) tree :
+  (tracked_realization model stores input0 R A0 c0) F [] root cuts tree.
 Proof.
   constructor.
   - constructor; intros p d; contradiction.
@@ -65,25 +57,31 @@ Theorem logged_choice_layout tc s tn n gs past ar S X owner F
     (sh : forall p, S p -> Show X) (rd : forall p, S p -> Read X)
     (input : values (fun p => At X owner p) S)
     (k : forall p, S p -> X -> Choreo M p (F p))
-    active inc root (cuts : family Cut F active) :
+    active inc root (cuts : family (logged_cut model stores input0 R A0 c0) F
+      active) :
   payload_history model stores input0 R A0 c0 tc s tn n gs past ->
   NoDup active ->
-  good ar F active root cuts ->
-  family_at Cut (node past) S F (fun p s => Perf (@Cond M p X owner (F p)
+  (owns_region model stores input0 R A0 c0) ar F active root cuts ->
+  family_at (logged_cut model stores input0 R A0 c0) ((at_node model stores
+    input0 R A0 c0) past) S F (fun p s => Perf (@Cond M p X owner (F p)
     (sh p s) (rd p s) (known owner) MkSSymbol (input p s) (k p s)))
     active inc root cuts ->
   exists entered
     (inside : includes (fun p => In p entered) (fun p => In p active))
     (choices : values (fun _ => X) (fun p => In p entered))
-    (bodies : family Cut F entered),
+    (bodies : family (logged_cut model stores input0 R A0 c0) F entered),
     NoDup entered /\
-    good ar F entered (child root ChoiceBody) bodies /\
+    (owns_region model stores input0 R A0 c0) ar F entered (child root
+      ChoiceBody) bodies /\
     (forall p d, choice_observation past X owner p (rd p (inc p (inside p d)))
       (input p (inc p (inside p d))) root (choices p d)) /\
-    (forall p d, node past p _ (child root ChoiceBody)
+    (forall p d, (at_node model stores input0 R A0 c0) past p _ (child root
+      ChoiceBody)
       (k p (inc p (inside p d)) (choices p d)) (bodies p d)) /\
-    (forall tree, tracked F entered (child root ChoiceBody) bodies tree ->
-      tracked F active root cuts (Choice owner tree)).
+    (forall tree, (tracked_realization model stores input0 R A0 c0) F entered
+      (child root ChoiceBody) bodies tree ->
+      (tracked_realization model stores input0 R A0 c0) F active root cuts
+        (Choice owner tree)).
 Proof.
   intros Hist ND Own Nodes.
   destruct (replay_cond_logged_partition model stores input0 R A0 c0 past ar
@@ -98,7 +96,8 @@ Proof.
   split; [exact BodyAt|]. intros tree BodyLayout.
   assert (HeaderCoverage : forall p d (here : In p entered) peer,
     owner <> peer -> (p = owner \/ p = peer) ->
-    covered p (F p) (cuts p d) ChoiceDelivery root owner peer).
+    (cut_covered model stores input0 R A0 c0) p (F p) (cuts p d) ChoiceDelivery
+      root owner peer).
   { intros p d here peer Ne Peer.
     destruct (Headers p here) as (header & Tokens & Site & Stamp).
     exists header. split.
@@ -150,25 +149,33 @@ Theorem coherent_choice_layout tc s tn n gs past ar S X owner F
     (sh : forall p, S p -> Show X) (rd : forall p, S p -> Read X)
     (input : values (fun p => At X owner p) S)
     (k : forall p, S p -> X -> Choreo M p (F p))
-    active inc root (cuts : family Cut F active) :
+    active inc root (cuts : family (logged_cut model stores input0 R A0 c0) F
+      active) :
   observed_archives model stores input0 R A0 c0 tc s tn n gs past ar ->
   NoDup active ->
-  good ar F active root cuts ->
-  family_at Cut (node past) S F (fun p s => Perf (@Cond M p X owner (F p)
+  (owns_region model stores input0 R A0 c0) ar F active root cuts ->
+  family_at (logged_cut model stores input0 R A0 c0) ((at_node model stores
+    input0 R A0 c0) past) S F (fun p s => Perf (@Cond M p X owner (F p)
     (sh p s) (rd p s) (known owner) MkSSymbol (input p s) (k p s)))
     active inc root cuts ->
   (forall p (s : S owner) (t : S p), p <> owner ->
     wire_law (sh owner s) (rd p t)) ->
-  tracked F active root cuts (Choice owner Leaf) \/
+  (tracked_realization model stores input0 R A0 c0) F active root cuts (Choice
+    owner Leaf) \/
   exists entered
     (inside : includes (fun p => In p entered) (fun p => In p active))
-    (chosen : X) (bodies : family Cut F entered),
+    (chosen : X) (bodies : family (logged_cut model stores input0 R A0 c0) F
+      entered),
     NoDup entered /\
-    good ar F entered (child root ChoiceBody) bodies /\
-    (forall p d, node past p _ (child root ChoiceBody)
+    (owns_region model stores input0 R A0 c0) ar F entered (child root
+      ChoiceBody) bodies /\
+    (forall p d, (at_node model stores input0 R A0 c0) past p _ (child root
+      ChoiceBody)
       (k p (inc p (inside p d)) chosen) (bodies p d)) /\
-    (forall tree, tracked F entered (child root ChoiceBody) bodies tree ->
-      tracked F active root cuts (Choice owner tree)).
+    (forall tree, (tracked_realization model stores input0 R A0 c0) F entered
+      (child root ChoiceBody) bodies tree ->
+      (tracked_realization model stores input0 R A0 c0) F active root cuts
+        (Choice owner tree)).
 Proof.
   intros Archives ND Own Nodes Codec.
   destruct (logged_choice_layout tc s tn n gs past ar S X owner F sh rd input k

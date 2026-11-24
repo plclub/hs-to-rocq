@@ -52,26 +52,21 @@ Definition wire_network_initial :=
   @Network.Execution.initialize wire_effect wire_event ((Symbol -> unit) * unit)
     wire_roles (fun _ => bool) wire_projected (wire_stores, tt).
 
-Local Notation SA := (@RoleSteps.source_action wire_event ((Symbol
-  -> unit) * unit)).
-Local Notation NA := (@Endpoints.action wire_event ((Symbol -> unit) *
-  unit)).
-Local Notation SC := (@Choreography.Execution.configuration wire_effect
-  wire_event
-  ((Symbol -> unit) * unit) (fun _ => bool)).
-Local Notation NC := (@Network.Execution.configuration wire_effect wire_event
-  ((Symbol -> unit) * unit)).
-
 (* Literal observations intentionally appear in each proposition. In particular,
    these are not obligations parameterized by a caller-selected predicate. *)
 Definition wire_partial_delivery : Prop :=
-  exists (s : SC) (n : NC),
+  exists (s : @Choreography.Execution.configuration wire_effect wire_event
+    ((Symbol -> unit) * unit) (fun _ => bool))
+    (n : @Network.Execution.configuration wire_effect wire_event
+      ((Symbol -> unit) * unit)),
     finite_run (Choreography.Execution.step (shared_model wire_model)
       wire_roles)
       wire_source_initial
       ([AnnounceAction bool [] wire_A true;
         SendAction bool [ChoiceBody; BindPrefix] wire_A wire_C false;
-        HearAction bool [] wire_A wire_B true] : list SA) s /\
+        HearAction bool [] wire_A wire_B true] :
+          list (@RoleSteps.source_action wire_event ((Symbol -> unit) * unit)))
+        s /\
     finite_run (Network.Execution.step (shared_model wire_model) wire_roles)
       wire_network_initial
       ([Announced wire_A Choreography.Network.Root (GHC.Base.hs_string__
@@ -79,7 +74,8 @@ Definition wire_partial_delivery : Prop :=
         Sent wire_A wire_C Choreography.Network.Root (GHC.Base.hs_string__
           "False");
         Received wire_A wire_B Choreography.Network.Root
-          (GHC.Base.hs_string__ "True")] : list NA) n /\
+          (GHC.Base.hs_string__ "True")] :
+          list (@Endpoints.action wire_event ((Symbol -> unit) * unit))) n /\
     PrefixRelation.matches wire_model wire_stores tt wire_roles
       (fun _ => bool) wire_choice
       [AnnounceAction bool [] wire_A true;
@@ -100,7 +96,10 @@ Definition wire_partial_delivery : Prop :=
       then [GHC.Base.hs_string__ "True"; GHC.Base.hs_string__ "False"] else [].
 
 Definition wire_reject_invented_value : Prop :=
-  forall (s : SC) (n : NC),
+  forall (s : @Choreography.Execution.configuration wire_effect wire_event
+    ((Symbol -> unit) * unit) (fun _ => bool))
+    (n : @Network.Execution.configuration wire_effect wire_event
+      ((Symbol -> unit) * unit)),
     ~ PrefixRelation.matches wire_model wire_stores tt wire_roles
       (fun _ => bool) wire_choice
       [AnnounceAction bool [] wire_A true;
@@ -113,7 +112,10 @@ Definition wire_reject_invented_value : Prop :=
          "True")] n.
 
 Definition wire_reject_wrong_occurrence : Prop :=
-  forall (s : SC) (n : NC),
+  forall (s : @Choreography.Execution.configuration wire_effect wire_event
+    ((Symbol -> unit) * unit) (fun _ => bool))
+    (n : @Network.Execution.configuration wire_effect wire_event
+      ((Symbol -> unit) * unit)),
     ~ PrefixRelation.matches wire_model wire_stores tt wire_roles
       (fun _ => bool) wire_choice
       [AnnounceAction bool [] wire_A true;
@@ -126,7 +128,10 @@ Definition wire_reject_wrong_occurrence : Prop :=
          "True")] n.
 
 Definition wire_reject_lost_pending : Prop :=
-  forall (s : SC) (n : NC),
+  forall (s : @Choreography.Execution.configuration wire_effect wire_event
+    ((Symbol -> unit) * unit) (fun _ => bool))
+    (n : @Network.Execution.configuration wire_effect wire_event
+      ((Symbol -> unit) * unit)),
     Choreography.Execution.deliveries s = [] ->
     ~ PrefixRelation.matches wire_model wire_stores tt wire_roles
       (fun _ => bool) wire_choice
@@ -140,7 +145,10 @@ Definition wire_reject_lost_pending : Prop :=
          "True")] n.
 
 Definition wire_reject_swapped_fifo : Prop :=
-  forall (s : SC) (n : NC),
+  forall (s : @Choreography.Execution.configuration wire_effect wire_event
+    ((Symbol -> unit) * unit) (fun _ => bool))
+    (n : @Network.Execution.configuration wire_effect wire_event
+      ((Symbol -> unit) * unit)),
     Network.Execution.mailboxes n (wire_A, wire_C, Choreography.Network.Root) =
       [GHC.Base.hs_string__ "False"; GHC.Base.hs_string__ "True"] ->
     ~ PrefixRelation.matches wire_model wire_stores tt wire_roles
@@ -170,12 +178,11 @@ Definition wire_app_self (p : Symbol) :
       show_bool read_bool (known wire_A) (known wire_B) MkSSymbol
       (Choreography.Choreo2.Mk_At (fun _ => false)) MkSSymbol)).
 
-Local Notation ASC := (@Choreography.Execution.configuration wire_effect
-  wire_event
-  ((Symbol -> unit) * unit) (fun p => Choreography.Choreo2.At bool wire_B p)).
-
 Definition wire_app_self_completed : Prop :=
-  exists (s : ASC) (n : NC),
+  exists (s : @Choreography.Execution.configuration wire_effect wire_event
+    ((Symbol -> unit) * unit) (fun p => Choreography.Choreo2.At bool wire_B p))
+    (n : @Network.Execution.configuration wire_effect wire_event
+      ((Symbol -> unit) * unit)),
     PrefixRelation.matches wire_model wire_stores tt [wire_A; wire_B]
       (fun p => Choreography.Choreo2.At bool wire_B p) wire_app_self
       [SendAction bool [AppArgument] wire_A wire_B false;
@@ -194,7 +201,10 @@ Definition wire_app_self_completed : Prop :=
     forall k, Network.Execution.mailboxes n k = [].
 
 Definition wire_app_reject_root_tag : Prop :=
-  forall (s : ASC) (n : NC),
+  forall (s : @Choreography.Execution.configuration wire_effect wire_event
+    ((Symbol -> unit) * unit) (fun p => Choreography.Choreo2.At bool wire_B p))
+    (n : @Network.Execution.configuration wire_effect wire_event
+      ((Symbol -> unit) * unit)),
     ~ PrefixRelation.matches wire_model wire_stores tt [wire_A; wire_B]
       (fun p => Choreography.Choreo2.At bool wire_B p) wire_app_self
       [SendAction bool [AppArgument] wire_A wire_B false;

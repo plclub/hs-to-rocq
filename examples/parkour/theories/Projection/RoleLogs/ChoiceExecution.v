@@ -15,7 +15,6 @@ Section ChoiceLog.
 Context {M E : Type -> Type} {S : Type}
   (model : local_model M E role S) (p : role) (L : Type).
 Variable leaf : forall B, @cursor M E p B -> L -> @cursor M E p B -> Prop.
-Local Notation log := (local_log model p L leaf).
 
 Definition choice_header_step_view {B} (t : @cursor M E p B) tok (u : @cursor M
   E p B)
@@ -46,12 +45,13 @@ Qed.
 
 (* The head is the identical L token, not its erased source action. *)
 Theorem local_log_cond X Y l o sh rd kl sl v (k : X -> Choreo M p Y) tr t :
-  log (Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) tr t ->
+  (local_log model p L leaf) (Code o (Perf (@Cond M p X l Y sh rd kl sl v k)))
+    tr t ->
   (tr = [] /\ t = Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) \/
   exists e suffix after,
     tr = e :: suffix /\
     leaf Y (Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) e after /\
-    log after suffix t.
+    (local_log model p L leaf) after suffix t.
 Proof.
   intro Run. induction Run.
   - left; auto.
@@ -116,44 +116,47 @@ Section StampedChoice.
 Context {M E Store Input} (model : local_model M E role (Store * Input))
   (stores : role -> Store) (input : Input) (R : list role) (A : role -> Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation sm := (shared_model model).
-Local Notation entry := (observed_entry model stores input R A c).
-Local Notation stamp := (stamped model stores input R A c).
-Local Notation log := (actor_log model stores input R A c).
-Local Notation ghosts := (entry_ghosts model stores input R A c).
-Local Notation ghosts_after := (entry_ghosts_after model stores input R A c).
-Local Notation batch := (entry_batch model stores input R A c).
 
 Theorem stamped_choice_step p X Y l o sh rd kl sl v (k : X -> Choreo M p Y)
-    (e : entry p) u :
-  stamp p Y (Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) e u ->
+    (e : (observed_entry model stores input R A c) p) u :
+  (stamped model stores input R A c) p Y (Code o (Perf (@Cond M p X l Y sh rd kl
+    sl v k))) e u ->
   exists chosen, u = Code (child o ChoiceBody) (k chosen) /\
     ((exists same : l = p, chosen = unAt v same) \/
      (l <> p /\ exists wire,
-       delivery X ChoiceDelivery o l p chosen rd (ghosts p e) wire (ghosts_after
+       delivery X ChoiceDelivery o l p chosen rd ((entry_ghosts model stores
+         input R A c) p e) wire ((entry_ghosts_after model stores input R A c)
          p e) /\
-       batch p e = [Consumed ChoiceDelivery o l p wire])).
+       (entry_batch model stores input R A c) p e = [Consumed ChoiceDelivery o l
+         p wire])).
 Proof.
   intros [_ Obs].
-  exact (observed_choice_shape_correct sm R p _ _ _ _ _ _ _ _ _ _ _ _ Obs).
+  exact (observed_choice_shape_correct (shared_model model) R p _ _ _ _ _ _ _ _
+    _ _ _ _ Obs).
 Qed.
 
 Theorem actor_log_cond p X Y l o sh rd kl sl v (k : X -> Choreo M p Y) tr t :
-  log p Y (Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) tr t ->
+  (actor_log model stores input R A c) p Y (Code o (Perf (@Cond M p X l Y sh rd
+    kl sl v k))) tr t ->
   (tr = [] /\ t = Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) \/
-  exists (e : entry p) suffix chosen,
+  exists (e : (observed_entry model stores input R A c) p) suffix chosen,
     tr = e :: suffix /\
-    stamp p Y (Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) e
+    (stamped model stores input R A c) p Y (Code o (Perf (@Cond M p X l Y sh rd
+      kl sl v k))) e
       (Code (child o ChoiceBody) (k chosen)) /\
     ((exists same : l = p, chosen = unAt v same) \/
      (l <> p /\ exists wire,
-       delivery X ChoiceDelivery o l p chosen rd (ghosts p e) wire (ghosts_after
+       delivery X ChoiceDelivery o l p chosen rd ((entry_ghosts model stores
+         input R A c) p e) wire ((entry_ghosts_after model stores input R A c)
          p e) /\
-       batch p e = [Consumed ChoiceDelivery o l p wire])) /\
-    log p Y (Code (child o ChoiceBody) (k chosen)) suffix t.
+       (entry_batch model stores input R A c) p e = [Consumed ChoiceDelivery o l
+         p wire])) /\
+    (actor_log model stores input R A c) p Y (Code (child o ChoiceBody) (k
+      chosen)) suffix t.
 Proof.
   intro Run.
-  destruct (local_log_cond sm p (entry p) (stamp p)
+  destruct (local_log_cond (shared_model model) p ((observed_entry model stores
+    input R A c) p) ((stamped model stores input R A c) p)
     X Y l o sh rd kl sl v k tr t Run)
     as [Empty|(e & suffix & after & Trace & First & Rest)].
   - left; exact Empty.
@@ -168,14 +171,17 @@ Theorem actor_log_cond_replay tc s tn n gs past
     p X Y l o sh rd kl sl v (k : X -> Choreo M p Y) tr t :
   payload_history model stores input R A c tc s tn n gs past ->
   (forall e, In e tr -> entry_in_past model stores input R A c p past e) ->
-  log p Y (Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) tr t ->
+  (actor_log model stores input R A c) p Y (Code o (Perf (@Cond M p X l Y sh rd
+    kl sl v k))) tr t ->
   (tr = [] /\ t = Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) \/
-  exists (e : entry p) suffix chosen,
+  exists (e : (observed_entry model stores input R A c) p) suffix chosen,
     tr = e :: suffix /\
-    stamp p Y (Code o (Perf (@Cond M p X l Y sh rd kl sl v k))) e
+    (stamped model stores input R A c) p Y (Code o (Perf (@Cond M p X l Y sh rd
+      kl sl v k))) e
       (Code (child o ChoiceBody) (k chosen)) /\
     choice_observation past X l p rd v o chosen /\
-    log p Y (Code (child o ChoiceBody) (k chosen)) suffix t.
+    (actor_log model stores input R A c) p Y (Code (child o ChoiceBody) (k
+      chosen)) suffix t.
 Proof.
   intros Hist SamePast Run.
   destruct (actor_log_cond p X Y l o sh rd kl sl v k tr t Run)

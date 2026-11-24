@@ -94,20 +94,14 @@ Context {M E Store Input}
   (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol)
   (A : Symbol -> Type) (c : forall p, Choreo M p (A p)).
-Local Notation cut := (logged_cut model stores input R A c).
-Local Notation tok := (tokens model stores input R A c).
-Local Notation cur := (cursor_at model stores input R A c).
-Local Notation ret := (finished model stores input R A c).
-Local Notation recv := (cut_receive model stores input R A c).
-Local Notation tracked := (tracked_realization model stores input R A c).
-Local Notation entry := (observed_entry model stores input R A c).
-Local Notation path_of := (entry_site model stores input R A c).
 Local Arguments tokens {M E Store Input} model stores input R A c {p B} _.
 Local Arguments cursor_at {M E Store Input} model stores input R A c {p B} _.
 
-Lemma cut_receive_branch p B (node : cut p B) X kind o sender rd :
-  recv p B node X kind o sender rd <->
-  branch_receive p (cur node) X kind o sender rd.
+Lemma cut_receive_branch p B (node : (logged_cut model stores input R A c) p B)
+  X kind o sender rd :
+  (cut_receive model stores input R A c) p B node X kind o sender rd <->
+  branch_receive p ((cursor_at model stores input R A c) node) X kind o sender
+    rd.
 Proof.
   split.
   - intros (Z & C & focus & Eq & Focus). rewrite Eq.
@@ -115,11 +109,15 @@ Proof.
   - apply branch_receive_focus.
 Qed.
 
-Lemma app_current_focus p X F root f x (parent : cut p F)
-    (fc : cut p (X -> F)) (xc : cut p X) :
+Lemma app_current_focus p X F root f x (parent : (logged_cut model stores input
+  R A c) p F)
+    (fc : (logged_cut model stores input R A c) p (X -> F)) (xc : (logged_cut
+      model stores input R A c) p X) :
   app_cursor_shape model stores input R A c p X F root f x parent fc xc ->
-  forall Y kind o sender rd, recv p F parent Y kind o sender rd ->
-    recv p _ fc Y kind o sender rd \/ recv p _ xc Y kind o sender rd.
+  forall Y kind o sender rd, (cut_receive model stores input R A c) p F parent Y
+    kind o sender rd ->
+    (cut_receive model stores input R A c) p _ fc Y kind o sender rd \/
+      (cut_receive model stores input R A c) p _ xc Y kind o sender rd.
 Proof.
   intros Shape Y kind o sender rd Recv. apply cut_receive_branch in Recv.
   destruct Shape as [[Parent _]|[Parent|(g & a & FRet & XRet & Parent)]].
@@ -132,16 +130,22 @@ Qed.
 
 Theorem tracked_app_logged S X F
     (f : programs M (fun p => X p -> F p) S) (x : programs M X S)
-    active inc root (cuts : family cut F active)
-    (fs : family cut (fun p => X p -> F p) active)
-    (xs : family cut X active) ft xt :
+    active inc root (cuts : family (logged_cut model stores input R A c) F
+      active)
+    (fs : family (logged_cut model stores input R A c) (fun p => X p -> F p)
+      active)
+    (xs : family (logged_cut model stores input R A c) X active) ft xt :
   (forall p d, app_cursor_shape model stores input R A c p (X p) (F p)
     root (f p (inc p d)) (x p (inc p d)) (cuts p d) (fs p d) (xs p d)) ->
-  (forall p d e, In e (tok (cuts p d)) <->
-    In e (tok (fs p d)) \/ In e (tok (xs p d))) ->
-  tracked _ active (child root AppFunction) fs ft ->
-  tracked _ active (child root AppArgument) xs xt ->
-  tracked F active root cuts (Parallel ft xt).
+  (forall p d e, In e ((tokens model stores input R A c) (cuts p d)) <->
+    In e ((tokens model stores input R A c) (fs p d)) \/ In e ((tokens model
+      stores input R A c) (xs p d))) ->
+  (tracked_realization model stores input R A c) _ active (child root
+    AppFunction) fs ft ->
+  (tracked_realization model stores input R A c) _ active (child root
+    AppArgument) xs xt ->
+  (tracked_realization model stores input R A c) F active root cuts (Parallel ft
+    xt).
 Proof.
   intros Shape Partition FTracked XTracked.
   eapply tracked_parallel; [exact FTracked|exact XTracked|exact Partition| |].
@@ -154,20 +158,23 @@ Qed.
 
 Variable past : list payload_event.
 Variable ar : actor_archive model stores input R A c.
-Local Notation node := (at_node model stores input R A c past).
-Local Notation good := (owns_region model stores input R A c ar).
 
-Lemma bind_subtree_paths p X F root (t : Choreo M p X) k (parent : cut p F) :
-  node p F root (Bind t k) parent ->
-  forall e, In e (tok parent) ->
-    path_prefix (child root BindPrefix) (path_of p e) \/
-    path_prefix (child root BindBody) (path_of p e).
+Lemma bind_subtree_paths p X F root (t : Choreo M p X) k (parent : (logged_cut
+  model stores input R A c) p F) :
+  (at_node model stores input R A c past) p F root (Bind t k) parent ->
+  forall e, In e ((tokens model stores input R A c) parent) ->
+    path_prefix (child root BindPrefix) ((entry_site model stores input R A c) p
+      e) \/
+    path_prefix (child root BindBody) ((entry_site model stores input R A c) p
+      e).
 Proof.
   intros [Run _].
-  destruct (local_log_bind_cases (shared_model model) p (entry p)
+  destruct (local_log_bind_cases (shared_model model) p ((observed_entry model
+    stores input R A c) p)
     (stamped model stores input R A c p)
     (stamped_primitive_cursor model stores input R A c p) X F root t k
-    (tok parent) (cur parent) Run)
+    ((tokens model stores input R A c) parent) ((cursor_at model stores input R
+      A c) parent) Run)
     as [[Empty Shape]|[(ct & Prefix & Shape)|
       (pl & bl & x & Part & Prefix & Body)]]; intros e Member.
   - rewrite Empty in Member. contradiction.
@@ -179,16 +186,22 @@ Qed.
 
 Lemma bind_owned_partition S X F (t : programs M X S)
     (k : forall p, S p -> X p -> Choreo M p (F p))
-    active entered inc root (cuts : family cut F active)
-    (prefixes : family cut X active) (bodies : family cut F entered) :
-  good F active root cuts ->
-  good X active (child root BindPrefix) prefixes ->
-  good F entered (child root BindBody) bodies ->
-  family_at cut node S F (fun p s => Bind (t p s) (k p s)) active inc root cuts
-    ->
-  forall p d e, In e (tok (cuts p d)) <->
-    In e (tok (prefixes p d)) \/
-    exists body_member, In e (tok (bodies p body_member)).
+    active entered inc root (cuts : family (logged_cut model stores input R A c)
+      F active)
+    (prefixes : family (logged_cut model stores input R A c) X active) (bodies :
+      family (logged_cut model stores input R A c) F entered) :
+  (owns_region model stores input R A c ar) F active root cuts ->
+  (owns_region model stores input R A c ar) X active (child root BindPrefix)
+    prefixes ->
+  (owns_region model stores input R A c ar) F entered (child root BindBody)
+    bodies ->
+  family_at (logged_cut model stores input R A c) (at_node model stores input R
+    A c past) S F (fun p s => Bind (t p s) (k p s))
+    active inc root cuts ->
+  forall p d e, In e ((tokens model stores input R A c) (cuts p d)) <->
+    In e ((tokens model stores input R A c) (prefixes p d)) \/
+    exists body_member, In e ((tokens model stores input R A c) (bodies p
+      body_member)).
 Proof.
   intros [_ [_ Parent]] [_ [_ Prefix]] [_ [BodyCover Body]] At p d e.
   split.
@@ -210,23 +223,32 @@ Qed.
 
 Definition bind_layout_shape S X F (t : programs M X S)
     (k : forall p, S p -> X p -> Choreo M p (F p))
-    active entered inc root (cuts : family cut F active)
+    active entered inc root (cuts : family (logged_cut model stores input R A c)
+      F active)
     (inside : includes (fun p => In p entered) (fun p => In p active))
-    (prefixes : family cut X active) (bodies : family cut F entered) :=
+    (prefixes : family (logged_cut model stores input R A c) X active) (bodies :
+      family (logged_cut model stores input R A c) F entered) :=
   forall p d,
     (exists e : In p entered, inside p e = d /\
-      cur (cuts p d) = cur (bodies p e)) \/
-    (cur (cuts p d) = Code root (Bind (t p (inc p d)) (k p (inc p d))) /\
-      cur (prefixes p d) = Code (child root BindPrefix) (t p (inc p d))) \/
-    cur (cuts p d) = Seq root (cur (prefixes p d)) (k p (inc p d)).
+      (cursor_at model stores input R A c) (cuts p d) = (cursor_at model stores
+        input R A c) (bodies p e)) \/
+    ((cursor_at model stores input R A c) (cuts p d) = Code root (Bind (t p (inc
+      p d)) (k p (inc p d))) /\
+      (cursor_at model stores input R A c) (prefixes p d) = Code (child root
+        BindPrefix) (t p (inc p d))) \/
+    (cursor_at model stores input R A c) (cuts p d) = Seq root ((cursor_at model
+      stores input R A c) (prefixes p d)) (k p (inc p d)).
 
 Lemma bind_current_focus S X F t k active entered inc root cuts inside prefixes
   bodies :
   bind_layout_shape S X F t k active entered inc root cuts inside prefixes
     bodies ->
-  forall p d Y kind o sender rd, recv p (F p) (cuts p d) Y kind o sender rd ->
-    recv p _ (prefixes p d) Y kind o sender rd \/
-    exists body_member, recv p _ (bodies p body_member) Y kind o sender rd.
+  forall p d Y kind o sender rd, (cut_receive model stores input R A c) p (F p)
+    (cuts p d) Y kind o sender rd ->
+    (cut_receive model stores input R A c) p _ (prefixes p d) Y kind o sender rd
+      \/
+    exists body_member, (cut_receive model stores input R A c) p _ (bodies p
+      body_member) Y kind o sender rd.
 Proof.
   intros Shape p d Y kind o sender rd Recv.
   destruct (Shape p d) as [(here & Eq & Parent)|[[Parent _]|Parent]].
@@ -240,22 +262,30 @@ Qed.
 
 Theorem tracked_bind_logged S X F (t : programs M X S)
     (k : forall p, S p -> X p -> Choreo M p (F p))
-    active entered inc root (cuts : family cut F active)
+    active entered inc root (cuts : family (logged_cut model stores input R A c)
+      F active)
     (inside : includes (fun p => In p entered) (fun p => In p active))
-    (prefixes : family cut X active)
+    (prefixes : family (logged_cut model stores input R A c) X active)
     (vals : values X (fun p => In p entered))
-    (bodies : family cut F entered) pt bt :
-  good F active root cuts ->
-  good X active (child root BindPrefix) prefixes ->
-  good F entered (child root BindBody) bodies ->
-  family_at cut node S F (fun p s => Bind (t p s) (k p s)) active inc root cuts
-    ->
-  family_returned cut ret X active entered inside prefixes vals ->
+    (bodies : family (logged_cut model stores input R A c) F entered) pt bt :
+  (owns_region model stores input R A c ar) F active root cuts ->
+  (owns_region model stores input R A c ar) X active (child root BindPrefix)
+    prefixes ->
+  (owns_region model stores input R A c ar) F entered (child root BindBody)
+    bodies ->
+  family_at (logged_cut model stores input R A c) (at_node model stores input R
+    A c past) S F (fun p s => Bind (t p s) (k p s))
+    active inc root cuts ->
+  family_returned (logged_cut model stores input R A c) (finished model stores
+    input R A c) X active entered inside prefixes vals ->
   bind_layout_shape S X F t k active entered inc root cuts inside prefixes
     bodies ->
-  tracked _ active (child root BindPrefix) prefixes pt ->
-  tracked _ entered (child root BindBody) bodies bt ->
-  tracked F active root cuts (Sequence pt bt).
+  (tracked_realization model stores input R A c) _ active (child root
+    BindPrefix) prefixes pt ->
+  (tracked_realization model stores input R A c) _ entered (child root BindBody)
+    bodies bt ->
+  (tracked_realization model stores input R A c) F active root cuts (Sequence pt
+    bt).
 Proof.
   intros Good PrefixGood BodyGood At PrefixReturned Shape PrefixTracked
     BodyTracked.
@@ -277,20 +307,30 @@ Qed.
 
 Theorem app_layout_children S X F
     (f : programs M (fun p => X p -> F p) S) (x : programs M X S)
-    active inc root (cuts : family cut F active) :
-  good F active root cuts ->
-  family_at cut node S F (fun p s => App (f p s) (x p s)) active inc root cuts
-    ->
-  exists (fs : family cut (fun p => X p -> F p) active)
-    (xs : family cut X active),
-    good _ active (child root AppFunction) fs /\
-    good _ active (child root AppArgument) xs /\
-    family_at cut node S _ f active inc (child root AppFunction) fs /\
-    family_at cut node S _ x active inc (child root AppArgument) xs /\
+    active inc root (cuts : family (logged_cut model stores input R A c) F
+      active) :
+  (owns_region model stores input R A c ar) F active root cuts ->
+  family_at (logged_cut model stores input R A c) (at_node model stores input R
+    A c past) S F (fun p s => App (f p s) (x p s))
+    active inc root cuts ->
+  exists (fs : family (logged_cut model stores input R A c) (fun p => X p -> F
+    p) active)
+    (xs : family (logged_cut model stores input R A c) X active),
+    (owns_region model stores input R A c ar) _ active (child root AppFunction)
+      fs /\
+    (owns_region model stores input R A c ar) _ active (child root AppArgument)
+      xs /\
+    family_at (logged_cut model stores input R A c) (at_node model stores input
+      R A c past) S _ f active inc (child root AppFunction) fs /\
+    family_at (logged_cut model stores input R A c) (at_node model stores input
+      R A c past) S _ x active inc (child root AppArgument) xs /\
     forall ft xt,
-      tracked _ active (child root AppFunction) fs ft ->
-      tracked _ active (child root AppArgument) xs xt ->
-      tracked F active root cuts (Parallel ft xt).
+      (tracked_realization model stores input R A c) _ active (child root
+        AppFunction) fs ft ->
+      (tracked_realization model stores input R A c) _ active (child root
+        AppArgument) xs xt ->
+      (tracked_realization model stores input R A c) F active root cuts
+        (Parallel ft xt).
 Proof.
   intros Good At.
   destruct (logged_replay_app_partition model stores input R A c past ar
@@ -303,26 +343,36 @@ Qed.
 
 Theorem bind_layout_children S X F (t : programs M X S)
     (k : forall p, S p -> X p -> Choreo M p (F p))
-    active inc root (cuts : family cut F active) :
-  good F active root cuts ->
-  family_at cut node S F (fun p s => Bind (t p s) (k p s)) active inc root cuts
-    ->
+    active inc root (cuts : family (logged_cut model stores input R A c) F
+      active) :
+  (owns_region model stores input R A c ar) F active root cuts ->
+  family_at (logged_cut model stores input R A c) (at_node model stores input R
+    A c past) S F (fun p s => Bind (t p s) (k p s))
+    active inc root cuts ->
   exists entered
     (inside : includes (fun p => In p entered) (fun p => In p active))
-    (prefixes : family cut X active)
+    (prefixes : family (logged_cut model stores input R A c) X active)
     (vals : values X (fun p => In p entered))
-    (bodies : family cut F entered),
+    (bodies : family (logged_cut model stores input R A c) F entered),
     NoDup entered /\
-    good X active (child root BindPrefix) prefixes /\
-    family_at cut node S X t active inc (child root BindPrefix) prefixes /\
-    family_returned cut ret X active entered inside prefixes vals /\
-    good F entered (child root BindBody) bodies /\
-    (forall p d, node p _ (child root BindBody)
+    (owns_region model stores input R A c ar) X active (child root BindPrefix)
+      prefixes /\
+    family_at (logged_cut model stores input R A c) (at_node model stores input
+      R A c past) S X t active inc (child root BindPrefix) prefixes /\
+    family_returned (logged_cut model stores input R A c) (finished model stores
+      input R A c) X active entered inside prefixes vals /\
+    (owns_region model stores input R A c ar) F entered (child root BindBody)
+      bodies /\
+    (forall p d, (at_node model stores input R A c past) p _ (child root
+      BindBody)
       (k p (inc p (inside p d)) (vals p d)) (bodies p d)) /\
     forall pt bt,
-      tracked _ active (child root BindPrefix) prefixes pt ->
-      tracked _ entered (child root BindBody) bodies bt ->
-      tracked F active root cuts (Sequence pt bt).
+      (tracked_realization model stores input R A c) _ active (child root
+        BindPrefix) prefixes pt ->
+      (tracked_realization model stores input R A c) _ entered (child root
+        BindBody) bodies bt ->
+      (tracked_realization model stores input R A c) F active root cuts
+        (Sequence pt bt).
 Proof.
   intros Good At.
   destruct (logged_replay_bind model stores input R A c past ar

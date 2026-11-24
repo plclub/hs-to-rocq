@@ -30,14 +30,6 @@ Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (A0 : Symbol -> Type) (c : forall p, Choreo M p (A0 p)).
 Variable past : list payload_event.
 Variable ar : actor_archive model stores input0 R A0 c.
-Local Notation entry := (observed_entry model stores input0 R A0 c).
-Local Notation site := (entry_site model stores input0 R A0 c).
-Local Notation stamp := (stamped model stores input0 R A0 c).
-Local Notation log := (actor_log model stores input0 R A0 c).
-Local Notation cut := (logged_cut model stores input0 R A0 c).
-Local Notation node := (at_node model stores input0 R A0 c past).
-Local Notation good := (owns_region model stores input0 R A0 c ar).
-Local Notation region := (in_region model stores input0 R A0 c ar).
 
 Definition choice_action_site p B (t : @cursor M E p B)
     (a : @source_action E ((Symbol -> Store) * Input)) : Prop :=
@@ -51,9 +43,11 @@ Lemma primitive_choice_site p B t s q a u s' q' :
   choice_action_site p B t a.
 Proof. destruct 1; cbn [choice_action_site]; exact I || reflexivity. Qed.
 
-Lemma stamped_choice_site p X B l o sh rd kl sl v k (e : entry p) u :
-  stamp p B (Code o (Perf (@Cond M p X l B sh rd kl sl v k))) e u ->
-  site p e = o.
+Lemma stamped_choice_site p X B l o sh rd kl sl v k (e : (observed_entry model
+  stores input0 R A0 c) p) u :
+  (stamped model stores input0 R A0 c) p B (Code o (Perf (@Cond M p X l B sh rd
+    kl sl v k))) e u ->
+  (entry_site model stores input0 R A0 c) p e = o.
 Proof.
   intro First. rewrite <- (primitive_entry_site model stores input0 R A0 c
     p B _ e u First).
@@ -78,8 +72,10 @@ Qed.
 
 (* These are the actual typed action constructors. Layout coverage can
    forget their payloads, but need not invent an announcement or hearing. *)
-Lemma stamped_choice_header p X B l o sh rd kl sl v k (e : entry p) u :
-  stamp p B (Code o (Perf (@Cond M p X l B sh rd kl sl v k))) e u ->
+Lemma stamped_choice_header p X B l o sh rd kl sl v k (e : (observed_entry model
+  stores input0 R A0 c) p) u :
+  (stamped model stores input0 R A0 c) p B (Code o (Perf (@Cond M p X l B sh rd
+    kl sl v k))) e u ->
   (exists x : X, entry_action model stores input0 R A0 c p e =
       AnnounceAction X o p x /\ l = p) \/
   (exists x : X, entry_action model stores input0 R A0 c p e =
@@ -123,8 +119,10 @@ Proof.
     contradiction.
 Qed.
 
-Lemma stamped_choice_header_batch p X B l o sh rd kl sl v k (e : entry p) u :
-  stamp p B (Code o (Perf (@Cond M p X l B sh rd kl sl v k))) e u ->
+Lemma stamped_choice_header_batch p X B l o sh rd kl sl v k (e : (observed_entry
+  model stores input0 R A0 c) p) u :
+  (stamped model stores input0 R A0 c) p B (Code o (Perf (@Cond M p X l B sh rd
+    kl sl v k))) e u ->
   forall ev, In ev (entry_batch model stores input0 R A0 c p e) ->
   match ev with
   | Produced kind path sender recipient _ | Consumed kind path sender recipient
@@ -138,20 +136,23 @@ Qed.
 
 (* A conditional has one event at its root. Every later token belongs to
    ChoiceBody, at any reached occurrence, not just the initial occurrence. *)
-Lemma choice_suffix_owned p B o (original : cut p B) head suffix :
+Lemma choice_suffix_owned p B o (original : (logged_cut model stores input0 R A0
+  c) p B) head suffix :
   (forall e, In e (tokens model stores input0 R A0 c original) <->
-    region p o e) ->
+    (in_region model stores input0 R A0 c ar) p o e) ->
   tokens model stores input0 R A0 c original = head :: suffix ->
-  site p head = o ->
-  Forall (fun e => path_prefix (child o ChoiceBody) (site p e)) suffix ->
-  forall e, In e suffix <-> region p (child o ChoiceBody) e.
+  (entry_site model stores input0 R A0 c) p head = o ->
+  Forall (fun e => path_prefix (child o ChoiceBody) ((entry_site model stores
+    input0 R A0 c) p e)) suffix ->
+  forall e, In e suffix <-> (in_region model stores input0 R A0 c ar) p (child o
+    ChoiceBody) e.
 Proof.
   intros Own Trace Head Scoped e. split.
   - intro Member. split.
     + exact (proj1 (proj1 (Own e) ltac:(rewrite Trace; now right))).
     + exact (choice_forall_member _ suffix e Scoped Member).
   - intros [Seen Below].
-    assert (Old : region p o e).
+    assert (Old : (in_region model stores input0 R A0 c ar) p o e).
     { split; [exact Seen|]. now apply path_prefix_parent in Below. }
     apply (proj2 (Own e)) in Old. rewrite Trace in Old.
     destruct Old as [Eq|Member]; [|exact Member].
@@ -163,29 +164,35 @@ Theorem replay_cond_logged_partition tc s tn n gs S X l A
     (sh : forall p, S p -> Show X) (rd : forall p, S p -> Read X)
     (input : values (fun p => At X l p) S)
     (k : forall p, S p -> X -> Choreo M p (A p))
-    active completed inc o (cuts : family cut A active)
+    active completed inc o (cuts : family (logged_cut model stores input0 R A0
+      c) A active)
     (done : includes (fun p => In p completed) (fun p => In p active))
     (v : values A (fun p => In p completed)) :
   payload_history model stores input0 R A0 c tc s tn n gs past ->
   NoDup active -> NoDup completed ->
-  good A active o cuts ->
-  family_at cut node S A (fun p s => Perf (@Cond M p X l (A p)
+  (owns_region model stores input0 R A0 c ar) A active o cuts ->
+  family_at (logged_cut model stores input0 R A0 c) (at_node model stores input0
+    R A0 c past) S A (fun p s => Perf (@Cond M p X l (A p)
     (sh p s) (rd p s) (known l) MkSSymbol (input p s) (k p s)))
     active inc o cuts ->
-  family_returned cut (finished model stores input0 R A0 c)
+  family_returned (logged_cut model stores input0 R A0 c) (finished model stores
+    input0 R A0 c)
     A active completed done cuts v ->
   exists entered
     (inside : includes (fun p => In p entered) (fun p => In p active))
     (finished_in : includes (fun p => In p completed) (fun p => In p entered))
     (choices : values (fun _ => X) (fun p => In p entered))
-    (body : family cut A entered),
+    (body : family (logged_cut model stores input0 R A0 c) A entered),
     NoDup entered /\
-    good A entered (child o ChoiceBody) body /\
+    (owns_region model stores input0 R A0 c ar) A entered (child o ChoiceBody)
+      body /\
     (forall p d, choice_observation past X l p (rd p (inc p (inside p d)))
       (input p (inc p (inside p d))) o (choices p d)) /\
-    (forall p d, node p _ (child o ChoiceBody)
+    (forall p d, (at_node model stores input0 R A0 c past) p _ (child o
+      ChoiceBody)
       (k p (inc p (inside p d)) (choices p d)) (body p d)) /\
-    family_returned cut (finished model stores input0 R A0 c)
+    family_returned (logged_cut model stores input0 R A0 c) (finished model
+      stores input0 R A0 c)
       A entered completed finished_in body v /\
     (forall p d, cursor_at model stores input0 R A0 c (cuts p (inside p d)) =
       cursor_at model stores input0 R A0 c (body p d)) /\
@@ -193,11 +200,11 @@ Theorem replay_cond_logged_partition tc s tn n gs S X l A
       cursor_at model stores input0 R A0 c (cuts p d) =
       Code o (Perf (@Cond M p X l (A p) (sh p (inc p d)) (rd p (inc p d))
         (known l) MkSSymbol (input p (inc p d)) (k p (inc p d))))) /\
-    (forall p d, exists header : entry p,
+    (forall p d, exists header : (observed_entry model stores input0 R A0 c) p,
       tokens model stores input0 R A0 c (cuts p (inside p d)) =
         header :: tokens model stores input0 R A0 c (body p d) /\
-      site p header = o /\
-      stamp p (A p)
+      (entry_site model stores input0 R A0 c) p header = o /\
+      (stamped model stores input0 R A0 c) p (A p)
         (Code o (Perf (@Cond M p X l (A p)
           (sh p (inc p (inside p d))) (rd p (inc p (inside p d)))
           (known l) MkSSymbol (input p (inc p (inside p d)))
@@ -210,7 +217,8 @@ Proof.
   set (head := fun p s => Perf (@Cond M p X l (A p)
     (sh p s) (rd p s) (known l) MkSSymbol (input p s) (k p s))).
   destruct (@select_returned
-    (fun p => option (X * entry p * list (entry p))%type)
+    (fun p => option (X * (observed_entry model stores input0 R A0 c) p * list
+      ((observed_entry model stores input0 R A0 c) p))%type)
     (fun p part => forall d : In p active,
       match part with
       | None => tokens model stores input0 R A0 c (cuts p d) = [] /\
@@ -218,12 +226,14 @@ Proof.
             p d))
       | Some (x,e,suffix) =>
           tokens model stores input0 R A0 c (cuts p d) = e :: suffix /\
-          site p e = o /\
+          (entry_site model stores input0 R A0 c) p e = o /\
           choice_observation past X l p (rd p (inc p d)) (input p (inc p d)) o x
             /\
-          stamp p (A p) (Code o (head p (inc p d))) e
+          (stamped model stores input0 R A0 c) p (A p) (Code o (head p (inc p
+            d))) e
             (Code (child o ChoiceBody) (k p (inc p d) x)) /\
-          node p _ (child o ChoiceBody) (k p (inc p d) x)
+          (at_node model stores input0 R A0 c past) p _ (child o ChoiceBody) (k
+            p (inc p d) x)
             (LoggedCut model stores input0 R A0 c
               (cursor_at model stores input0 R A0 c (cuts p d)) suffix)
       end) active) as (parts & Valid).
@@ -270,12 +280,14 @@ Proof.
     assert (Body : forall p d,
       let '(x,e,suffix) := triple p d in
       tokens model stores input0 R A0 c (cuts p (inside p d)) = e :: suffix /\
-      site p e = o /\
+      (entry_site model stores input0 R A0 c) p e = o /\
       choice_observation past X l p (rd p (inc p (inside p d)))
         (input p (inc p (inside p d))) o x /\
-      stamp p (A p) (Code o (head p (inc p (inside p d)))) e
+      (stamped model stores input0 R A0 c) p (A p) (Code o (head p (inc p
+        (inside p d)))) e
         (Code (child o ChoiceBody) (k p (inc p (inside p d)) x)) /\
-      node p _ (child o ChoiceBody) (k p (inc p (inside p d)) x)
+      (at_node model stores input0 R A0 c past) p _ (child o ChoiceBody) (k p
+        (inc p (inside p d)) x)
         (LoggedCut model stores input0 R A0 c
           (cursor_at model stores input0 R A0 c (cuts p (inside p d))) suffix)).
     { intros p d. pose proof (Valid p (inside p d) (inside p d)) as H.
@@ -286,7 +298,7 @@ Proof.
         (cursor_at model stores input0 R A0 c (cuts p (inside p d))) suffix).
     assert (SuffixOwn : forall p d token,
       In token (tokens model stores input0 R A0 c (body p d)) <->
-      region p (child o ChoiceBody) token).
+      (in_region model stores input0 R A0 c ar) p (child o ChoiceBody) token).
     { intros p d token. unfold body.
       pose proof (Body p d) as H.
       destruct (triple p d) as [[x e] suffix].
@@ -300,7 +312,7 @@ Proof.
     split; [apply entered_domain_nodup; exact NA|]. split.
     + split; [apply entered_domain_nodup; exact NA|]. split.
       * intros p token InBody.
-        assert (Old : region p o token).
+        assert (Old : (in_region model stores input0 R A0 c ar) p o token).
         { split; [exact (proj1 InBody)|].
           apply path_prefix_parent with ChoiceBody. exact (proj2 InBody). }
         pose proof (proj1 (proj2 Good) p token Old) as Present.
@@ -353,29 +365,35 @@ Theorem replay_cond_logged_strong tc s tn n gs S X l A
     (sh : forall p, S p -> Show X) (rd : forall p, S p -> Read X)
     (input : values (fun p => At X l p) S)
     (k : forall p, S p -> X -> Choreo M p (A p))
-    active completed inc o (cuts : family cut A active)
+    active completed inc o (cuts : family (logged_cut model stores input0 R A0
+      c) A active)
     (done : includes (fun p => In p completed) (fun p => In p active))
     (v : values A (fun p => In p completed)) :
   payload_history model stores input0 R A0 c tc s tn n gs past ->
   NoDup active -> NoDup completed ->
-  good A active o cuts ->
-  family_at cut node S A (fun p s => Perf (@Cond M p X l (A p)
+  (owns_region model stores input0 R A0 c ar) A active o cuts ->
+  family_at (logged_cut model stores input0 R A0 c) (at_node model stores input0
+    R A0 c past) S A (fun p s => Perf (@Cond M p X l (A p)
     (sh p s) (rd p s) (known l) MkSSymbol (input p s) (k p s)))
     active inc o cuts ->
-  family_returned cut (finished model stores input0 R A0 c)
+  family_returned (logged_cut model stores input0 R A0 c) (finished model stores
+    input0 R A0 c)
     A active completed done cuts v ->
   exists entered
     (inside : includes (fun p => In p entered) (fun p => In p active))
     (finished_in : includes (fun p => In p completed) (fun p => In p entered))
     (choices : values (fun _ => X) (fun p => In p entered))
-    (body : family cut A entered),
+    (body : family (logged_cut model stores input0 R A0 c) A entered),
     NoDup entered /\
-    good A entered (child o ChoiceBody) body /\
+    (owns_region model stores input0 R A0 c ar) A entered (child o ChoiceBody)
+      body /\
     (forall p d, choice_observation past X l p (rd p (inc p (inside p d)))
       (input p (inc p (inside p d))) o (choices p d)) /\
-    (forall p d, node p _ (child o ChoiceBody)
+    (forall p d, (at_node model stores input0 R A0 c past) p _ (child o
+      ChoiceBody)
       (k p (inc p (inside p d)) (choices p d)) (body p d)) /\
-    family_returned cut (finished model stores input0 R A0 c)
+    family_returned (logged_cut model stores input0 R A0 c) (finished model
+      stores input0 R A0 c)
       A entered completed finished_in body v /\
     (forall p d, cursor_at model stores input0 R A0 c (cuts p (inside p d)) =
       cursor_at model stores input0 R A0 c (body p d)) /\
@@ -400,29 +418,35 @@ Theorem replay_cond_logged tc s tn n gs S X l A
     (sh : forall p, S p -> Show X) (rd : forall p, S p -> Read X)
     (input : values (fun p => At X l p) S)
     (k : forall p, S p -> X -> Choreo M p (A p))
-    active completed inc o (cuts : family cut A active)
+    active completed inc o (cuts : family (logged_cut model stores input0 R A0
+      c) A active)
     (done : includes (fun p => In p completed) (fun p => In p active))
     (v : values A (fun p => In p completed)) :
   observed_archives model stores input0 R A0 c tc s tn n gs past ar ->
   NoDup active -> NoDup completed ->
-  good A active o cuts ->
-  family_at cut node S A (fun p s => Perf (@Cond M p X l (A p)
+  (owns_region model stores input0 R A0 c ar) A active o cuts ->
+  family_at (logged_cut model stores input0 R A0 c) (at_node model stores input0
+    R A0 c past) S A (fun p s => Perf (@Cond M p X l (A p)
     (sh p s) (rd p s) (known l) MkSSymbol (input p s) (k p s)))
     active inc o cuts ->
-  family_returned cut (finished model stores input0 R A0 c)
+  family_returned (logged_cut model stores input0 R A0 c) (finished model stores
+    input0 R A0 c)
     A active completed done cuts v ->
   exists entered
     (inside : includes (fun p => In p entered) (fun p => In p active))
     (finished_in : includes (fun p => In p completed) (fun p => In p entered))
     (choices : values (fun _ => X) (fun p => In p entered))
-    (body : family cut A entered),
+    (body : family (logged_cut model stores input0 R A0 c) A entered),
     NoDup entered /\
-    good A entered (child o ChoiceBody) body /\
+    (owns_region model stores input0 R A0 c ar) A entered (child o ChoiceBody)
+      body /\
     (forall p d, choice_observation past X l p (rd p (inc p (inside p d)))
       (input p (inc p (inside p d))) o (choices p d)) /\
-    (forall p d, node p _ (child o ChoiceBody)
+    (forall p d, (at_node model stores input0 R A0 c past) p _ (child o
+      ChoiceBody)
       (k p (inc p (inside p d)) (choices p d)) (body p d)) /\
-    family_returned cut (finished model stores input0 R A0 c)
+    family_returned (logged_cut model stores input0 R A0 c) (finished model
+      stores input0 R A0 c)
       A entered completed finished_in body v.
 Proof.
   intros Observed NA NC Good At Ret.

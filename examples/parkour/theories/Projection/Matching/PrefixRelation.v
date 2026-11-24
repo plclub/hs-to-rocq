@@ -8,11 +8,7 @@ From ParkourTheories Require Import Semantics.LocalEffects Semantics.SharedState
 Require Import Parkour.Symbol Parkour.Codec Control.Monad.Tree.
 Require Choreography.Choreo2.
 Import ListNotations.
-Local Notation At := Choreography.Choreo2.At.
-Local Notation unAt := Choreography.Choreo2.unAt.
-Local Notation Comm := Choreography.Choreo2.Comm.
-Local Notation Cond := Choreography.Choreo2.Cond.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
+Import Choreography.Choreo2 (At, unAt, Comm, Cond, Choreo).
 Arguments Choreography.Execution.positions {M E Store A} _ _.
 Arguments Choreography.Execution.deliveries {M E Store A} _.
 Arguments Choreography.Execution.shared_store {M E Store A} _.
@@ -173,53 +169,66 @@ Variable input : Input.
 Variable R : list Symbol.
 Variable A : Symbol -> Type.
 Variable c : forall p, Choreo M p (A p).
-Local Notation sm := (shared_model model).
-Local Notation SC := (@Choreography.Execution.configuration M E ((Symbol ->
-  Store) *
-  Input) A).
-Local Notation NC := (@Network.Execution.configuration M E ((Symbol -> Store) *
-  Input)).
-
-Definition source_initial : SC := Choreography.Execution.initial c
+Definition source_initial :
+    @Choreography.Execution.configuration M E ((Symbol -> Store) * Input) A :=
+  Choreography.Execution.initial c
   (stores,input).
-Definition network_initial : NC :=
+Definition network_initial :
+    @Network.Execution.configuration M E ((Symbol -> Store) * Input) :=
   initialize R (fun p => runner (c p) Choreography.Network.Root) (stores,input).
 
 (* Alignment is about residual syntax, not aggregate traces. No frontier,
    readiness or future-progress premise is built into this state relation. *)
-Definition residuals (s : SC) (n : NC) : Prop :=
+Definition residuals
+    (s :
+      @Choreography.Execution.configuration M E ((Symbol -> Store) * Input) A)
+    (n : @Network.Execution.configuration M E ((Symbol -> Store) * Input)) :
+    Prop :=
   exists ns : forall p, @control M E (A p),
     endpoints n = map (fun p => Endpoint (A p) p (ns p)) R /\
     (forall p, In p R ->
-      inhabited (aligned sm Choreography.Network.Root p (A p) (positions s p)
+      inhabited (aligned (shared_model model) Choreography.Network.Root
+        p (A p) (positions s p)
         (ns p))).
 
-Definition state_match (s : SC) (n : NC) gs : Prop :=
+Definition state_match
+    (s :
+      @Choreography.Execution.configuration M E ((Symbol -> Store) * Input) A)
+    (n : @Network.Execution.configuration M E ((Symbol -> Store) * Input))
+    gs : Prop :=
   Choreography.Execution.shared_store s = Network.Execution.shared_store n /\
   represents (deliveries s) (mailboxes n) gs /\ residuals s n.
 
 (* One certificate chooses the SAME scheduled role on both machines.
    The network_step is not just a label-level fact: its active endpoint is ns p,
    and the exact residual endpoint is ns'. *)
-Inductive paired_step (s : SC) (n : NC) gs :
-    @source_action E ((Symbol -> Store) * Input) -> SC ->
-    @action E ((Symbol -> Store) * Input) -> NC -> list message -> Prop :=
+Inductive paired_step
+    (s :
+      @Choreography.Execution.configuration M E ((Symbol -> Store) * Input) A)
+    (n : @Network.Execution.configuration M E ((Symbol -> Store) * Input)) gs :
+    @source_action E ((Symbol -> Store) * Input) ->
+    @Choreography.Execution.configuration M E ((Symbol -> Store) * Input) A ->
+    @action E ((Symbol -> Store) * Input) ->
+    @Network.Execution.configuration M E ((Symbol -> Store) * Input) ->
+    list message -> Prop :=
 | PairStep p (pre post : list (@endpoint M E)) t t' s' n' a na gs' :
     In p R ->
     endpoints n = pre ++ Endpoint (A p) p t :: post ->
     endpoints n' = pre ++ Endpoint (A p) p t' :: post ->
-    decorated sm R (A p) (positions s p) (Choreography.Execution.shared_store s)
+    decorated (shared_model model) R (A p) (positions s p)
+      (Choreography.Execution.shared_store s)
       (deliveries s) a (positions s' p) (Choreography.Execution.shared_store s')
       (deliveries s') na gs gs' ->
     (forall r, r <> p -> positions s r = positions s' r) ->
-    Endpoints.step sm R p (A p) t (mailboxes n) (Network.Execution.shared_store
+    Endpoints.step (shared_model model) R p (A p) t (mailboxes n)
+      (Network.Execution.shared_store
       n)
       na t' (mailboxes n') (Network.Execution.shared_store n') ->
     paired_step s n gs a s' na n' gs'.
 
 Lemma paired_source s n gs a s' na n' gs' :
   paired_step s n gs a s' na n' gs' ->
-  Choreography.Execution.step sm R s a s'.
+  Choreography.Execution.step (shared_model model) R s a s'.
 Proof.
   intro H. destruct H. eapply CStep; [eassumption| |eassumption].
   eapply decorated_source. eassumption.
@@ -227,7 +236,7 @@ Qed.
 
 Lemma paired_network s n gs a s' na n' gs' :
   paired_step s n gs a s' na n' gs' ->
-  Network.Execution.step sm R n na n'.
+  Network.Execution.step (shared_model model) R n na n'.
 Proof.
   intro H. destruct H.
   destruct n as [es q st], n' as [es' q' st']; cbn in *.
@@ -243,8 +252,11 @@ Proof. intro H. destruct H. eapply decorated_action. eassumption. Qed.
    membership; they do NOT assert that every network step can be extended.
    A separately proved structural invariant can later establish that fact. *)
 Inductive matched_prefix :
-    list (@source_action E ((Symbol -> Store) * Input)) -> SC ->
-    list (@action E ((Symbol -> Store) * Input)) -> NC -> list message -> Prop
+    list (@source_action E ((Symbol -> Store) * Input)) ->
+    @Choreography.Execution.configuration M E ((Symbol -> Store) * Input) A ->
+    list (@action E ((Symbol -> Store) * Input)) ->
+    @Network.Execution.configuration M E ((Symbol -> Store) * Input) ->
+    list message -> Prop
       :=
 | PrefixInitial :
     matched_prefix [] source_initial [] network_initial []
@@ -290,7 +302,7 @@ Qed.
 
 Theorem prefix_source_run tc s tn n gs :
   matched_prefix tc s tn n gs ->
-  Choreography.Execution.run sm R source_initial tc s.
+  Choreography.Execution.run (shared_model model) R source_initial tc s.
 Proof.
   intro H. induction H; [constructor|].
   eapply RunSnoc; [exact IHmatched_prefix|].
@@ -298,8 +310,9 @@ Proof.
 Qed.
 
 Lemma network_run_snoc n tn u na v :
-  Network.Execution.run sm R n tn u -> Network.Execution.step sm R u na v ->
-  Network.Execution.run sm R n (tn ++ [na]) v.
+  Network.Execution.run (shared_model model) R n tn u ->
+  Network.Execution.step (shared_model model) R u na v ->
+  Network.Execution.run (shared_model model) R n (tn ++ [na]) v.
 Proof.
   intros H Next. induction H; cbn.
   - eapply RunCons; [exact Next|constructor].
@@ -308,7 +321,7 @@ Qed.
 
 Theorem prefix_network_run tc s tn n gs :
   matched_prefix tc s tn n gs ->
-  Network.Execution.run sm R network_initial tn n.
+  Network.Execution.run (shared_model model) R network_initial tn n.
 Proof.
   intro H. induction H; [constructor|].
   eapply network_run_snoc; [exact IHmatched_prefix|].

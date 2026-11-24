@@ -43,18 +43,19 @@ Section First.
 Context {M E Store Input} (model : local_model M E role (Store * Input))
   (stores : role -> Store) (input : Input) (R : list role) (A : role -> Type)
   (c : forall p, Choreography.Choreo2.Choreo M p (A p)).
-Local Notation prefix := (matched_prefix model stores input R A c).
 
 (* Locate the actual step that first emitted on this key. Both traces carry
    their suffixes to the queried destination, rather than just asserting the
    existence of some other execution that can send the same occurrence. *)
 Theorem first_send_prefix tc s tn n gs k first rest :
-  prefix tc s tn n gs -> sent R k tc = first :: rest ->
+  matched_prefix model stores input R A c tc s tn n gs ->
+  sent R k tc = first :: rest ->
   exists tc0 s0 tn0 n0 gs0 a s1 b n1 gs1 tailC tailN batchTail g,
     tc = tc0 ++ a :: tailC /\ tn = tn0 ++ b :: tailN /\
-    prefix tc0 s0 tn0 n0 gs0 /\
+    matched_prefix model stores input R A c tc0 s0 tn0 n0 gs0 /\
     paired_step model R A s0 n0 gs0 a s1 b n1 gs1 /\
-    prefix (tc0 ++ [a]) s1 (tn0 ++ [b]) n1 gs1 /\
+    matched_prefix model stores input R A c (tc0 ++ [a]) s1
+      (tn0 ++ [b]) n1 gs1 /\
     sent R k tc0 = [] /\ emits R k a = first :: batchTail /\
     In g gs1 /\ message_key g = k /\ message_path g = first.
 Proof.
@@ -66,8 +67,8 @@ Proof.
   rewrite app_nil_r in Sent.
   fold (sent R k tc) in Sent. destruct (sent R k tc) as [|head old] eqn:Sends.
   - cbn in Sent.
-    assert (New : prefix (tc ++ [a]) s' (tn ++ [b]) n' gs') by (econstructor;
-      eassumption).
+    assert (New : matched_prefix model stores input R A c
+      (tc ++ [a]) s' (tn ++ [b]) n' gs') by (econstructor; eassumption).
     pose proof (prefix_ledger _ _ _ _ _ _ _ _ _ _ _ k P) as Old.
     rewrite Sends in Old. symmetry in Old. apply app_eq_nil in Old as [Rec _].
     pose proof (prefix_ledger _ _ _ _ _ _ _ _ _ _ _ k New) as Ledger.
@@ -110,13 +111,12 @@ Section StaticFrontier.
 Context {M E Store Input} (model : local_model M E role (Store * Input))
   (stores : role -> Store) (input : Input) (R : list role) (A : role -> Type)
   (c : forall p, Choreography.Choreo2.Choreo M p (A p)).
-Local Notation prefix := (matched_prefix model stores input R A c).
-Local Notation sm := (shared_model model).
 
 Theorem head_from_first_send tc s tn n gs p X kind site sender rd first rest
   head :
-  prefix tc s tn n gs ->
-  receive_site sm p (A p) (positions s p) X kind site sender rd ->
+  matched_prefix model stores input R A c tc s tn n gs ->
+  receive_site (shared_model model) p (A p) (positions s p)
+    X kind site sender rd ->
   sent R (sender,p,session_at site Choreography.Network.Root) tc = first :: rest
     ->
   first = site ->
@@ -128,7 +128,8 @@ Proof.
   pose proof (matched_future_unreceived model stores input R A c _ _ _ _ _
     sender p
     (session_at site Choreography.Network.Root) site P
-    (receive_site_future sm p (A p) _ X kind _ _ _ Site)) as Fresh.
+    (receive_site_future (shared_model model) p (A p) _ X kind _ _ _ Site))
+    as Fresh.
   pose proof (prefix_ledger model stores input R A c _ _ _ _ _
     (sender,p,session_at site Choreography.Network.Root) P) as Eq.
   destruct (head_key_path _ _ _ First) as [tail Pending].

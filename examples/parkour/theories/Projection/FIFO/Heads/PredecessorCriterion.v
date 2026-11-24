@@ -53,8 +53,6 @@ Context {M E Store Input} (m : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol) (A : Symbol ->
     Type)
   (c : forall p, Choreography.Choreo2.Choreo M p (A p)).
-Local Notation ep := (observed_entry m stores input R A c).
-Local Notation cuts_of := (logged_cut m stores input R A c).
 
 (* Both the send and the waiting receive must be located in one tree. The
    only missing facts at this point are own-role witnesses for the strict

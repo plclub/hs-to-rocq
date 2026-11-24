@@ -3,7 +3,7 @@ Require Import Parkour.Symbol.
 From ParkourTheories Require Import Semantics.LocalEffects Semantics.Runs
   Choreography.PendingDeliveries Choreography.RoleSteps.
 Require Choreography.Choreo2.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
+Import Choreography.Choreo2 (Choreo).
 Import ListNotations.
 
 Section Source.

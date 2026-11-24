@@ -154,23 +154,21 @@ Variable input : Input.
 Variable R : list role.
 Variable A : role -> Type.
 Variable c : forall p, Choreography.Choreo2.Choreo M p (A p).
-Local Notation sm := (shared_model model).
-Local Notation prefix := (matched_prefix model stores input R A c).
 
 Theorem matched_sent_chronology tc s tn n gs sender receiver sid :
-  NoDup R -> prefix tc s tn n gs ->
+  NoDup R -> matched_prefix model stores input R A c tc s tn n gs ->
   StronglySorted fresh_after (sent R (sender,receiver,sid) tc).
 Proof.
   intros ND P. rewrite <- sent_actor_actions.
   apply flat_emits_chronology; [exact ND|].
   eapply cursor_history_chronology.
-  - exact (initial_actor_history sm R A c (stores,input) _ _
+  - exact (initial_actor_history (shared_model model) R A c (stores,input) _ _
       (prefix_source_run model stores input R A c _ _ _ _ _ P) sender).
   - apply path_prefix_refl.
 Qed.
 
 Theorem matched_sent_nodup tc s tn n gs sender receiver sid :
-  NoDup R -> prefix tc s tn n gs ->
+  NoDup R -> matched_prefix model stores input R A c tc s tn n gs ->
   NoDup (sent R (sender,receiver,sid) tc).
 Proof.
   intros ND P. apply fresh_sorted_nodup.
@@ -180,7 +178,7 @@ Qed.
 (* Compatibility is the sole layout obligation. Freshness and the direction
    of the source order come from the sender's actual chronological history. *)
 Theorem matched_sent_sorted tc s tn n gs sender receiver sid :
-  NoDup R -> prefix tc s tn n gs ->
+  NoDup R -> matched_prefix model stores input R A c tc s tn n gs ->
   (forall x y, In x (sent R (sender,receiver,sid) tc) ->
     In y (sent R (sender,receiver,sid) tc) -> compatible x y) ->
   StronglySorted source_before (sent R (sender,receiver,sid) tc).
@@ -210,7 +208,7 @@ Proof.
 Qed.
 
 Theorem matched_head_from_layout tc s tn n gs sender receiver site head :
-  NoDup R -> prefix tc s tn n gs ->
+  NoDup R -> matched_prefix model stores input R A c tc s tn n gs ->
   future (positions s receiver) site ->
   (forall x y, In x (sent R (sender,receiver,
       session_at site Choreography.Network.Root) tc) ->
@@ -249,7 +247,7 @@ Qed.
    The ledger itself places the pending head in the actual sent history;
    neither head identity nor current-site membership is assumed. *)
 Theorem matched_head_identity tc s tn n gs sender receiver site head :
-  NoDup R -> prefix tc s tn n gs ->
+  NoDup R -> matched_prefix model stores input R A c tc s tn n gs ->
   future (positions s receiver) site ->
   (forall x y, In x (sent R (sender,receiver,
       session_at site Choreography.Network.Root) tc) ->

@@ -37,22 +37,18 @@ Variables (tc : list (@source_action E ((Symbol -> Store) * Input)))
   (ar : actor_archive model stores input0 R A0 c0).
 Hypothesis Archives :
   observed_archives model stores input0 R A0 c0 tc s tn n gs past ar.
-Local Notation Cut := (logged_cut model stores input0 R A0 c0).
-Local Notation Node := (at_node model stores input0 R A0 c0 past).
-Local Notation Done := (finished model stores input0 R A0 c0).
-Local Notation Own := (owns_region model stores input0 R A0 c0 ar).
-Local Notation Tracked := (tracked_realization model stores input0 R A0 c0).
-Local Notation Laws :=
-  (actual_replay_laws model stores input0 R A0 c0 _ _ _ _ _ _ _ Archives).
 
 Theorem structural_tracked_layout S F code Q :
   structural R M S F code Q ->
   forall active (inc : includes (fun p => In p active) S) root
-    (cuts : family Cut F active),
+    (cuts : family (logged_cut model stores input0 R A0 c0) F active),
   (forall p (u v : S p), u = v) ->
-  NoDup active -> Own F active root cuts ->
-  family_at Cut Node S F code active inc root cuts ->
-  exists tree, Tracked F active root cuts tree.
+  NoDup active -> (owns_region model stores input0 R A0 c0 ar) F active root
+    cuts ->
+  family_at (logged_cut model stores input0 R A0 c0) (at_node model stores
+    input0 R A0 c0 past) S F code active inc root cuts ->
+  exists tree, (tracked_realization model stores input0 R A0 c0) F active root
+    cuts tree.
 Proof.
   intro WF.
   induction WF as
@@ -78,7 +74,8 @@ Proof.
       _ _ code active inc root cuts past (Exchange sender receiver) At).
     + intros p d. right. rewrite Shape. apply AtomicComm.
     + intros p d. rewrite Shape. reflexivity.
-  - assert (Head : family_at Cut Node S F
+  - assert (Head : family_at (logged_cut model stores input0 R A0 c0) (at_node
+    model stores input0 R A0 c0 past) S F
       (fun p d => Perf (@Cond M p X owner (F p) (sh p d) (rd p d)
         (known owner) MkSSymbol (input p d) (k p d))) active inc root cuts).
     { intros p d. rewrite <- Shape. apply At. }
@@ -89,14 +86,16 @@ Proof.
         Assemble)].
     + exists (Choice owner Leaf). exact Dormant.
     +
-      assert (BodyAt : family_at Cut Node S F
+      assert (BodyAt : family_at (logged_cut model stores input0 R A0 c0)
+        (at_node model stores input0 R A0 c0 past) S F
         (fun p d => k p d chosen) entered
         (fun p d => inc p (inside p d)) (child root ChoiceBody) bodies).
       { exact BodiesAt. }
       destruct (IH chosen entered (fun p d => inc p (inside p d))
         (child root ChoiceBody) bodies PI NE GB BodyAt) as [bt Tree].
       exists (Choice owner bt). now apply Assemble.
-  - assert (Head : family_at Cut Node S F
+  - assert (Head : family_at (logged_cut model stores input0 R A0 c0) (at_node
+    model stores input0 R A0 c0 past) S F
       (fun p d => App (f p d) (x p d)) active inc root cuts).
     { intros p d. rewrite <- Shape. apply At. }
     destruct (app_layout_children model stores input0 R A0 c0 past ar
@@ -107,7 +106,8 @@ Proof.
     destruct (IHX active inc (child root AppArgument) xs PI ND GX NX) as [xt
       XT].
     exists (Parallel ft xt). now apply Assemble.
-  - assert (Head : family_at Cut Node S F
+  - assert (Head : family_at (logged_cut model stores input0 R A0 c0) (at_node
+    model stores input0 R A0 c0 past) S F
       (fun p d => Bind (prefix p d) (k p d)) active inc root cuts).
     { intros p d. rewrite <- Shape. apply At. }
     destruct (bind_layout_children model stores input0 R A0 c0 past ar
@@ -115,7 +115,10 @@ Proof.
       as (entered & inside & prefixes & vals & bodies &
         NE & GP & NP & RP & GB & NB & Assemble).
     assert (Values : P (fun p => In p entered) vals).
-    { exact (structural_cut_family_results Cut Node Done past Own Laws
+    { exact (structural_cut_family_results (logged_cut model stores input0 R A0
+      c0) (at_node model stores input0 R A0 c0 past) (finished model stores
+      input0 R A0 c0) past (owns_region model stores input0 R A0 c0 ar)
+      (actual_replay_laws model stores input0 R A0 c0 _ _ _ _ _ _ _ Archives)
         R S X prefix P WFP active entered inc (child root BindPrefix)
         prefixes vals inside PI ND NE GP NP RP). }
     destruct (IHP active inc (child root BindPrefix) prefixes PI ND GP NP)

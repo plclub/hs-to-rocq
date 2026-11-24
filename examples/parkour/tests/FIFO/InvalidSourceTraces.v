@@ -73,15 +73,14 @@ Proof.
   constructor; [exact C'|constructor].
 Qed.
 
-Local Notation bad_path :=
-  (Pending bool ChoiceDelivery [ChoiceBody] wire_A wire_B true).
-
 Theorem reject_wrong_occurrence : wire_reject_wrong_occurrence.
 Proof.
   intros s n [gs Match].
   pose proof (prefix_source_run wire_model wire_stores tt wire_roles
     (fun _ => bool) wire_choice _ _ _ _ _ Match) as Run.
-  pose proof (run_queue_guard _ _ _ _ _ (fun v => v <> bad_path) Run) as Guard.
+  pose proof (run_queue_guard _ _ _ _ _
+    (fun v => v <> Pending bool ChoiceDelivery [ChoiceBody] wire_A wire_B true)
+    Run) as Guard.
   specialize (Guard (Forall_nil _) ltac:(
     cbn [produced announcement wire_roles wire_A wire_B wire_C] ;
     repeat constructor; intro H; discriminate)).

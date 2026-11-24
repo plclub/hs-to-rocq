@@ -47,18 +47,19 @@ Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol) (A : Symbol ->
     Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation Cut := (logged_cut model stores input R A c).
-Local Notation tokens_at := (tokens model stores input R A c).
-Local Notation batch_of := (entry_batch model stores input R A c).
 
 Theorem produced_in_owner_log tc s tn n gs past ar F active o
-    (cuts : forall p, In p active -> Cut p (F p)) kind sender recipient op :
+    (cuts : forall p, In p active ->
+      logged_cut model stores input R A c p (F p))
+    kind sender recipient op :
   observed_archives model stores input R A c tc s tn n gs past ar ->
   owns_region model stores input R A c ar F active o cuts ->
   In (Produced kind o sender recipient op) past ->
   exists (here : In sender active) token,
-    In token (tokens_at sender (F sender) (cuts sender here)) /\
-    In (Produced kind o sender recipient op) (batch_of sender token).
+    In token (tokens model stores input R A c sender (F sender)
+      (cuts sender here)) /\
+    In (Produced kind o sender recipient op)
+      (entry_batch model stores input R A c sender token).
 Proof.
   intros Archives [ND [Cover Exact]] Member.
   destruct (observed_past_event_archived model stores input R A c
@@ -76,14 +77,17 @@ Proof.
 Qed.
 
 Theorem queued_in_owner_log tc s tn n gs past ar F active o
-    (cuts : forall p, In p active -> Cut p (F p))
+    (cuts : forall p, In p active ->
+      logged_cut model stores input R A c p (F p))
     X kind sender recipient (x : X) sh :
   observed_archives model stores input R A c tc s tn n gs past ar ->
   owns_region model stores input R A c ar F active o cuts ->
   In (Message X kind o sender recipient x sh) gs ->
   exists (here : In sender active) token,
-    In token (tokens_at sender (F sender) (cuts sender here)) /\
-    In (Produced kind o sender recipient (Operand X sh x)) (batch_of sender
+    In token (tokens model stores input R A c sender (F sender)
+      (cuts sender here)) /\
+    In (Produced kind o sender recipient (Operand X sh x))
+      (entry_batch model stores input R A c sender
       token).
 Proof.
   intros Archives Own Pending.
@@ -100,8 +104,6 @@ Context {M E Store Input} (model : local_model M E Symbol (Store * Input))
   (stores : Symbol -> Store) (input : Input) (R : list Symbol) (A : Symbol ->
     Type)
   (c : forall p, Choreo M p (A p)).
-Local Notation Cut := (logged_cut model stores input R A c).
-Local Notation atc := (at_node model stores input R A c).
 Variable tc : list (@source_action E ((Symbol -> Store) * Input)).
 Variables (s : @Choreography.Execution.configuration M E ((Symbol -> Store) *
   Input) A)
@@ -115,9 +117,10 @@ Hypothesis Archives : observed_archives model stores input R A c tc s tn n gs
 Variables (S : roles) (F : Symbol -> Type) (prog : programs M F S) (active :
   list Symbol)
   (inc : includes (fun p => In p active) S) (root : occurrence)
-  (cuts : family Cut F active).
+  (cuts : family (logged_cut model stores input R A c) F active).
 Hypothesis Own : owns_region model stores input R A c ar F active root cuts.
-Hypothesis Nodes : family_at Cut (atc past) S F prog active inc root cuts.
+Hypothesis Nodes : family_at (logged_cut model stores input R A c)
+  (at_node model stores input R A c past) S F prog active inc root cuts.
 
 Theorem owned_original_operand p (d : In p active) kind recipient op :
   sender_operand (prog p (inc p d)) = Some op ->

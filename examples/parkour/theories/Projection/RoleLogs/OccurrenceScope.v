@@ -14,21 +14,19 @@ Section Scope.
 Context {M E Store Input} (model : local_model M E role (Store * Input))
   (stores : role -> Store) (input : Input) (R : list role)
   (A : role -> Type) (c : forall p, Choreo M p (A p)).
-Local Notation sm := (shared_model model).
-Local Notation entry := (observed_entry model stores input R A c).
-Local Notation log := (actor_log model stores input R A c).
-Local Notation stamp := (stamped model stores input R A c).
-Local Notation site := (entry_site model stores input R A c).
 
-Lemma entry_forall_snoc p (P : entry p -> Prop) tr e :
+Lemma entry_forall_snoc p (P : (observed_entry model stores input R A c) p ->
+  Prop) tr e :
   Forall P tr -> P e -> Forall P (tr ++ [e]).
 Proof. intros H He; induction H; cbn; constructor; auto. Qed.
 
 Lemma labelled_step_focus p B t tok u :
-  labelled_step sm p (entry p) (stamp p) B t tok u ->
-  (tok = None /\ silent sm B t u) \/
+  labelled_step (shared_model model) p ((observed_entry model stores input R A
+    c) p) ((stamped model stores input R A c) p) B t tok u ->
+  (tok = None /\ silent (shared_model model) B t u) \/
   exists X (C : @cursor_context M E p X B) f e g,
-    tok = Some e /\ t = plug C f /\ u = plug C g /\ stamp p X f e g.
+    tok = Some e /\ t = plug C f /\ u = plug C g /\ (stamped model stores input
+      R A c) p X f e g.
 Proof.
   induction 1.
   - left; split; [reflexivity|now apply primitive_is_silent].
@@ -50,8 +48,8 @@ Proof.
 Qed.
 
 Lemma actor_log_history p B start tr (t : @cursor M E p B) :
-  log p B start tr t ->
-  exists actions, cursor_history sm R start actions t.
+  (actor_log model stores input R A c) p B start tr t ->
+  exists actions, cursor_history (shared_model model) R start actions t.
 Proof.
   induction 1 as [|tr t tok u Prior IH Step].
   - exists []; constructor.
@@ -63,7 +61,8 @@ Proof.
 Qed.
 
 Lemma actor_log_scoped p B start tr (t : @cursor M E p B) root :
-  log p B start tr t -> scoped root start -> scoped root t.
+  (actor_log model stores input R A c) p B start tr t -> scoped root start ->
+    scoped root t.
 Proof.
   induction 1 as [|tr t tok u Prior IH Step]; intro Scope; [exact Scope|].
   specialize (IH Scope).
@@ -75,8 +74,9 @@ Proof.
 Qed.
 
 Lemma primitive_entry_site p B (f : @cursor M E p B) e g :
-  stamp p B f e g ->
-  action_path (entry_action model stores input R A c p e) = site p e.
+  (stamped model stores input R A c) p B f e g ->
+  action_path (entry_action model stores input R A c p e) = (entry_site model
+    stores input R A c) p e.
 Proof.
   intros [Prim _].
   pose proof (entry_primitive model stores input R A c p e) as Actual.
@@ -85,8 +85,9 @@ Proof.
 Qed.
 
 Lemma actor_log_scope p B root (code : Choreo M p B) tr t :
-  log p B (Code root code) tr t ->
-  Forall (fun e => RoleChronology.path_prefix root (site p e)) tr /\ scoped root
+  (actor_log model stores input R A c) p B (Code root code) tr t ->
+  Forall (fun e => RoleChronology.path_prefix root ((entry_site model stores
+    input R A c) p e)) tr /\ scoped root
     t.
 Proof.
   intro Hist. split.
@@ -99,18 +100,21 @@ Proof.
     + exact IH.
     + cbn [snoc_token]. apply entry_forall_snoc; [exact IH|].
       rewrite <- (primitive_entry_site _ _ _ _ _ Stamp).
-      pose proof (role_step_plug sm R _ _ _ C _ _ _ _ _ _ _
-        (primitive_is_role_step sm R _ _ _ _ _ _ _ _ _ (proj1 Stamp))) as Act.
+      pose proof (role_step_plug (shared_model model) R _ _ _ C _ _ _ _ _ _ _
+        (primitive_is_role_step (shared_model model) R _ _ _ _ _ _ _ _ _ (proj1
+          Stamp))) as Act.
       eapply scoped_future.
       * eapply actor_log_scoped; eassumption.
-      * exact (proj2 (role_future sm R _ _ _ _ _ _ _ _ _ Act)).
+      * exact (proj2 (role_future (shared_model model) R _ _ _ _ _ _ _ _ _
+        Act)).
   - eapply actor_log_scoped; [exact Hist|apply path_prefix_refl].
 Qed.
 
 Lemma actor_log_token p B start tr (t : @cursor M E p B) e :
-  log p B start tr t -> In e tr ->
+  (actor_log model stores input R A c) p B start tr t -> In e tr ->
   exists prior X (C : @cursor_context M E p X B) f g,
-    log p B start prior (plug C f) /\ stamp p X f e g.
+    (actor_log model stores input R A c) p B start prior (plug C f) /\ (stamped
+      model stores input R A c) p X f e g.
 Proof.
   intros Hist; induction Hist as [|tr t tok u Prior IH Step]; intro Member;
     [contradiction|].
@@ -135,7 +139,7 @@ Qed.
    between hidden result types is extracted from the origin certificate. *)
 Theorem actor_log_produced_here p B root (code : Choreo M p B) tr t e
     kind d operand :
-  log p B (Code root code) tr t -> In e tr ->
+  (actor_log model stores input R A c) p B (Code root code) tr t -> In e tr ->
   In (Produced kind root p d operand)
     (entry_batch model stores input R A c p e) ->
   sender_operand code = Some operand /\
@@ -145,9 +149,11 @@ Proof.
   destruct (actor_log_token _ _ _ _ _ _ Hist Member)
     as (prior & X & C & f & g & Prior & [Prim Obs]).
   destruct (actor_log_history _ _ _ _ _ Prior) as [actions History].
-  pose proof (entered_history_origin sm R p B root code _ _ History) as Origin.
+  pose proof (entered_history_origin (shared_model model) R p B root code _ _
+    History) as Origin.
   pose proof (relative_plug p B root code _ _ C _ Origin) as AtFocus.
-  destruct (observed_production_focus sm R _ _ _ _ _ _ _ _ _ _ _ _ _ Obs
+  destruct (observed_production_focus (shared_model model) R _ _ _ _ _ _ _ _ _ _
+    _ _ _ Obs
     _ _ _ _ _ Produced)
     as (Y & D & before & after & Sil & Act & End & Site).
   assert (Rel : relative_cursor p B root code before).
@@ -183,7 +189,7 @@ Qed.
 
 Corollary actor_log_message_here p B root (code : Choreo M p B) tr t e
     X kind d (v : X) sh :
-  log p B (Code root code) tr t -> In e tr ->
+  (actor_log model stores input R A c) p B (Code root code) tr t -> In e tr ->
   In (Produced kind root p d (Operand X sh v))
     (entry_batch model stores input R A c p e) ->
   outgoing code root d = Some (Message X kind root p d v sh).

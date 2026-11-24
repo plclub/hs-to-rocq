@@ -105,6 +105,14 @@ that [`theories/_CoqProject`](theories/_CoqProject) declares
 `-Q . ParkourTheories`, lists every `.v` source under `theories/` exactly once,
 and uses capitalized Rocq identifiers for all directory and module names.
 
+Use the original Rocq names in Parkour sources: import the particular names
+you need (for example, `Import Choreography.Choreo2 (At, Choreo).`) or write
+the term directly. `make -C examples/parkour check-no-local-notation` rejects
+explicitly local `Notation` and `Infix` declarations, including `#[local]`
+and `Reserved` forms. It checks Parkour-authored `.v` files, including
+fixtures and translation preambles, and reports each violation by path and
+line. The check needs only Python and runs as part of `check-layout`.
+
 Frozen `.sha256` manifests under `tests/` and the immutable specifications
 ([`SPEC.md`](SPEC.md) and [`DEADLOCK-FREEDOM-SPEC.md`](DEADLOCK-FREEDOM-SPEC.md))
 retain their historical `Deadlock*` filenames and digests.
@@ -117,13 +125,21 @@ piece. [`scripts/frozen_inputs.py`](scripts/frozen_inputs.py) verifies the
 migration table's own pinned digest and compares each file's exact bytes against
 its reviewed SHA-256; it never derives an expected digest from the working copy.
 
-An independent migration review comparing the current frozen fixtures and split
-modules against `fe8a2152` in Rocq 9.0.1 confirmed all 42 digest triples in
-[`tests/namespace-migration.tsv`](tests/namespace-migration.tsv): all 818
-historical exports matched with the same normalized elaborated types, and all
+An independent namespace-migration review on Rocq 9.0.1 confirmed all 42
+digest triples recorded at `e69c765a`. Compared with `fe8a2152`, all 818
+historical exports matched on their normalized elaborated types, and all
 467 mutually unfoldable definitions matched their normalized bodies. The
 remaining 54 definition entries did not unfold on either side; the comparison
 does not claim proof-term identity.
+
+Removing local notations changed five canonical digests: `Execution` and
+`RoleSteps` in `theories/Choreography/`, `CommunicationOrder` and
+`OccurrenceDelivery` in `tests/Choreography/`, and `ScheduledTraceContracts`
+in `tests/FIFO/`. Before updating those digests, we compiled the five files
+against the same dependencies as their `e69c765a` originals on Rocq 9.0.1.
+The module signatures, `About` reports for all 160 exports, and printed
+definition, projection, and induction-scheme bodies matched with notations
+disabled and universes visible. Only declaration locations differed.
 
 The [HasChor submodule](upstream) includes an unpublished, one-commit fix:
 the choice owner binds its broadcast before running the continuation.

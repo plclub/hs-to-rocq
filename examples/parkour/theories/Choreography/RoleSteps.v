@@ -5,14 +5,8 @@ Require Import Parkour.Symbol Parkour.Codec Control.Monad.Tree.
 From ParkourTheories Require Import Semantics.LocalEffects
   Choreography.PendingDeliveries Choreography.Occurrences.
 Require Choreography.Choreo2.
-Local Notation At := Choreography.Choreo2.At.
-Local Notation Mk_At := Choreography.Choreo2.Mk_At.
-Local Notation unAt := Choreography.Choreo2.unAt.
-Local Notation Unwrap := Choreography.Choreo2.Unwrap.
-Local Notation Choreo := Choreography.Choreo2.Choreo.
-Local Notation Locally := Choreography.Choreo2.Locally.
-Local Notation Comm := Choreography.Choreo2.Comm.
-Local Notation Cond := Choreography.Choreo2.Cond.
+Import Choreography.Choreo2
+  (At, Mk_At, unAt, Unwrap, Choreo, Locally, Comm, Cond).
 Import ListNotations.
 
 Definition off_at {X l p} (h : l <> p) : At X l p :=
