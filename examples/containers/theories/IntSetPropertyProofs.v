@@ -400,12 +400,9 @@ Abort.
    In Haskell, Word is 64-bit, so all keys satisfy k < 2^64 and all masks
    satisfy mask < 2^64. Under this constraint, the property holds.
 
-   However, the Coq model's enumFromTo for N is off-by-one:
-   enumFromTo 0 63 = map N.of_nat (seq 0 63) = [0..62], so powersOf2
-   only contains 2^0 through 2^62 (not 2^63). Therefore the bound must
-   be k < 2^63 (not 2^64) to ensure all masks are in powersOf2.
-   A set with keys {0, 2^63} is WF and bounded by 2^64, but its mask
-   2^63 is not in powersOf2, disproving the 2^64 version. *)
+   The theorem below uses the stronger bound k < 2^63, so that all masks
+   are at most 2^62. (This bound was originally needed because
+   enumFromTo on N was off by one, so powersOf2 lacked 2^63.) *)
 
 (* Auxiliary: for n <= 62, 2^n is in powersOf2.
    Proved by exhaustive case analysis on the 63 possible values of n. *)

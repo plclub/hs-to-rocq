@@ -475,5 +475,6 @@ Instance instance__Enum_N : (Enum N) := {
   toEnum := Z.to_N ;
   fromEnum := Z.of_N ;
   enumFrom := fun _ => nil; (* we do not support infinite lists *)
-  enumFromTo := fun x y => map N.of_nat (seq (N.to_nat x) (N.to_nat y));
+  enumFromTo := fun x y =>
+    map N.of_nat (seq (N.to_nat x) (Nat.sub (S (N.to_nat y)) (N.to_nat x)));
 }.
