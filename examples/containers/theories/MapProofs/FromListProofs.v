@@ -11,6 +11,7 @@ Require Import Coq.Program.Tactics.
 Require Import HsToRocq.DeferredFix.
 Require Import Coq.Wellfounded.Wellfounded.
 Require Import Coq.Logic.FunctionalExtensionality.
+Require Import Coq.ZArith.Zcomplements.
 Require Proofs.Data.Foldable.
 
 
@@ -47,7 +48,7 @@ Proof.
   intros.
   rewrite Z.shiftr_div_pow2 by lia.
   replace (2^1)%Z with 2%Z by reflexivity.
-  apply Z_div_lt; lia.
+  apply Z.div_lt; lia.
 Qed.
 
 Lemma mul_pow_sub:

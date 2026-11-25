@@ -455,7 +455,7 @@ Proof.
     try apply eq_iff_eq_true;
     rewrite ?negb_true_iff, ?N.eqb_eq, ?N.eqb_neq, ?N.leb_le,  ?N.leb_gt, ?N.ltb_lt,
             ?N.compare_eq_iff, ?N.compare_lt_iff, ?N.compare_gt_iff in *;
-    try (zify;lia).
+    try lia.
 Qed.
 
 Ltac unfoldZ := unfold

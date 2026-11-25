@@ -754,7 +754,7 @@ convertLExpr e | RealSrcSpan s _ <- getLocA e, Just x <- headName (unLoc e) = do
     case ts of
       Just args -> do
         q <- var ExprNS x
-        ExplicitApp q <$> traverse convertType args >>= rewriteExpr
+        traverse convertType args >>= rewriteExpr . ExplicitApp q
       Nothing -> convertExpr (unLoc e)
  where
   headName (HsVar _ (L _ x)) = Just x

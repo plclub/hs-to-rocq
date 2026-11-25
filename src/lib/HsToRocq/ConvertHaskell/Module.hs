@@ -13,6 +13,7 @@ module HsToRocq.ConvertHaskell.Module (
 
 import Control.Lens
 
+import Data.Bifunctor (bimap)
 import Data.Foldable
 import Data.Traversable
 import HsToRocq.Util.Monad
@@ -623,7 +624,8 @@ convertModules sources = do
                  , ModeConvert <> mode
                  , (modData^.modExports) <> combinedExports
                  , (modData^.modDetails) <> combinedDetails
-                 , ((modData^.modCallbackUses) <> fst uses, M.unionWith S.union (modData^.modMethodCalls) (snd uses))
+                 , bimap (modData^.modCallbackUses <>)
+                         (M.unionWith S.union (modData^.modMethodCalls)) uses
                  , (axAux, auxBinds `plusHsValBinds` convAux) )
 
     combineModules (ConvertedModule name  imports1 tyClDecls1 valDecls1 clsInstDecls1 addedTyCls1 addedDecls1 origins1, imps1)

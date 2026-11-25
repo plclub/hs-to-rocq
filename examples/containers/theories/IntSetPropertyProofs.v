@@ -420,7 +420,7 @@ Proof.
     all: destruct p as [p|p|]; try (vm_compute; reflexivity).
     all: destruct p as [p|p|]; try (vm_compute; reflexivity).
     all: destruct p as [p|p|]; try (vm_compute; reflexivity).
-    all: exfalso; zify; lia.
+    all: exfalso; lia.
 Qed.
 
 Definition bounded_WF (s : IntSet) :=

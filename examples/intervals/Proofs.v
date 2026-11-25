@@ -13,7 +13,7 @@ Require Import Coq.Sets.Ensembles.
 Require Import Coq.Sets.Powerset_facts.
 Require Import Ensemble_facts.
 Import ListNotations.
-Require Import Lia.
+From Coq Require Import Lia micromega.ZArith_hints.
 
 Definition goodI (i : Interval) : Prop :=
   match i with I f t => (f < t)%Z end.

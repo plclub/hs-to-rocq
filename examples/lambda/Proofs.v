@@ -74,7 +74,7 @@ Function subst v arg body {measure depth body} :=
   end.
 Proof.
   all: intros; simpl;
-    repeat rewrite depth_rename; zify; lia.
+    repeat rewrite depth_rename; lia.
 Qed.
 
 Inductive small_step : Expr -> Expr -> Prop :=
@@ -151,13 +151,13 @@ Proof.
     + destruct (small_step_fun (Let n m1_1 m1_2)) eqn:J; inversion SS.
       eapply ss_let_search.
       eapply (IH (depth (Let n m1_1 m1_2))); auto.
-      zify; lia.
+      lia.
     + inversion SS.
       eapply ss_let; simpl; auto.
     + destruct (small_step_fun (App m1_1 m1_2)) eqn:J; inversion SS.
       eapply ss_let_search.
       eapply (IH (depth (App m1_1 m1_2))); auto.
-      zify; lia.
+      lia.
   -  (* app *)
     destruct m1.
     + destruct (small_step_fun m2) eqn:J; inversion SS.
@@ -167,18 +167,18 @@ Proof.
     + destruct (small_step_fun (Let n m1_1 m1_2)) eqn:J; inversion SS.
       eapply ss_app_search.
       eapply (IH (depth (Let n m1_1 m1_2))); auto.
-      zify; lia.
+      lia.
     + destruct (small_step_fun m2) eqn:J; inversion SS.
       eapply ss_app_val.
       simpl; auto.
       eapply (IH (depth m2)); auto.
-      zify; lia.
+      lia.
       destruct m2;
         try solve [inversion SS; eapply ss_beta; simpl; auto].
     + destruct (small_step_fun (App m1_1 m1_2)) eqn:J; inversion SS.
       eapply ss_app_search.
       eapply (IH (depth (App m1_1 m1_2))); auto.
-      zify; lia.
+      lia.
 Qed.
 
 Lemma small_step_small_step_fun : forall m m',

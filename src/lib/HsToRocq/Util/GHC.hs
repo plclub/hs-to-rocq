@@ -27,9 +27,9 @@ ghcPpr :: (GhcMonad m, Outputable a) => a -> m Text
 ghcPpr x = fmap T.pack $ showPpr <$> getSessionDynFlags <*> pure x
 
 defaultRunGhc :: Ghc () -> IO ()
-defaultRunGhc ghc = defaultErrorHandler defaultFatalMessager defaultFlushOut
-                  . runGhc (Just libdir)
-                  -- The CLI sets the session flags after parsing --ghc options.
-                  -- Setting them here would select the default interpreter
-                  -- before a caller can request -fexternal-interpreter.
-                  . handleSourceError (\err -> printException err >> liftIO exitFailure) $ ghc
+defaultRunGhc = defaultErrorHandler defaultFatalMessager defaultFlushOut
+              . runGhc (Just libdir)
+              -- The CLI sets the session flags after parsing --ghc options.
+              -- Setting them here would select the default interpreter
+              -- before a caller can request -fexternal-interpreter.
+              . handleSourceError (\err -> printException err >> liftIO exitFailure)

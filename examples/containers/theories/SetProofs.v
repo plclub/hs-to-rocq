@@ -14,6 +14,7 @@ Require Import Coq.Classes.Morphisms. (* For [Proper] *)
 Require Import Coq.Wellfounded.Inverse_Image.
 Require Import Coq.Program.Tactics.
 Require Import Coq.Sorting.Sorted.
+Require Import Coq.ZArith.Zcomplements.
 Set Bullet Behavior "Strict Subproofs".
 
 (** This file contains our specifications and proofs for [Data.Set]. The file
@@ -3865,7 +3866,7 @@ Proof.
   intros.
   rewrite Z.shiftr_div_pow2 by lia.
   replace (2^1)%Z with 2%Z by reflexivity.
-  apply Z_div_lt; lia.
+  apply Z.div_lt; lia.
 Qed.
 
 Lemma mul_pow_sub:
